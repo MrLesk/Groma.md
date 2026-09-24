@@ -13,14 +13,16 @@ import { angularHttpRequests } from './http.ts'
 import { angularPrograms, angularProjects, projectConfigs, relative, type AngularProgram } from './project.ts'
 import { Templates } from './template.ts'
 
-/** Readiness reads every Angular project's configs; source syntax is the scan's to check. */
-export async function checkAngularReadiness(root: string): Promise<void> {
-  await projectConfigs(root, [...(await angularProjects(root)).keys()])
+/** Readiness reads the configs of every Angular project the exclusions leave in; source syntax is the scan's to check. */
+export async function checkAngularReadiness(root: string, _settings?: unknown,
+  excluded: (file: string) => boolean = () => false): Promise<void> {
+  await projectConfigs(root, [...(await angularProjects(root, excluded)).keys()], excluded)
 }
 
-export async function scanAngular(root: string, _settings?: unknown, excluded?: (file: string) => boolean): Promise<ScanObservation | undefined> {
+export async function scanAngular(root: string, _settings?: unknown,
+  excluded: (file: string) => boolean = () => false): Promise<ScanObservation | undefined> {
   const projects = await angularProjects(root, excluded)
-  const { configs, diagnostics } = await projectConfigs(root, [...projects.keys()])
+  const { configs, diagnostics } = await projectConfigs(root, [...projects.keys()], excluded)
   const inputs: EntrySources = { imports: new Map(), entries: [] }
   const parts = []
   for (const [directory, files] of projects) {
@@ -28,7 +30,7 @@ export async function scanAngular(root: string, _settings?: unknown, excluded?: 
     if (programs.length) parts.push({ key: directory, observation: await scanProject(root, directory, programs, inputs) })
   }
   const combined = combineObservations(parts)
-  return withJavaScriptEntries(root, combined && { ...combined, diagnostics: [...combined.diagnostics, ...diagnostics] }, inputs)
+  return withJavaScriptEntries(root, combined && { ...combined, diagnostics: [...combined.diagnostics, ...diagnostics] }, inputs, excluded)
 }
 
 function mergeInputs(inputs: EntrySources, next: EntrySources): void {

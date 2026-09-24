@@ -9,7 +9,7 @@ project build were installed or run.
   manifest rule.
 - 47 authored files were inventoried with 122 declarations, 1,249 operations,
   758 of them carrying body tokens, and 4,762 calls, every one unresolved.
-- 579 files under `vendor/` stayed out through the shared Git boundary.
+- 579 files under `vendor/` stayed out of the scan.
 - Repeating the scan produced identical evidence. The first fold created 49
   elements; folding the same evidence again created none and refreshed the same
   47 files.
@@ -22,16 +22,10 @@ project build were installed or run.
   no HTTP row was derived there.
 - Each scan of the whole project finished in under a second.
 
-The minified rules were measured against 137 authored candidate files in four
-JavaScript repositories. The longest-lined authored file averaged 57 characters
-per line. Exactly one file reached the 500-character average: a built asset under
-an ordinary `.js` name, which the rule excluded. Vendored and built directories
-are already outside the shared Git boundary.
-
 The independent `javascript-source` fixture verifies ECMAScript modules,
 CommonJS, JSX, a browser script whose top-level calls belong to the module,
 exact source positions, tokens on named bodies only, and the exclusion of a
-`.min.js` name, of a long-lined bundle, and of the TypeScript file beside them.
+`.min.js` name by the default exclusions and of the TypeScript file beside it.
 `javascript-outline` verifies the declaration list and the module, CommonJS and
 script visibility rules, including a CommonJS file that publishes a function value
 and keeps its own helpers private; `javascript-parity` verifies that one body

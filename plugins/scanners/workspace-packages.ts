@@ -1,13 +1,12 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { projectFiles } from './projects.ts'
+import { packageManifest, repositoryFiles } from './projects.ts'
 
 /*
- * Workspace packages as a fresh checkout has them, without node_modules or build output. Every named package.json in
- * the repository is a workspace package, whatever a `workspaces` field lists: its name resolves to the source its
- * manifest points at, and a file its build writes to the source it comes from. The TypeScript scanner gives these
- * mappings to its compiler and to the entry reader.
+ * Workspace packages as a fresh checkout has them, without node_modules or build output. Every named package.json the
+ * scanner's exclusions leave in is a workspace package, whatever a `workspaces` field lists: its name resolves to the
+ * source its manifest points at, and a file its build writes to the source it comes from. The TypeScript scanner gives
+ * these mappings to its compiler and to the entry reader.
  */
 
 /** Where a build writes a source folder: a file under `outDir` comes from the same path under `rootDir`. */
@@ -71,22 +70,13 @@ function packageMappings(root: string, file: string, name: string, manifest: Man
   ]])
 }
 
-/** A manifest's fields, or none for a file that is not JSON, which names no package. */
-async function manifestAt(root: string, file: string): Promise<Manifest | undefined> {
-  try {
-    return JSON.parse(await readFile(path.join(root, file), 'utf8')) as Manifest
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * Compiler path mappings from each workspace package's name, and each subpath it serves, to absolute targets. A name
- * two packages share is ambiguous, so its imports stay unresolved.
+ * two packages share is ambiguous, so its imports stay unresolved. The manifests `excluded` names are not read.
  */
-export async function packagePaths(root: string, outputs: readonly BuildOutput[]): Promise<Record<string, string[]>> {
-  const manifests = await Promise.all((await projectFiles(root, file => path.posix.basename(file) === 'package.json'))
-    .map(async file => ({ file, manifest: await manifestAt(root, file) })))
+export async function packagePaths(root: string, outputs: readonly BuildOutput[], excluded: (file: string) => boolean): Promise<Record<string, string[]>> {
+  const manifests = await Promise.all((await repositoryFiles(root, file => path.posix.basename(file) === 'package.json' && !excluded(file)))
+    .map(async file => ({ file, manifest: await packageManifest(root, file) as Manifest | undefined })))
   const named = manifests.flatMap(({ file, manifest }) => typeof manifest?.name === 'string' ? [{ file, name: manifest.name, manifest }] : [])
   const counts = new Map<string, number>()
   for (const { name } of named) counts.set(name, (counts.get(name) ?? 0) + 1)

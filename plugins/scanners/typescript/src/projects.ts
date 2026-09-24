@@ -2,7 +2,7 @@ import path from 'node:path'
 import { stat } from 'node:fs/promises'
 import type { ScanDiagnostic } from '@groma/scanner'
 import type { API, ParsedCommandLine } from 'typescript/unstable/async'
-import { projectFiles } from '../../projects.ts'
+import { repositoryFiles } from '../../projects.ts'
 import type { BuildOutput } from '../../workspace-packages.ts'
 
 export interface TypeScriptProject { key: string; config?: ParsedCommandLine; files: string[] }
@@ -30,8 +30,11 @@ export function buildOutputs(root: string, projects: readonly TypeScriptProject[
   })
 }
 
-/** A nested config owns its included files before an enclosing config does. */
-export async function typescriptProjects(api: API, root: string, files: string[]): Promise<{
+/**
+ * A nested config owns its included files before an enclosing config does. Every `tsconfig.json` the exclusions leave
+ * in is read, with each config it references.
+ */
+export async function typescriptProjects(api: API, root: string, files: string[], excluded: (file: string) => boolean): Promise<{
   projects: TypeScriptProject[]
   diagnostics: ScanDiagnostic[]
 }> {
@@ -55,7 +58,9 @@ export async function typescriptProjects(api: API, root: string, files: string[]
       await read(target)
     }
   }
-  for (const file of await projectFiles(root, file => path.posix.basename(file) === 'tsconfig.json')) await read(path.join(root, file))
+  for (const file of await repositoryFiles(root, file => path.posix.basename(file) === 'tsconfig.json' && !excluded(file))) {
+    await read(path.join(root, file))
+  }
   const selected = new Set(files.map(file => path.resolve(root, file)))
   const projects = [...configurations].map(([key, config]) => ({ key, config,
     files: config.fileNames.filter(file => selected.has(path.resolve(file))) }))

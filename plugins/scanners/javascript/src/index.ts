@@ -4,7 +4,7 @@ import ts from 'typescript'
 import { javaScriptEvidence } from './evidence.ts'
 import { javaScriptHttpFacts } from './http.ts'
 import { readJavaScriptOutline } from './outline.ts'
-import { javaScriptSources, type JavaScriptSource } from './sources.ts'
+import { javaScriptFiles, javaScriptSources, type JavaScriptSource } from './sources.ts'
 import { withJavaScriptEntries } from '../../entry-points/javascript.ts'
 import { javaScriptEntries } from './entries.ts'
 
@@ -38,17 +38,16 @@ export default {
   id: 'javascript',
   watch: {
     include: ['**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx', '**/*.html', '**/package.json', '**/angular.json'],
-    exclude: ['**/*.min.js', '**/*.min.mjs', '**/*.min.cjs', '**/*.min.jsx'],
+    exclude: [],
   },
-  /** The same authored selection `scan` makes, so a minified bundle is never listed. */
-  listSourceFiles: async root => (await javaScriptSources(root)).map(source => source.file),
-  async checkReadiness(root) {
-    if (!(await javaScriptSources(root)).length) {
-      throw new Error('javascript: No authored JavaScript source files were found in the Git repository.')
+  listSourceFiles: root => javaScriptFiles(root),
+  async checkReadiness(root, _settings?, excluded?) {
+    if (!(await javaScriptFiles(root, excluded)).length) {
+      throw new Error('javascript: No JavaScript source files were found in the Git repository.')
     }
   },
-  async scan(root) {
-    const sources = await javaScriptSources(root)
+  async scan(root, _settings?, excluded = () => false) {
+    const sources = await javaScriptSources(root, excluded)
     if (!sources.length) return undefined
     const parsed = sources.map(parse)
     const warnings = parsed.map(parseWarning)
@@ -71,7 +70,7 @@ export default {
       diagnostics: [{ severity: 'info', code: 'JAVASCRIPT_SOURCE_SCOPE',
         message: 'Source syntax only. Module loading, dynamic dispatch, framework wiring and external symbols remain unresolved.' },
       ...warnings.filter(warning => warning !== undefined)],
-    }), await javaScriptEntries(root, readable))
+    }), await javaScriptEntries(root, readable), excluded)
   },
   // Every file this scanner owns is a JavaScript source, so no reference is filtered out here.
   readCodeStructure: readJavaScriptOutline,

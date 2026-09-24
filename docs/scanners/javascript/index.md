@@ -33,27 +33,17 @@ parse errors.
 
 ## Excluded files
 
-Minified output is not authored source, so it is left out of the scan and the
-source outline:
+The package declares default
+[exclusions](../index.md#excluding-source-evidence): names that state minified
+output, such as `jquery-ui.min.js`, and `node_modules`, `dist`, `build` and
+`coverage` folders. The scan and the readiness check
+read no source the exclusions name.
 
-- a name that states minified output, such as `jquery-ui.min.js`;
-- text whose code lines average 500 characters or more after leading block
-  comments, or one 400-character code line after such a banner, the shape of a
-  bundle a build produced under an ordinary name such as `vendor.js`.
+A bundle under an ordinary name, such as `vendor.js`, is read like any other
+source; a project that keeps it out adds a pattern to `scanners.json`.
 
-The shared Git boundary omits ignored files and dependency or build directories
-such as `node_modules`, `vendor`, `dist` and `build`. Core applies the source
-exclusions configured in `scanners.json`.
-
-Test sources are treated like any other JavaScript source, as in the PHP and
-Swift scanners: a project excludes them explicitly in `scanners.json`. The
-TypeScript scanner instead omits `test` directories and `.test` and `.spec` names
-by default.
-
-Discovery counts any `.js`, `.mjs`, `.cjs` or `.jsx` name, minified files
-included, because it reads file names without opening them. A repository whose
-only JavaScript is minified can therefore be recommended this scanner, and
-readiness then reports that no authored JavaScript source was found.
+Test sources are treated like any other JavaScript source: the defaults name
+none, so a project that keeps them out adds a pattern to `scanners.json`.
 
 TypeScript sources belong to the [TypeScript scanner](../typescript/index.md)
 and single-file components to the [Vue scanner](../vue/index.md). This scanner
@@ -286,7 +276,7 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 ## Validation
 
 Independent fixtures cover ECMAScript modules, CommonJS, JSX, browser scripts,
-minified files excluded by name and by line length, exact source positions,
+minified names excluded by the default exclusions, exact source positions,
 unresolved calls, the source outline with its visibility rules, one body that
 tokenizes identically in JavaScript and in TypeScript, identical and
 near-duplicate bodies found by `groma lint`, a file that does not parse next to

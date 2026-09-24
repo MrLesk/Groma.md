@@ -64,14 +64,17 @@ function mergedEvidence(programs: readonly ProjectEvidence[]): ProjectEvidence {
   }
 }
 
-/** Each compiler project resolves its own aliases; only selected repository source becomes evidence. */
-export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
+/**
+ * Each compiler project resolves its own aliases; only selected repository source becomes evidence. The configs and
+ * workspace manifests `excluded` names are not read.
+ */
+export async function analyzeSourceFiles(repositoryRoot: string, paths: string[], excluded: (file: string) => boolean): Promise<SourceEvidence> {
   if (paths.length === 0) return { ...mergedEvidence([]), diagnostics: [], buildOutputs: [] }
   const api = new API({ cwd: repositoryRoot })
   try {
-    const { projects, diagnostics } = await typescriptProjects(api, repositoryRoot, paths)
+    const { projects, diagnostics } = await typescriptProjects(api, repositoryRoot, paths, excluded)
     const outputs = buildOutputs(repositoryRoot, projects)
-    const workspacePaths = await packagePaths(repositoryRoot, outputs)
+    const workspacePaths = await packagePaths(repositoryRoot, outputs, excluded)
     // A file's imports come from its own config's program, whose aliases it is written for; a file no config owns
     // takes them from any program that reaches it.
     const configured = new Set(projects.flatMap(project => project.config === undefined ? [] : project.files.map(file => path.resolve(file))))

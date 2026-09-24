@@ -181,16 +181,22 @@ real-project result and remaining release gates.
 
 Run Groma from the repository root. The scanner finds package declarations in
 tracked and unignored files, including nested apps and libraries. Dependencies,
-dev dependencies, peer dependencies and optional dependencies identify candidates.
-A candidate also needs a tracked or unignored `tsconfig.json` in its directory or
-below it, as an Nx workspace keeps one in each project while declaring Angular
-once at its root, and TypeScript source files belonging to that package, outside
-nested candidates. Declaration files and inactive fixtures with a `.fixture`
+dev dependencies, peer dependencies and optional dependencies identify candidates;
+a `package.json` that is not JSON declares none. A candidate also needs a
+tracked or unignored `tsconfig.json` in its directory or below it, as an Nx
+workspace keeps one in each project while declaring Angular once at its root,
+and TypeScript source files belonging to that package, outside nested
+candidates. Declaration files and inactive fixtures with a `.fixture`
 suffix do not qualify. Packages with only framework tooling dependencies are
 skipped. No matching project produces no evidence.
 
-A project compiles its own TypeScript sources, leaving out `*.spec.ts` and
-`*.test.ts` specs and files the shared `exclude` patterns name. As in the
+A project compiles its own TypeScript sources outside the scanner's
+[exclusions](../index.md#excluding-source-evidence). The package declares
+`*.spec.ts` and `*.test.ts` specs and the `.angular`, `node_modules`, `dist`,
+`build` and `coverage` folders as defaults. The scan and
+readiness check read no package declaration, config, source or entry
+declaration the exclusions name, and the source listing names files before
+them. As in the
 [TypeScript scanner](../typescript/index.md), each source compiles with the
 deepest config that includes it, following the references of a solution config
 that lists no files of its own; a source no config includes compiles with default

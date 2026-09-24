@@ -84,7 +84,7 @@ test.concurrent('project discovery includes peer dependencies but excludes ignor
   const root = await repository()
   try {
     await writeFile(path.join(root, '.gitignore'), 'ignored/\n')
-    for (const directory of ['packages/ui', 'ignored', 'node_modules/dependency']) {
+    for (const directory of ['packages/ui', 'ignored']) {
       await mkdir(path.join(root, directory), { recursive: true })
       await writeFile(path.join(root, directory, 'package.json'), JSON.stringify({ peerDependencies: { react: '*' } }))
       await writeFile(path.join(root, directory, 'tsconfig.json'), '{}')

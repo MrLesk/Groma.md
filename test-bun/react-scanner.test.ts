@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ScanObservation, ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/react/build.ts'
+import manifest from '../plugins/scanners/react/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
@@ -11,6 +12,7 @@ import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
@@ -189,17 +191,25 @@ test.concurrent('a React package compiled by an ancestor config scans once besid
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-test.concurrent('React leaves out the test files the TypeScript scanner leaves out, whatever their syntax', async () => {
+test.concurrent('React reads no source its exclusions name, whatever its syntax, and reads a test a later pattern restores', async () => {
   const { temporary, root, scanner } = await setup()
   try {
     await writeFile(path.join(root, 'editor.test.tsx'), 'export const broken = <Editor saved={\n')
-    // A package holding only tests has no components to report and does not fail the scan either.
+    await writeFile(path.join(root, 'panel.test.tsx'), 'export const Panel = () => <div />\n')
+    // A package holding only excluded tests has no components to report and does not fail the scan either.
     await mkdir(path.join(root, 'checks'))
     await writeFile(path.join(root, 'checks/package.json'), '{"name":"checks","devDependencies":{"react":"19.2.7"}}')
     await writeFile(path.join(root, 'checks/tsconfig.json'), '{"compilerOptions":{"jsx":"react-jsx"}}')
     await writeFile(path.join(root, 'checks/editor.test.tsx'), 'export const Check = () => <div />\n')
-    const react = (await scanner.scan(root))!
-    expect(react.files.map(file => file.file)).toEqual(['editor.tsx', 'host.tsx'])
+    // An installed React package is never selected, so its invalid config is never read.
+    await mkdir(path.join(root, 'node_modules/widget'), { recursive: true })
+    await writeFile(path.join(root, 'node_modules/widget/package.json'), '{"name":"widget","dependencies":{"react":"19.2.7"}}')
+    await writeFile(path.join(root, 'node_modules/widget/tsconfig.json'), '{')
+    await writeFile(path.join(root, 'node_modules/widget/widget.tsx'), 'export const Widget = () => <div />\n')
+    const excluded = exclusion([...manifest.groma.scanner.exclude, '!panel.test.tsx'])
+    await scanner.checkReadiness!(root, {}, excluded)
+    const react = (await scanner.scan(root, {}, excluded))!
+    expect(react.files.map(file => file.file)).toEqual(['editor.tsx', 'host.tsx', 'panel.test.tsx'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

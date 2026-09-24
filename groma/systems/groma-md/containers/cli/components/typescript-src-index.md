@@ -14,6 +14,7 @@ groma:
       symbol: scanTypeScriptSource
     - scanner: typescript
       file: plugins/scanners/typescript/src/files.ts
+      symbol: listTypeScriptFiles
     - scanner: typescript
       file: plugins/scanners/typescript/src/projects.ts
     - scanner: typescript

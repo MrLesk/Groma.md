@@ -2,7 +2,16 @@
   "scanners": [
     {
       "id": "angular",
-      "source": "./plugins/scanners/angular"
+      "source": "./plugins/scanners/angular",
+      "exclude": [
+        "*.spec.ts",
+        "*.test.ts",
+        ".angular/",
+        "node_modules/",
+        "dist/",
+        "build/",
+        "coverage/"
+      ]
     },
     {
       "id": "csharp",
@@ -41,7 +50,18 @@
     },
     {
       "id": "react",
-      "source": "./plugins/scanners/react"
+      "source": "./plugins/scanners/react",
+      "exclude": [
+        "*.test.ts",
+        "*.test.tsx",
+        "*.spec.ts",
+        "*.spec.tsx",
+        "/test/",
+        "node_modules/",
+        "dist/",
+        "build/",
+        "coverage/"
+      ]
     },
     {
       "id": "rust",
@@ -56,11 +76,28 @@
     },
     {
       "id": "typescript",
-      "source": "./plugins/scanners/typescript"
+      "source": "./plugins/scanners/typescript",
+      "exclude": [
+        "*.test.ts",
+        "*.test.tsx",
+        "*.spec.ts",
+        "*.spec.tsx",
+        "/test/",
+        "node_modules/",
+        "dist/",
+        "build/",
+        "coverage/"
+      ]
     },
     {
       "id": "vue",
-      "source": "./plugins/scanners/vue"
+      "source": "./plugins/scanners/vue",
+      "exclude": [
+        "node_modules/",
+        "dist/",
+        "build/",
+        "coverage/"
+      ]
     }
   ],
   "exclude": [

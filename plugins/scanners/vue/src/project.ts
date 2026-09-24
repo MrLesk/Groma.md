@@ -45,9 +45,17 @@ export class VueProject {
   private language!: Language<string>
   private readonly plugin
 
-  constructor(root: string, repositoryRoot: string, sources: readonly string[], owners: ReadonlyMap<string, string>) {
+  constructor(root: string, repositoryRoot: string, sources: readonly string[], owners: ReadonlyMap<string, string>,
+    excluded: (file: string) => boolean) {
     this.root = repositoryRoot
     const assigned = new Set(sources.map(file => path.resolve(repositoryRoot, file)))
+    // A file the config includes is this project's source unless a nested project owns it or the exclusions name
+    // it. Exclusions take repository paths, and their matcher throws on a path outside the repository, which a
+    // config may include, so such a file is never tested against them.
+    const selected = (file: string) => {
+      const local = relative(repositoryRoot, file)
+      return (owners.get(local) ?? root) === root && (local.startsWith('../') || !excluded(local))
+    }
     const configFile = projectConfig(root, repositoryRoot)
     const configRoot = path.dirname(configFile)
     const config = ts.readJsonConfigFile(configFile, ts.sys.readFile)
@@ -66,17 +74,14 @@ export class VueProject {
     host.getCurrentDirectory = () => root
     this.program = proxyCreateProgram(vueTypeScript, ts.createProgram, () => ({
       languagePlugins: [this.plugin], setup: language => { this.language = language },
-    }))({ rootNames: [...new Set([...assigned, ...parsed.fileNames.filter(file =>
-      (owners.get(relative(repositoryRoot, file)) ?? root) === root)])],
-      options: parsed.options, host })
+    }))({ rootNames: [...new Set([...assigned, ...parsed.fileNames.filter(selected)])], options: parsed.options, host })
     failDiagnostics(this.program.getSyntacticDiagnostics())
     this.diagnostics.push(...this.program.getOptionsDiagnostics().filter(item => item.code === 6053).map(item => ({
       severity: 'warning', code: 'vue-missing-config-source', file: relative(repositoryRoot, configFile),
       message: `A declared TypeScript source is absent; available source was still scanned. ${ts.flattenDiagnosticMessageText(item.messageText, ' ')}`,
     })))
     this.checker = this.program.getTypeChecker()
-    this.files = this.program.getSourceFiles().filter(source => this.owned(source)
-      && (owners.get(relative(repositoryRoot, source.fileName)) ?? root) === root)
+    this.files = this.program.getSourceFiles().filter(source => this.owned(source) && selected(source.fileName))
     for (const source of this.files) this.validateSfc(source.fileName)
   }
 
@@ -148,13 +153,14 @@ export class VueProject {
   }
 }
 
-export function vueProject(root: string, repositoryRoot = root, sources: readonly string[] = [], owners: ReadonlyMap<string, string> = new Map()) {
+export function vueProject(root: string, repositoryRoot = root, sources: readonly string[] = [], owners: ReadonlyMap<string, string> = new Map(),
+  excluded: (file: string) => boolean = () => false) {
   const manifestFile = path.join(root, 'package.json')
   if (!existsSync(manifestFile)) return undefined
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
   if (!hasDependency(manifest, 'vue')) return undefined
   try {
-    return { manifest, project: new VueProject(root, repositoryRoot, sources, owners) }
+    return { manifest, project: new VueProject(root, repositoryRoot, sources, owners, excluded) }
   } catch (error) {
     throw new Error(`VUE_SOURCE_INVALID: Check the project tsconfig.json and Vue syntax. ${error}`)
   }

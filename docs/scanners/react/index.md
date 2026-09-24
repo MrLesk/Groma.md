@@ -26,11 +26,13 @@ or installation script is required. Public naming and publication are separate
 release decisions.
 
 The scanner reads each selected package's nearest `tsconfig.json` and owned TSX
-files using its bundled TypeScript compiler. It reads only files the TypeScript
-scanner reads, so the files that scanner leaves out by default, such as `.test`
-and `.spec` files, stay out, and a syntax error only fails the scan in a file it
-reads. Project dependencies and React types do
-not need to be installed. A solution `tsconfig.json` that names no source of its
+files using its bundled TypeScript compiler. It reads the repository's `.ts` and
+`.tsx` sources, never declaration files, less its exclusions, and a syntax error
+only fails the scan in a file it reads. The package declares the TypeScript
+scanner's default [exclusions](../index.md#excluding-source-evidence): `.test`
+and `.spec` files, the root `test` folder, and `node_modules`, `dist`,
+`build` and `coverage` folders. Project dependencies and
+React types do not need to be installed. A solution `tsconfig.json` that names no source of its
 own compiles through the first config it references that compiles one of its
 components. An extended config a fresh
 checkout lacks, such as an uninstalled package or a generated file, leaves the
@@ -223,7 +225,7 @@ a repository ancestor, and TSX source files belonging to that package, outside
 nested packages. Declaration files and inactive fixtures with a `.fixture` suffix
 do not qualify. Packages with only framework tooling dependencies are skipped. No
 matching project produces no evidence, and neither does a package whose config
-compiles none of its components, such as one holding only tests. Each compiler uses the nearest config of
+compiles none of its components, such as one holding only excluded tests. Each compiler uses the nearest config of
 its package; imported source in sibling repository libraries keeps its original
 source path. A file belongs to the nearest React package that contains it, so a
 package whose config also compiles a nested package leaves that package's files

@@ -11,8 +11,8 @@ export default {
   watch: { include: ['**/*.tsx', '**/*.ts', '**/tsconfig*.json', '**/package.json', '**/*.html', '**/angular.json'], exclude: [] },
   checkReadiness: checkReactReadiness,
   /**
-   * A React program can read any source the TypeScript scanner reads, a sibling library's included, so the
-   * listing is all of them while the repository has a React project.
+   * A React program can read any TypeScript source in the repository, a sibling library's included, so the
+   * listing is all of them, before exclusions, while the repository has a React project.
    */
   listSourceFiles: async root => (await reactProjects(root)).length ? listTypeScriptFiles(root) : [],
   // Every reference the outline receives is a TypeScript or TSX source this scanner reads.

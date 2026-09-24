@@ -32,6 +32,13 @@ code with the TypeScript checker, which resolves component imports and handler
 function identities. The scanner translates these facts into the existing
 supplied-callback evidence contract; it has no separate name or type resolver.
 
+The package declares default
+[exclusions](../index.md#excluding-source-evidence): `node_modules`, `dist`,
+`build` and `coverage` folders. The scan and the readiness
+check leave out every source the exclusions name, including one the project's
+`tsconfig.json` includes; a source they read can still import it as compiler
+context.
+
 ## Supported interaction
 
 ### External source blocks

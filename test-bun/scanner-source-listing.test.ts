@@ -32,8 +32,8 @@ const listings: [ScannerPlugin, string, string[]][] = [
     'src/main/java/Shapes.java', 'src/main/java/Unused.java',
   ]],
   [rust, 'rust-semantic', ['src/api.rs', 'src/lib.rs', 'src/provider.rs', 'src/unreferenced.rs']],
-  // A minified name, minified text and a TypeScript file are all outside the authored selection.
-  [javascript, 'javascript-source', ['public/legacy.js', 'src/cart.mjs', 'src/panel.jsx', 'src/totals.cjs']],
+  // A TypeScript file is outside the selection, while a minified name is listed for the default exclusion to hide.
+  [javascript, 'javascript-source', ['public/legacy.js', 'public/vendor.min.js', 'src/cart.mjs', 'src/panel.jsx', 'src/totals.cjs']],
   // A component's template and stylesheets are read besides its class.
   [angular, 'angular-output', [
     'emitter.css', 'emitter.html', 'emitter.ts', 'host.html', 'host.scss', 'host.ts', 'shared.css',

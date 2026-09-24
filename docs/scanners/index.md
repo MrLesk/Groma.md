@@ -164,9 +164,9 @@ pattern cannot restore a file a scanner's own list excludes; edit that scanner's
 list instead. Adding a scanner with `groma scanner add`, setup, init or the web
 writes the default exclusions its package declares into its entry, where they
 are edited like any other pattern; updating a scanner keeps the entry's list.
-Omitting `exclude` or using `[]` adds no exclusions. Each scanner keeps its own
-language coverage and built-in rules; `!` does not restore files omitted by
-those rules. When a scanner lists source files and all of them are excluded for
+Omitting `exclude` or using `[]` adds no exclusions. Only language coverage,
+the files the language's own build compiles, stays built into a scanner; `!`
+does not restore a file outside it. When a scanner lists source files and all of them are excluded for
 it, Groma skips its readiness check and scan. This keeps
 excluded test projects from blocking a scan on incomplete fixture inputs.
 When included sources remain, compiler analysis can still read excluded files

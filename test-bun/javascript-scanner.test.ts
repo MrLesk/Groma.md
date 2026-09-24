@@ -4,7 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import type { CodeSymbol, ScannerPlugin, ScanOperation } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/javascript/build.ts'
+import manifest from '../plugins/scanners/javascript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
@@ -33,10 +35,11 @@ test.concurrent('packaged JavaScript reads every module format without project t
   const { temporary, root, scanner } = await setup()
   try {
     expect((await discoverScanners(root)).recommendations.some(scanner => scanner.id === 'javascript')).toBe(true)
-    await scanner.checkReadiness?.(root)
-    const scan = (await scanner.scan(root))!
-    expect(await scanner.scan(root)).toEqual(scan)
-    // The minified bundle, the `.min.js` name and the TypeScript source next to them contribute nothing.
+    const excluded = exclusion(manifest.groma.scanner.exclude)
+    await scanner.checkReadiness?.(root, {}, excluded)
+    const scan = (await scanner.scan(root, {}, excluded))!
+    expect(await scanner.scan(root, {}, excluded)).toEqual(scan)
+    // The `.min.js` name the defaults exclude and the TypeScript source next to it contribute nothing.
     expect(scan.files.map(file => file.file)).toEqual(['public/legacy.js', 'src/cart.mjs', 'src/panel.jsx', 'src/totals.cjs'])
     const declared = scan.files.flatMap(file => file.symbols.map(symbol => symbol.name))
     expect(declared).toEqual(expect.arrayContaining(['CartPanel', 'subtotal', 'removeItem']))
@@ -101,8 +104,20 @@ test.concurrent('configured exclusions and watch patterns decide which JavaScrip
     expect(registry.watchesFile('src/view.jsx')).toBe(true)
     const watches = compileWatchPatterns(scanner.watch)
     expect(['src/loader.mjs', 'tools/build.cjs'].every(watches)).toBe(true)
-    expect(['public/jquery-ui.min.js', 'src/widget.min.jsx', 'src/app.ts', 'src/app.tsx'].some(watches)).toBe(false)
+    expect(['src/app.ts', 'src/app.tsx'].some(watches)).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('the scan reads a minified name a later pattern restores', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-exclusions-'))
+  try {
+    await writeFile(path.join(root, 'app.js'), 'export function run() { return 1 }\n')
+    await writeFile(path.join(root, 'widget.min.js'), 'export function widget() { return 2 }\n')
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    // A `.min` name is a default exclusion rather than a rule in code, so a `!` pattern restores it.
+    const excluded = exclusion([...manifest.groma.scanner.exclude, '!widget.min.js'])
+    expect((await javascript.scan(root, {}, excluded))!.files.map(file => file.file)).toEqual(['app.js', 'widget.min.js'])
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test.concurrent('one body carries the same tokens whether it is written in JavaScript or in TypeScript', async () => {
@@ -219,15 +234,5 @@ test.concurrent('calls inside accessors belong to the accessor without entering 
     const owner = scan.operations!.find(operation => operation.id === call.source)!
     expect(owner.position).toBe(source.indexOf('get url'))
     expect(owner.tokens).toBeUndefined()
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test.concurrent('a leading comment does not hide a compact generated JavaScript body', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-compact-'))
-  try {
-    await writeFile(path.join(root, 'authored.js'), 'export function run() { return 1 }\n')
-    await writeFile(path.join(root, 'compressed.js'), `/* generated source\n * kept as a tracked file\n */\n${'var a=1;'.repeat(60)}\n`)
-    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
-    expect((await javascript.scan(root))!.files.map(file => file.file)).toEqual(['authored.js'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })

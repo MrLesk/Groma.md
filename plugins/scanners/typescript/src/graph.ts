@@ -3,11 +3,7 @@ import path from 'node:path'
 
 import type { ScanDiagnostic, ScanHttpEndpoint, ScanHttpRequest, ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
-import {
-  defaultTypeScriptScannerConfig,
-  listTypeScriptFiles,
-  type TypeScriptScannerConfig,
-} from './files.ts'
+import { listTypeScriptFiles } from './files.ts'
 import { displayName, kebabCase } from './naming.ts'
 import { analyzeSourceFiles } from './source-analysis.ts'
 import type { SourceEntry } from '../../entry-points/javascript.ts'
@@ -58,13 +54,14 @@ export async function packageName(repositoryRoot: string): Promise<string> {
   return displayName(kebabCase(path.basename(repositoryRoot)))
 }
 
+/** The graph of the sources `excluded` leaves in, compiled with the configs and workspace manifests it leaves in. */
 export async function buildImportGraph(
   repositoryRoot: string,
-  config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
+  excluded: (file: string) => boolean = () => false,
 ): Promise<ImportGraph> {
-  const paths = await listTypeScriptFiles(repositoryRoot, config)
+  const paths = (await listTypeScriptFiles(repositoryRoot)).filter(file => !excluded(file))
   const files = new Set(paths)
-  const { files: analyses, operations, invocations, httpEndpoints, httpRequests, entries, diagnostics, buildOutputs } = await analyzeSourceFiles(repositoryRoot, paths)
+  const { files: analyses, operations, invocations, httpEndpoints, httpRequests, entries, diagnostics, buildOutputs } = await analyzeSourceFiles(repositoryRoot, paths, excluded)
   const nodes = new Map<string, ImportGraphNode>()
   for (const analysis of analyses) {
     const node = nodes.get(analysis.file) ?? { file: analysis.file, imports: [], importedBy: [], symbols: [] }

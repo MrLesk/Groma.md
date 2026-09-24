@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
+import manifest from '../plugins/scanners/vue/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
@@ -12,6 +13,7 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
@@ -151,6 +153,20 @@ test.concurrent('Vue rejects external scripts combined with script setup', async
     await expect(scanner.scan(root)).rejects.toThrow('script setup')
     await writeFile(path.join(root, 'External.vue'), '<script lang="ts" src="./logic.ts"></script><script setup lang="ts">const value = 1</script>')
     await expect(scanner.scan(root)).rejects.toThrow('script setup')
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Vue reads no source its exclusions name, even one its config includes', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const config = path.join(root, 'tsconfig.json')
+    await writeFile(config, JSON.stringify({ ...JSON.parse(await readFile(config, 'utf8')), include: ['**/*.ts', '**/*.vue'] }))
+    // Read, the built component the config includes fails the scan with its unclosed element.
+    await mkdir(path.join(root, 'dist/ui'), { recursive: true })
+    await writeFile(path.join(root, 'dist/ui/Button.vue'), '<template><button>Save</template>\n')
+    const excluded = exclusion(manifest.groma.scanner.exclude)
+    await scanner.checkReadiness!(root, {}, excluded)
+    expect((await scanner.scan(root, {}, excluded))!.files.map(file => file.file)).not.toContain('dist/ui/Button.vue')
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

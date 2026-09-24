@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createScanObservation, type ScanEntryPoint, type ScanObservation } from '@groma/scanner'
-import { projectFiles } from '../projects.ts'
+import { repositoryFiles } from '../projects.ts'
 import type { EntrySources } from './source.ts'
 import { sourceOf, type BuildOutput } from '../workspace-packages.ts'
 
@@ -151,13 +151,16 @@ function sourced(entry: SourceEntry, root: string, outputs: readonly BuildOutput
   return file === undefined ? entry : { ...entry, file }
 }
 
-/** Shared source facts for JS/TS and framework observers; each contributes only the files it analyzed. */
+/**
+ * Shared source facts for JS/TS and framework observers; each contributes only the files it analyzed, and reads no
+ * manifest, workspace file or page its exclusions name.
+ */
 export async function withJavaScriptEntries(
-  root: string, observation: ScanObservation | undefined, inputs: EntrySources,
+  root: string, observation: ScanObservation | undefined, inputs: EntrySources, excluded: (file: string) => boolean,
 ): Promise<ScanObservation | undefined> {
   if (!observation) return undefined
-  const inventory = await projectFiles(root, file => ['package.json', 'angular.json', 'project.json', 'nx.json'].includes(path.posix.basename(file))
-    || file.endsWith('.html'))
+  const inventory = await repositoryFiles(root, file => !excluded(file)
+    && (['package.json', 'angular.json', 'project.json', 'nx.json'].includes(path.posix.basename(file)) || file.endsWith('.html')))
   const workspaces = new Set(inventory.filter(file => path.posix.basename(file) === 'nx.json').map(file => path.posix.dirname(file)))
   const packages = new Set(inventory.filter(file => path.posix.basename(file) === 'package.json').map(file => path.posix.dirname(file)))
   const active = new Set(observation.files.map(file => packageFor(file.file, packages)))

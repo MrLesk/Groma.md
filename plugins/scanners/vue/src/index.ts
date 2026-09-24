@@ -1,7 +1,7 @@
-import { createScanObservation, type ScanObservation, type ScannerPlugin } from '@groma/scanner'
+import { createScanObservation, type ScanObservation, type ScannerPlugin, type ScannerSettings } from '@groma/scanner'
 import { VueEvidence } from './evidence.ts'
 import path from 'node:path'
-import { frameworkProjects, hasDependency, isUnder, projectFiles } from '../../projects.ts'
+import { frameworkProjects, hasDependency, isUnder, repositoryFiles } from '../../projects.ts'
 import { frameworkSourceFiles } from '../../typescript-project.ts'
 import { combineObservations } from '../../observations.ts'
 import { vueHttpFacts } from './http.ts'
@@ -13,24 +13,26 @@ import { entrySourceInputs } from '../../entry-points/source.ts'
 import { classicChecker } from '../../http-checker.ts'
 import ts from 'typescript'
 
-export async function scanVue(root: string): Promise<ScanObservation | undefined> {
+export async function scanVue(root: string, _settings?: ScannerSettings,
+  excluded: (file: string) => boolean = () => false): Promise<ScanObservation | undefined> {
   const parts = []
-  const { selected, owners } = await vueProjects(root)
+  const { selected, owners } = await vueProjects(root, excluded)
   for (const [project, sources] of selected) {
-    const observation = await scanVueProject(project, root, sources, owners)
+    const observation = await scanVueProject(project, root, sources, owners, excluded)
     if (observation) parts.push({ key: relative(root, project), observation })
   }
   return combineObservations(parts)
 }
 
-async function vueProjects(root: string): Promise<{ selected: Map<string, string[]>; owners: Map<string, string> }> {
-  const projects = await frameworkProjects(root, 'vue', ['.vue'], { inheritConfig: true })
+/** Each Vue project with the repository sources the exclusions leave in. */
+async function vueProjects(root: string, excluded: (file: string) => boolean): Promise<{ selected: Map<string, string[]>; owners: Map<string, string> }> {
+  const projects = await frameworkProjects(root, 'vue', ['.vue'], { inheritConfig: true }, excluded)
   const selected = new Map(projects.map(project => [project, [] as string[]]))
   const owners = new Map<string, string>()
   // Each source belongs to its nearest selected Vue package, even under an export-only package.json.
   const ordered = projects.map(project => ({ project, directory: relative(root, project) }))
     .sort((left, right) => right.directory.length - left.directory.length)
-  for (const file of await projectFiles(root, file => /\.(?:vue|[cm]?[jt]sx?)$/.test(file))) {
+  for (const file of await repositoryFiles(root, file => /\.(?:vue|[cm]?[jt]sx?)$/.test(file) && !excluded(file))) {
     const owner = ordered.find(item => isUnder(file, item.directory))
     if (owner) {
       selected.get(owner.project)!.push(file)
@@ -40,8 +42,9 @@ async function vueProjects(root: string): Promise<{ selected: Map<string, string
   return { selected, owners }
 }
 
-async function scanVueProject(projectRoot: string, root: string, sources: string[], owners: ReadonlyMap<string, string>): Promise<ScanObservation | undefined> {
-  const prepared = vueProject(projectRoot, root, sources, owners)
+async function scanVueProject(projectRoot: string, root: string, sources: string[], owners: ReadonlyMap<string, string>,
+  excluded: (file: string) => boolean): Promise<ScanObservation | undefined> {
+  const prepared = vueProject(projectRoot, root, sources, owners, excluded)
   if (!prepared) return undefined
   const { manifest, project } = prepared
   const evidence = new VueEvidence(project)
@@ -74,7 +77,7 @@ async function scanVueProject(projectRoot: string, root: string, sources: string
     operations: [...evidence.operations.values()], invocations: evidence.invocations,
     diagnostics: [...project.diagnostics, ...evidence.diagnostics],
     ...(httpEndpoints.length ? { httpEndpoints } : {}), ...(httpRequests.length ? { httpRequests } : {}),
-  }), await entrySourceInputs(root, ts, classicChecker(ts, project.checker), project.files))
+  }), await entrySourceInputs(root, ts, classicChecker(ts, project.checker), project.files), excluded)
 }
 
 export default {
@@ -84,9 +87,9 @@ export default {
   /** Each Vue project's sources, including its `.vue` files and a Nuxt project's server routes. */
   listSourceFiles: root => frameworkSourceFiles({ root, dependency: 'vue', projects: ['.vue'],
     inheritConfig: true, sources: ['.vue', '.ts', '.tsx', '.js', '.jsx', '.html', '.css', '.scss', '.sass', '.less', '.styl'] }),
-  checkReadiness: async root => {
-    const { selected, owners } = await vueProjects(root)
-    for (const [project, sources] of selected) vueProject(project, root, sources, owners)
+  checkReadiness: async (root, _settings?, excluded = () => false) => {
+    const { selected, owners } = await vueProjects(root, excluded)
+    for (const [project, sources] of selected) vueProject(project, root, sources, owners, excluded)
   },
   scan: scanVue,
 } satisfies ScannerPlugin

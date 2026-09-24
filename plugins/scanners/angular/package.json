@@ -8,6 +8,15 @@
     "scanner": {
       "id": "angular",
       "entry": "./dist/package/dist/index.js",
+      "exclude": [
+        "*.spec.ts",
+        "*.test.ts",
+        ".angular/",
+        "node_modules/",
+        "dist/",
+        "build/",
+        "coverage/"
+      ],
       "discovery": {
         "technologies": [
           "angular"

@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/angular/build.ts'
+import manifest from '../plugins/scanners/angular/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
@@ -11,6 +12,7 @@ import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
@@ -239,13 +241,15 @@ test.concurrent('Angular scans an Nx application through its solution config wit
     [`${shop}/shop.spec.ts`]: "import { Shop } from './shop'\nexport const spec = Shop\n",
   })
   try {
-    await scanner.checkReadiness!(root)
-    const observation = (await scanner.scan(root))!
+    const excluded = exclusion(manifest.groma.scanner.exclude)
+    await scanner.checkReadiness!(root, {}, excluded)
+    const observation = (await scanner.scan(root, {}, excluded))!
     const observed = observation.files.map(file => file.file)
     // The absent stylesheet is left out of the component's source unit.
     expect(observation.sourceUnits?.find(unit => unit.primary === `${shop}/shop.ts`)?.files.toSorted()).toEqual([`${shop}/shop.html`, `${shop}/shop.ts`])
     for (const file of [`${shop}/shop.spec.ts`, `${shop}/data.json`]) expect(observed).not.toContain(file)
-    expect(await scanner.listSourceFiles!(root)).not.toContain(`${shop}/shop.spec.ts`)
+    // The listing comes before exclusions, so it names the spec the defaults leave out.
+    expect(await scanner.listSourceFiles!(root)).toContain(`${shop}/shop.spec.ts`)
     expect(observation.diagnostics.map(item => item.code)).toEqual(expect.arrayContaining(['angular-unreadable-config', 'angular-missing-resource']))
     expect(observation.entryPoints).toEqual([expect.objectContaining({ name: 'shop', file: `${shop}/main.ts`,
       files: expect.arrayContaining([`${shop}/polyfills.ts`, `${shop}/env.prod.ts`, `${shop}/shop.html`]) })])
@@ -280,5 +284,29 @@ test.concurrent('Angular binds directive outputs and template emits from inline 
     const list = await readFile(path.join(root, 'list.ts'), 'utf8')
     const position = list.indexOf('(removed)')
     expect(observation.invocations!.map(call => call.binding)).toContainEqual({ file: 'list.ts', line: list.slice(0, position).split('\n').length, position })
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Angular reads no project, config, source or entry declaration its exclusions name, and a ! pattern restores a spec', async () => {
+  const { temporary, root, scanner } = await workspace({
+    'package.json': JSON.stringify({ dependencies: { '@angular/core': '21.2.17' } }),
+    'tsconfig.json': JSON.stringify({ compilerOptions: { experimentalDecorators: true }, include: ['src/**/*.ts'] }),
+    'src/app.ts': "import { Component } from '@angular/core'\n\n@Component({ template: '<p>App</p>' })\nexport class App {}\n",
+    'src/app.spec.ts': "import { App } from './app'\nexport const spec = App\n",
+    // Each excluded input fails the readiness check or the scan if read: an installed Angular package with an invalid
+    // config and source, and an invalid workspace file in the application's own package.
+    'node_modules/lib/package.json': JSON.stringify({ dependencies: { '@angular/core': '21.2.17' } }),
+    'node_modules/lib/tsconfig.json': '{',
+    'node_modules/lib/broken.ts': 'export class Broken {\n',
+    'dist/angular.json': '{',
+    'node_modules/other/package.json': '{',
+    'node_modules/other/tsconfig.json': '{}',
+  })
+  try {
+    // The listing comes before exclusions: it names installed source, and a package.json that is not JSON names no project.
+    expect(await scanner.listSourceFiles!(root)).toContain('node_modules/lib/broken.ts')
+    const excluded = exclusion([...manifest.groma.scanner.exclude, '!src/app.spec.ts'])
+    await scanner.checkReadiness!(root, {}, excluded)
+    expect((await scanner.scan(root, {}, excluded))!.files.map(file => file.file).toSorted()).toEqual(['src/app.spec.ts', 'src/app.ts'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

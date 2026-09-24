@@ -3,8 +3,11 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
+import manifest from '../plugins/scanners/typescript/package.json'
+import typescript from '../plugins/scanners/typescript/src/index.ts'
 import { buildImportGraph } from '../plugins/scanners/typescript/src/graph.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 
 /** A monorepo as a fresh checkout has it: no node_modules and no build output. */
 async function monorepo(files: Record<string, string>): Promise<string> {
@@ -73,6 +76,25 @@ test.concurrent('a package file reads its imports with its own config, not the a
     const imports = (file: string) => graph.files.find(node => node.file === file)?.imports
     expect(imports('server/src/main.ts')).toEqual(['packages/sdk/src/index.ts'])
     expect(imports('packages/sdk/src/index.ts')).toEqual(['packages/sdk/src/types.ts'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('the scan reads no source, config or manifest its exclusions name, and reads a test a later pattern restores', async () => {
+  const root = await monorepo({
+    'packages/api/package.json': json({ name: '@acme/api', exports: './src/index.ts' }),
+    'packages/api/src/index.ts': 'export function listPosts(): string[] { return [] }\n',
+    // Build output: read, the copied manifest makes the package name ambiguous and the config fails the scan.
+    'packages/api/dist/package.json': json({ name: '@acme/api', exports: './index.js' }),
+    'packages/api/dist/tsconfig.json': '{ invalid',
+    'apps/web/src/page.ts': "import { listPosts } from '@acme/api'\nexport const page = listPosts()\n",
+    'apps/web/src/page.test.ts': "import { page } from './page'\nexport const checked = page\n",
+    'apps/web/src/page.spec.ts': "import { page } from './page'\nexport const specified = page\n",
+  })
+  try {
+    const scan = (await typescript.scan(root, {}, exclusion([...manifest.groma.scanner.exclude, '!page.test.ts'])))!
+    expect(scan.files.map(file => file.file)).toEqual(['apps/web/src/page.test.ts', 'apps/web/src/page.ts', 'packages/api/src/index.ts'])
+    const files = new Map(scan.operations!.map(operation => [operation.id, operation.file]))
+    expect(scan.invocations!.flatMap(call => call.targets.map(target => files.get(target)))).toEqual(['packages/api/src/index.ts'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

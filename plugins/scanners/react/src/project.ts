@@ -68,11 +68,11 @@ export interface ReactProject {
 }
 
 /**
- * A React package's program. `typescriptSources` holds the files the TypeScript scanner reads, less the
- * project's exclusions, so tests and declarations it leaves out are not React sources either. A file belongs
+ * A React package's program. `typescriptSources` holds the repository's TypeScript sources less this scanner's
+ * exclusions, so declaration files and the tests its defaults exclude are not React sources. A file belongs
  * to the nearest of the React `packages`, listed deepest first, so a package whose config also compiles a
  * nested package leaves that package's files to it. A package without components of its own, such as one
- * holding only tests, has nothing to report.
+ * holding only excluded tests, has nothing to report.
  */
 export function reactProject(directory: string, repositoryRoot: string, typescriptSources: ReadonlySet<string>,
   packages: readonly string[]): ReactProject | undefined {

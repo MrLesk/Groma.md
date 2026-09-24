@@ -9,10 +9,6 @@ import {
 } from '@groma/scanner'
 
 import {
-  defaultTypeScriptScannerConfig,
-  type TypeScriptScannerConfig,
-} from './files.ts'
-import {
   buildImportGraph,
   fileLabel,
   fileStem,
@@ -116,11 +112,12 @@ function scopeNames(scopeFiles: string[]): Map<string, string> {
   return names
 }
 
+/** `excluded` names the repository files the scan leaves out: sources, and the configs and workspace manifests it selects. */
 export async function scanTypeScriptSource(
   repositoryRoot: string,
-  config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
+  excluded: (file: string) => boolean = () => false,
 ): Promise<ScanObservation | undefined> {
-  const graph = await buildImportGraph(repositoryRoot, config)
+  const graph = await buildImportGraph(repositoryRoot, excluded)
   if (graph.files.length === 0) return undefined
   const scopeFiles = inferScopeFiles(graph, await packageBins(repositoryRoot))
   const placements = placementByFile(graph, scopeFiles)
@@ -146,5 +143,6 @@ export async function scanTypeScriptSource(
     httpEndpoints: graph.httpEndpoints,
     httpRequests: graph.httpRequests,
     diagnostics: graph.diagnostics,
-  }), { imports: new Map(graph.files.map(node => [node.file, node.imports])), entries: graph.entries, buildOutputs: graph.buildOutputs })
+  }), { imports: new Map(graph.files.map(node => [node.file, node.imports])), entries: graph.entries, buildOutputs: graph.buildOutputs },
+  excluded)
 }

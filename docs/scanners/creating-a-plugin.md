@@ -222,6 +222,11 @@ whose sources are all excluded and name the pattern that hides a file. Tests,
 generated output, vendored code and build directories belong in the scanner's
 default `exclude` list rather than in its listing code.
 
+Groma runs the listing before every readiness check and scan, so a listing that
+throws fails its scanner. Because it reads before exclusions, a listing meets
+broken inputs in excluded folders, so a manifest the build cannot read names
+nothing.
+
 Official scanners list tracked and unignored files through one shared Git
 listing. A symlink to another file in that listing is the same physical source,
 so only the file it points to is listed and each source is read once.
@@ -236,7 +241,7 @@ scanner makes:
 | Go | A file its build constraints exclude, such as `_windows.go` or a `//go:build` tag the scan does not select |
 | C# | A C# file no scanned project compiles |
 | Angular, Vue | A template or stylesheet no component declares |
-| React | Any source the TypeScript scanner reads, while the repository has a React project, including files no React package compiles |
+| React | Any TypeScript source, while the repository has a React project, including files no React package compiles |
 
 A listing must never leave out a file the scan does read: that would report the
 file as read by no enabled scanner.

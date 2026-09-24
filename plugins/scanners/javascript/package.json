@@ -9,6 +9,16 @@
     "scanner": {
       "id": "javascript",
       "entry": "./dist/package/dist/index.js",
+      "exclude": [
+        "*.min.js",
+        "*.min.mjs",
+        "*.min.cjs",
+        "*.min.jsx",
+        "node_modules/",
+        "dist/",
+        "build/",
+        "coverage/"
+      ],
       "discovery": {
         "technologies": [
           "javascript"

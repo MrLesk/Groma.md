@@ -116,9 +116,6 @@ test.concurrent('TypeScript emits one file fact and separate inferred placement'
     'src/scanner.ts': "import { parse } from './parse.ts'\nexport function scan() { parse() }\n",
     'src/parse.ts': 'export function parse() {}\n',
     'src/unused.ts': 'export function unused() {}\n',
-    'src/ignored.test.ts': 'export function ignored() {}\n',
-    'test/helper.ts': 'export function helper() {}\n',
-    'test-bun/helper.ts': 'export function bunHelper() {}\n',
   })
   try {
     await gitAdd(root)

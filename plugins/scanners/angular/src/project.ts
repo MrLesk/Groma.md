@@ -1,15 +1,12 @@
 import path from 'node:path'
 import type { ScanDiagnostic } from '@groma/scanner'
 import ts from 'typescript'
-import { projectFiles } from '../../projects.ts'
+import { repositoryFiles } from '../../projects.ts'
 import { frameworkProjectFiles, frameworkSourceFiles } from '../../typescript-project.ts'
 
 /** A package that declares Angular; an Nx workspace declares it once at its root and keeps configs in each project. */
 const SELECTION = { dependency: '@angular/core', projects: ['.ts'], nestedConfig: true } as const
 const RESOURCES = ['.html', '.css', '.scss', '.sass', '.less', '.styl']
-
-/** Specs exercise the application rather than form it; the TypeScript scanner leaves them out as well. */
-const isTest = (file: string) => /\.(?:spec|test)\.ts$/.test(file)
 
 export function relative(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join('/')
@@ -23,15 +20,17 @@ function failDiagnostics(diagnostics: readonly ts.Diagnostic[]): void {
   }).join('\n'))
 }
 
-/** Each Angular project directory with the TypeScript sources its scan compiles; a file belongs to its nearest project. */
-export async function angularProjects(root: string, excluded: (file: string) => boolean = () => false): Promise<Map<string, string[]>> {
-  const projects = await frameworkProjectFiles({ root, ...SELECTION, sources: ['.ts'] })
-  return new Map([...projects].map(([directory, files]) => [directory, files.filter(file => !isTest(file) && !excluded(file))]))
+/**
+ * Each Angular project directory with the TypeScript sources its scan compiles, among the files `excluded` leaves in; a
+ * file belongs to its nearest project.
+ */
+export function angularProjects(root: string, excluded: (file: string) => boolean): Promise<Map<string, string[]>> {
+  return frameworkProjectFiles({ root, ...SELECTION, sources: ['.ts'], excluded })
 }
 
-/** The files a scan can read: the sources, and every template and stylesheet a component can name. */
-export async function angularSourceFiles(root: string): Promise<string[]> {
-  return (await frameworkSourceFiles({ root, ...SELECTION, sources: ['.ts', ...RESOURCES] })).filter(file => !isTest(file))
+/** The files a scan can read, before exclusions: the sources, and every template and stylesheet a component can name. */
+export function angularSourceFiles(root: string): Promise<string[]> {
+  return frameworkSourceFiles({ root, ...SELECTION, sources: ['.ts', ...RESOURCES] })
 }
 
 /**
@@ -42,8 +41,12 @@ const unreadable = new Set([5083, 6053, 5023, 6046])
 
 export interface ProjectConfig { file: string; config: ts.ParsedCommandLine }
 
-/** Every config inside the Angular projects, and each config they reference, as a solution config names its projects. */
-export async function projectConfigs(root: string, directories: readonly string[]): Promise<{ configs: ProjectConfig[]; diagnostics: ScanDiagnostic[] }> {
+/**
+ * Every config inside the Angular projects that `excluded` leaves in, and each config they reference, as a solution
+ * config names its projects.
+ */
+export async function projectConfigs(root: string, directories: readonly string[],
+  excluded: (file: string) => boolean): Promise<{ configs: ProjectConfig[]; diagnostics: ScanDiagnostic[] }> {
   const configs = new Map<string, ProjectConfig>()
   const diagnostics: ScanDiagnostic[] = []
   const read = (file: string): void => {
@@ -60,7 +63,7 @@ export async function projectConfigs(root: string, directories: readonly string[
     for (const reference of config.projectReferences ?? []) read(ts.resolveProjectReferencePath(reference))
   }
   const inProject = (file: string) => directories.some(directory => directory === '.' || file.startsWith(`${directory}/`))
-  for (const file of await projectFiles(root, file => path.posix.basename(file) === 'tsconfig.json' && inProject(file))) {
+  for (const file of await repositoryFiles(root, file => path.posix.basename(file) === 'tsconfig.json' && inProject(file) && !excluded(file))) {
     read(path.join(root, file))
   }
   return { configs: [...configs.values()], diagnostics }
