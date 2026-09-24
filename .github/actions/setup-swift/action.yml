@@ -3,6 +3,12 @@ description: Install the compiler and native packaging tools used by scanner bui
 runs:
   using: composite
   steps:
+    # On a runner image without this Swift, setup-swift downloads Swiftly and checks its signature against a keyring it
+    # never fills, so the step fails; swift.org's published keys include the signing key.
+    - name: Import the Swift signing keys
+      if: runner.os == 'Linux'
+      run: curl -fsSL https://www.swift.org/keys/all-keys.asc | gpg --import
+      shell: bash
     - uses: swift-actions/setup-swift@v3
       if: runner.os != 'Windows'
       with:
