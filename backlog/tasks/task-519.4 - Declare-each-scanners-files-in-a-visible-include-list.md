@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-24 18:21'
-updated_date: '2026-09-24 19:05'
+updated_date: '2026-09-24 19:12'
 labels: []
 dependencies:
   - TASK-519.2
@@ -219,6 +219,8 @@ The globs of the files a scanner reads (for example **/*.java and **/pom.xml for
 Implemented as planned. The host lists the repository once (src/repository-listing.ts, with useGitignore), config.ts parses the required include list and useGitignore and matches both lists, src/scanner/modules/selection.ts owns a scanner's selection and the test helper scannerFiles, and the registry hands each scanner its files, skips one whose candidates are all excluded without calling it, and triggers a scanner only for a path its include names and no exclusion names. The plugin contract passes files to scan and checkReadiness and candidates to listSourceFiles; watch left it. Four agents converted the twelve scanners (each package declares groma.scanner.include; no plugin runs Git; plugins/scanners/projects.ts keeps only isUnder). Docs: the plugin guide's 'What a scanner reads' section, the overview's 'Selecting source files', the agent instructions and the teaching example. Test decision: scanner-exclusions 'a scanner receives the files its include list names, less excluded ones and, unless useGitignore is false, ignored ones' (authority: AC2 to AC4); a fake scanner reports the files it receives in a diagnostic; removing the include filter, the exclusion filter, the flag in the listing or the include check in triggers each fails it. Evidence before the emergency stop: that test and the converted host tests pass; Go and Java suites 32 of 32, C# 9 of 9 plus the .NET worker 30 of 30, Rust 21 of 21 (agent runs with toolchains). On Alex's emergency instruction (2026-09-24: skip checks and CI, finish the code and push to main), bun run check, the cold simplicity review, the full-context review and CI were not run for this task.
 
 Left open by the emergency stop: bun run check, CI and both reviews were not run (DoD 2 unchecked); the React, Vue and Angular suites were not rerun; the TypeScript, JavaScript, React, Vue and Angular doc pages still describe the old selection; the prebuilt dist packages under plugins/scanners/*/dist need a rebuild before Groma scans itself locally; nested-scanners 'TypeScript configs with no inputs or an absent base' needs the include-only candidates; the Python suite's intermittent git-init hang is unconfirmed against main.
+
+Follow-up 31fbae7c (Alex: check without CI): the full check on main found five failures and two complexity warnings from this task. Fixed: a collection or readiness check with no scanner to run no longer lists the repository, so groma scan works outside a Git repository; Vue passes a declared root the disk lacks to the compiler again, so its absent-source warning returns; discovery and scanner-package reading moved a loop and the list validation into helpers; three tests adapted to the new model; the TypeScript, JavaScript, React, Vue and Angular pages describe the include and exclude lists. bun run check on main plus this fix: 742 pass, 48 skip, 0 fail. Open: the Groma architecture workflow installs the released npm scanner packages, which declare no include yet, so it fails until new scanner releases are published.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

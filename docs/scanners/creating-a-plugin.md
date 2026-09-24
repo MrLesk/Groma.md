@@ -286,7 +286,7 @@ For a framework detected through a dependency:
           "package": "@example/ui"
         }],
         "compatibility": {
-          "groma": ">=0.3.0"
+          "groma": ">=0.5.0"
         }
       }
     }
@@ -312,7 +312,7 @@ coverage gap.
 | `text` | `versionPattern`: regular expression evaluated with the multiline flag; the first capture is the version. `declaration` explains the clue. |
 
 Declare the minimum groma.md API version the scanner needs in `compatibility.groma`,
-such as `>=0.3.0`. Later stable groma.md versions remain eligible. Raise the minimum
+such as `>=0.5.0`. Later stable groma.md versions remain eligible. Raise the minimum
 only when the scanner uses an API introduced in a newer groma.md version.
 groma.md uses that requirement and standard npm `os`/`cpu` fields to choose a published release
 when the user installs a package by name. Language versions are discovery evidence,

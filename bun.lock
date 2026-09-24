@@ -30,7 +30,7 @@
     },
     "packages/scanner": {
       "name": "@groma/scanner",
-      "version": "0.1.2",
+      "version": "0.2.0",
     },
     "packages/work-source": {
       "name": "@groma/work-source",
@@ -38,7 +38,7 @@
     },
     "plugins/scanners/angular": {
       "name": "@groma/scanner-angular",
-      "version": "0.1.5",
+      "version": "0.2.0",
       "dependencies": {
         "@angular/compiler": "22.2.0",
         "@groma/scanner": "workspace:*",
@@ -50,21 +50,21 @@
     },
     "plugins/scanners/csharp": {
       "name": "@groma/scanner-csharp",
-      "version": "0.1.4",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/go": {
       "name": "@groma/scanner-go",
-      "version": "0.1.3",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/java": {
       "name": "@groma/scanner-java",
-      "version": "0.1.3",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "good-enough-parser": "1.1.23",
@@ -72,7 +72,7 @@
     },
     "plugins/scanners/javascript": {
       "name": "@groma/scanner-javascript",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "typescript": "6.0.3",
@@ -80,7 +80,7 @@
     },
     "plugins/scanners/php": {
       "name": "@groma/scanner-php",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "php-parser": "3.7.0",
@@ -88,7 +88,7 @@
     },
     "plugins/scanners/python": {
       "name": "@groma/scanner-python",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "pyodide": "314.0.7",
@@ -96,7 +96,7 @@
     },
     "plugins/scanners/react": {
       "name": "@groma/scanner-react",
-      "version": "0.1.5",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "typescript": "6.0.3",
@@ -108,21 +108,21 @@
     },
     "plugins/scanners/rust": {
       "name": "@groma/scanner-rust",
-      "version": "0.1.4",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/swift": {
       "name": "@groma/scanner-swift",
-      "version": "0.1.3",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
     },
     "plugins/scanners/typescript": {
       "name": "@groma/scanner-typescript",
-      "version": "0.1.4",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "typescript": "7.1.0-dev.20260924.1",
@@ -130,7 +130,7 @@
     },
     "plugins/scanners/vue": {
       "name": "@groma/scanner-vue",
-      "version": "0.1.5",
+      "version": "0.2.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
         "@volar/typescript": "2.4.28",

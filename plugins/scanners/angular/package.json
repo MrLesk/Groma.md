@@ -1,6 +1,6 @@
 {
   "name": "@groma/scanner-angular",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "license": "MIT",
@@ -47,7 +47,7 @@
           }
         ],
         "compatibility": {
-          "groma": ">=0.3.0"
+          "groma": ">=0.5.0"
         }
       }
     }
