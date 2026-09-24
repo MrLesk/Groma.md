@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createScanObservation, type CodeDeclaration, type CodeFile, type CodeVisibility, type ScannerPlugin,
   type ScanInvocation, type ScanOperation, type ScanSymbol, type SourceReference } from '@groma/scanner'
-import { projectFiles } from '../../projects.ts'
+import { repositoryFiles } from '../../projects.ts'
 
 interface FileEvidence {
   file: string
@@ -19,14 +19,13 @@ interface FileEvidence {
 const assets = fileURLToPath(new URL('../dist/', import.meta.url))
 const worker = path.join(assets, `${process.platform}-${process.arch}`, process.platform === 'win32' ? 'worker.exe' : 'worker')
 // DocC catalogs hold documentation snippets that no build compiles; some are deliberately incomplete.
-const exclude = ['**/.build/**', '**/Pods/**', '**/Carthage/**', '**/*.docc/**']
-const exclusions = exclude.map(pattern => new Bun.Glob(pattern))
+const catalog = new Bun.Glob('**/*.docc/**')
 // SwiftPM reads Package.swift and its version-specific Package@swift-<version>.swift variants.
 const manifest = /^Package(@swift-[\d.]+)?\.swift$/
 
 async function files(root: string, excluded?: (file: string) => boolean) {
-  return projectFiles(root, file => file.endsWith('.swift') && !manifest.test(path.posix.basename(file))
-    && !exclusions.some(pattern => pattern.match(file)) && !excluded?.(file))
+  return repositoryFiles(root, file => file.endsWith('.swift') && !manifest.test(path.posix.basename(file))
+    && !catalog.match(file) && !excluded?.(file))
 }
 
 function readEvidence(root: string, files: string[]): Promise<FileEvidence[]> {
@@ -67,10 +66,10 @@ function outline(file: FileEvidence, symbols: string[]): CodeFile {
 
 export default {
   id: 'swift',
-  watch: { include: ['**/*.swift'], exclude },
+  watch: { include: ['**/*.swift'], exclude: [] },
   listSourceFiles: root => files(root),
-  async checkReadiness(root) {
-    if (!(await files(root)).length) throw new Error('swift: No Swift source files were found in the Git repository.')
+  async checkReadiness(root, _settings, excluded) {
+    if (!(await files(root, excluded)).length) throw new Error('swift: No Swift source files were found in the Git repository.')
     await access(worker)
   },
   async scan(root, _settings, excluded) {

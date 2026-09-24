@@ -44,12 +44,15 @@ into a component. Ordinary OKF Code links
 expose file ownership without adding a new architecture level or stored graph.
 
 PHP edits and new files use the shared scanner watcher. Repeated scans preserve
-one physical owner and authored architecture. Shared Git boundaries omit ignored
-files and dependency/build output directories. Core applies configured source
-exclusions. Test source is otherwise treated like other PHP source; projects can
-exclude it explicitly.
-The live scanner also rescans after other unexcluded repository changes so it
-can catch extensionless Composer commands at any declared path.
+one physical owner and authored architecture. What counts as PHP source is built
+in. The package declares default
+[exclusion](../index.md#excluding-source-evidence) for Composer's `vendor/`
+folder. The readiness check and scan read no source, Composer manifest or
+command that the scanner's exclusions name. The source listing names files
+before exclusions, and a `composer.json` that is not JSON names no command. Test
+source is treated like other PHP source; projects can exclude it explicitly. The
+live scanner also rescans after other unexcluded repository changes so it can
+catch extensionless Composer commands at any declared path.
 
 ## Source outline
 
@@ -271,8 +274,8 @@ HTTP API (`wp_remote_get`, `wp_remote_post`, `wp_remote_head`,
 ## Validation
 
 Independent fixtures cover declarations, mixed PHP/HTML, nested function
-ownership, exact source locations, unresolved calls, invalid syntax, discovery
-without Composer, repeat scans, live source edits, identical,
+ownership, exact source locations, unresolved calls, invalid syntax, default
+exclusions, discovery without Composer, repeat scans, live source edits, identical,
 near-duplicate and renamed bodies found by `groma lint`, the source outline
 of PHP files beside a TypeScript file in one component, and the HTTP facts of
 each supported routing and client API with their unresolved cases. The fresh-checkout

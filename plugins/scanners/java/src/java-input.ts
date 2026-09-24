@@ -38,26 +38,35 @@ async function collect(root: string, directory: string): Promise<string[]> {
 }
 
 /**
- * A directory with pom.xml is a Maven project and every other selected directory a Gradle project; the scan and
- * the source listing both read its declarations here. Undefined for a Maven aggregator.
+ * A directory with a pom.xml that `excluded` leaves in is a Maven project and every other selected directory a Gradle
+ * project; the scan and the source listing both read its declarations here. Undefined for a Maven aggregator.
+ * `excluded` takes paths relative to the directory.
  */
-export async function readJavaProject(directory: string): Promise<JavaProject | undefined> {
+export async function readJavaProject(
+  directory: string, excluded: (file: string) => boolean = () => false,
+): Promise<JavaProject | undefined> {
   const pom = path.join(directory, 'pom.xml')
-  if (!await exists(pom)) return { release: '', ...await readGradleProject(directory), encoding: 'UTF-8', kind: 'gradle-project' }
+  if (excluded('pom.xml') || !await exists(pom)) {
+    return { release: '', ...await readGradleProject(directory, excluded), encoding: 'UTF-8', kind: 'gradle-project' }
+  }
   const maven = readMavenProject(directory, await readFile(pom, 'utf8'))
   return maven && { ...maven, kind: 'maven-project', file: 'pom.xml' }
 }
 
-export async function readJavaInput(repositoryRoot: string): Promise<JavaInput | undefined> {
-  const root = await realpath(repositoryRoot)
-  const project = await readJavaProject(root)
+/** The project's declarations and the sources under its main source roots that `excluded` leaves in. */
+export async function readJavaInput(
+  projectRoot: string, excluded: (file: string) => boolean = () => false,
+): Promise<JavaInput | undefined> {
+  const root = await realpath(projectRoot)
+  const project = await readJavaProject(root, excluded)
   if (!project) return undefined
   const { sourceRoots, ...input } = project
   const found = await Promise.all(sourceRoots.map(async sourceRoot => {
     const directory = path.resolve(root, sourceRoot)
     return await exists(directory) ? collect(root, directory) : []
   }))
-  const files = [...new Set(found.flat())].sort()
+  // Exclusions apply inside a declared root too, such as a generated root in a build directory.
+  const files = [...new Set(found.flat())].filter(file => !excluded(file)).sort()
   if (!files.length) return undefined
   return { ...input, root, files }
 }

@@ -1,5 +1,5 @@
 import type { ScannerPlugin } from '@groma/scanner'
-import { checkCSharpReadiness, exclude, listCSharpSources, readCSharpOutline, scanCSharpSource } from './adapter.ts'
+import { checkCSharpReadiness, listCSharpSources, readCSharpOutline, scanCSharpSource } from './adapter.ts'
 
 const scanner = {
   id: 'csharp',
@@ -8,7 +8,7 @@ const scanner = {
     include: ['**/*.cs', '**/*.csproj', '**/*.sln', '**/*.slnx', '**/*.props', '**/*.targets',
       '**/global.json', '**/nuget.config', '**/packages.lock.json']
       .map(pattern => pattern.replace(/[a-z]/g, letter => `[${letter}${letter.toUpperCase()}]`)),
-    exclude,
+    exclude: [],
   },
   checkReadiness: checkCSharpReadiness,
   readCodeStructure: readCSharpOutline,

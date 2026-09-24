@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { CodeSymbol, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/php/build.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
@@ -177,13 +178,19 @@ test.concurrent('PHP accepts named arguments after unpacking but rejects positio
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-test.concurrent('PHP scan omits source excluded by Groma before parsing it', async () => {
-  const { temporary, root, scanner } = await setup()
+test.concurrent('the PHP scan reads nothing the default exclusions name', async () => {
+  const { temporary, root, artifact, scanner } = await setup()
   try {
-    await writeFile(path.join(root, 'excluded.php'), '<?php function broken(')
-    const scan = (await scanner.scan(root, undefined, file => file === 'excluded.php'))!
-    expect(scan.files.some(file => file.file === 'excluded.php')).toBe(false)
-    await expect(scanner.scan(root)).rejects.toThrow()
+    // Reading either vendored file fails the scan: the manifest when its entries are read, the source when it is parsed.
+    await mkdir(path.join(root, 'vendor/acme/tool'), { recursive: true })
+    await writeFile(path.join(root, 'vendor/acme/tool/composer.json'), '{')
+    await writeFile(path.join(root, 'vendor/acme/tool/broken.php'), '<?php function broken(')
+    const defaults: string[] = JSON.parse(await readFile(path.join(artifact, 'package.json'), 'utf8')).groma.scanner.exclude
+    const excluded = exclusion(defaults)
+    // The host lists before exclusions, so the listing names the vendored source instead of failing on its manifest.
+    expect(await scanner.listSourceFiles!(root)).toContain('vendor/acme/tool/broken.php')
+    expect((await scanner.scan(root, {}, excluded))!.files.map(file => file.file))
+      .toEqual(['plugin.php', 'view.php'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

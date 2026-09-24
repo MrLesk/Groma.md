@@ -16,7 +16,7 @@ Scanner consumers do not build the worker or install a separate language runtime
 ## Project inputs
 
 The adapter reads tracked and unignored `Cargo.toml` files with a TOML parser.
-Workspace members and exclusions, package names, editions, library/binary paths,
+Workspace `members` and `exclude` lists, package names, editions, library/binary paths,
 local workspace dependencies and declared default features supply a source
 crate graph. It passes that graph directly to rust-analyzer's `ProjectJson`
 API. The engine loads modules and resolves source names. Cargo metadata,
@@ -46,6 +46,20 @@ and follows literal `#[path = "..."]` references to shared files outside them.
 Module declarations still select the analyzed files; making a file reachable
 does not create a source owner by itself.
 
+## Exclusions
+
+The package declares `target/` and `vendor/` as default
+[exclusions](../index.md#excluding-source-evidence). The scan and
+readiness check read no `Cargo.toml` the exclusions name, so an excluded
+manifest is not a project, workspace member, path dependency or enclosing
+workspace. The worker reads no module file they name: the file reports nothing
+and cannot fail the scan, a call into it stays unresolved, and an excluded
+binary root declares no entry point. The source listing names files before
+exclusions, and none of a project Cargo cannot build: one with a manifest that
+is not TOML, or with no library or binary target. Selecting library and binary
+targets and leaving out `#[test]` functions and `cfg(test)` items stay built in,
+because they are Cargo build rules.
+
 ## Evidence and uncertainty
 
 The scanner emits module source files, functions, exact UTF-16 positions and
@@ -57,7 +71,8 @@ bodies, macro-expanded call bodies and generated sources are not extracted.
 A physical file shared by multiple module contexts appears once, with no guessed
 declarations or targets and a `rust-unsupported-compilation-contexts` diagnostic.
 This includes a file reached through a symlink.
-Invalid syntax or an engine module-loading error fails the observation.
+Invalid syntax or an engine module-loading error in a file the scan reads fails
+the observation.
 Unresolved external semantics do not fail the source scan. A completed scan
 does not claim that the application compiles.
 

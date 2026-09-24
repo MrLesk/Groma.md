@@ -9,6 +9,18 @@
     "scanner": {
       "id": "csharp",
       "entry": "./src/index.ts",
+      "exclude": [
+        "[bB][iI][nN]/",
+        "[oO][bB][jJ]/",
+        "[tT]est/",
+        "[tT]ests/",
+        "*Tests/",
+        "*.Test/",
+        "*.[dD]esigner.cs",
+        "*.g.cs",
+        "*.g.i.cs",
+        "*.generated.cs"
+      ],
       "discovery": {
         "technologies": [
           "csharp"

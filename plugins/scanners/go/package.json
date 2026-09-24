@@ -8,6 +8,9 @@
     "scanner": {
       "id": "go",
       "entry": "./src/index.ts",
+      "exclude": [
+        "vendor/"
+      ],
       "discovery": {
         "technologies": [
           "go"

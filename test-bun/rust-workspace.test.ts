@@ -2,8 +2,10 @@ import { expect, test } from 'bun:test'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import rustPackage from '../plugins/scanners/rust/package.json'
 import rust from '../plugins/scanners/rust/src/index.ts'
 import { execute, readRustProject, rustProjects } from '../plugins/scanners/rust/src/project.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 
 async function fixture(action: (root: string) => Promise<void>) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-rust-workspace-'))
@@ -85,6 +87,30 @@ nativeTest('Rust reads shared path modules and resolves calls across inherited w
     expect(calls).toEqual([
       { caller: 'start', targets: ['service/src/lib.rs'], unresolved: false },
       { caller: 'gen', targets: ['service/src/lib.rs'], unresolved: false },
+    ])
+  })
+}, 60000)
+
+nativeTest('Rust lists vendored source, reads no manifest or module its exclusions name, and reads a restored file', async () => {
+  await fixture(async root => {
+    // Each vendored input fails the scan if read: a crate and a module with invalid syntax.
+    const files = {
+      'vendor/broken/Cargo.toml': '[package]\nname = "broken"\nversion = "0.1.0"\n',
+      'vendor/broken/src/lib.rs': 'pub fn broken(\n',
+      'service/src/lib.rs': '#[path = "../../shared.rs"]\nmod shared;\nmod vendor;\nmod routes_generated;\npub fn run() {}\n',
+      'service/src/vendor/mod.rs': 'pub fn broken(\n',
+      'service/src/routes_generated.rs': 'pub fn routes() {}\n',
+    }
+    for (const [file, source] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(root, file)), { recursive: true })
+      await writeFile(path.join(root, file), source)
+    }
+    // Vendoring is a default exclusion rather than a rule in code, so the listing still names vendored source.
+    expect(await rust.listSourceFiles(root)).toContain('vendor/broken/src/lib.rs')
+    // A global pattern hides generated files, and a `!` pattern in the scanner's own list restores one.
+    const excluded = exclusion(['*_generated.rs', ...rustPackage.groma.scanner.exclude, '!service/src/routes_generated.rs'])
+    expect((await rust.scan(root, {}, excluded))!.files.map(file => file.file).sort()).toEqual([
+      'app/src/lib.rs', 'service/src/lib.rs', 'service/src/routes_generated.rs', 'shared.rs', 'support/src/lib.rs',
     ])
   })
 }, 60000)

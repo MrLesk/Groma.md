@@ -1,22 +1,34 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createScanObservation, type ScannerPlugin } from '@groma/scanner'
-import { projectFiles } from '../../projects.ts'
+import { repositoryFiles } from '../../projects.ts'
 import { phpEvidence } from './evidence.ts'
 import { moduleOperation, phpHttpFacts, resolveEndpoints } from './http.ts'
 import { readCodeStructure } from './outline.ts'
 import { parsePhp } from './syntax.ts'
 import { commandTargets, phpEntries } from './entries.ts'
 
+/**
+ * The files a Composer manifest names as commands. A manifest that is not JSON names none, so the source listing, which
+ * reads manifests before exclusions, never fails on one; a scan that reads it still fails when it reads the entries.
+ */
+async function commandFiles(root: string, declaration: string): Promise<string[]> {
+  const text = await readFile(path.join(root, declaration), 'utf8')
+  let manifest: Record<string, unknown>
+  try { manifest = JSON.parse(text) } catch { return [] }
+  return commandTargets(manifest).map(target => path.posix.join(path.posix.dirname(declaration), target))
+}
+
+/**
+ * The PHP sources and Composer manifests outside `excluded`. A source may be an extensionless PHP command that a
+ * manifest names.
+ */
 async function inventory(root: string, excluded?: (file: string) => boolean) {
-  const available = await projectFiles(root, file => !excluded?.(file))
+  const available = await repositoryFiles(root, file => !excluded?.(file))
   const files = available.filter(file => file.endsWith('.php'))
   const manifests = available.filter(file => path.basename(file) === 'composer.json')
   const commands = new Set<string>()
-  for (const declaration of manifests) {
-    const manifest = JSON.parse(await readFile(path.join(root, declaration), 'utf8'))
-    for (const target of commandTargets(manifest)) commands.add(path.posix.join(path.posix.dirname(declaration), target))
-  }
+  for (const declaration of manifests) for (const file of await commandFiles(root, declaration)) commands.add(file)
   for (const file of available.filter(file => commands.has(file))) {
     if (!file.endsWith('.php') && (await readFile(path.join(root, file), 'utf8')).includes('<?php')) files.push(file)
   }
@@ -26,11 +38,12 @@ async function inventory(root: string, excluded?: (file: string) => boolean) {
 export default {
   id: 'php',
   readCodeStructure,
+  // The listing comes before exclusions; the host applies them to it.
   listSourceFiles: async root => (await inventory(root)).files,
   // Composer can name an extensionless PHP command at any path.
   watch: { include: ['**/*'], exclude: [] },
-  async checkReadiness(root) {
-    if (!(await inventory(root)).files.length) throw new Error('php: No PHP source files were found in the Git repository.')
+  async checkReadiness(root, _settings, excluded) {
+    if (!(await inventory(root, excluded)).files.length) throw new Error('php: No PHP source files were found in the Git repository.')
   },
   async scan(root, _settings, excluded) {
     const { files, manifests } = await inventory(root, excluded)

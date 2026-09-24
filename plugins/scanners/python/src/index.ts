@@ -2,20 +2,17 @@ import { Worker } from 'node:worker_threads'
 import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { parseScanObservation, type CodeFile, type ScannerPlugin, type SourceReference } from '@groma/scanner'
-import { projectFiles } from '../../projects.ts'
+import { repositoryFiles } from '../../projects.ts'
 
 const worker = new URL('../dist/worker/runtime.js', import.meta.url)
 const declarations = new Set(['pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt'])
-const excluded = ['**/.venv/**', '**/venv/**', '**/__pycache__/**', '**/test/**', '**/tests/**',
-  '**/test_*.py', '**/*_test.py', '**/conftest.py']
-const globs = excluded.map(pattern => new Bun.Glob(pattern))
 
+/** The `.py` sources and project declarations the worker reads, skipping every file `excluded` names. */
 async function inventory(root: string, excluded?: (file: string) => boolean) {
-  return projectFiles(root, file => (file.endsWith('.py') || declarations.has(path.posix.basename(file)))
-    && !globs.some(glob => glob.match(file)) && !excluded?.(file))
+  return repositoryFiles(root, file => (file.endsWith('.py') || declarations.has(path.posix.basename(file))) && !excluded?.(file))
 }
 
-/** The analyzed sources; the declaration files in the inventory describe projects, not source. */
+/** The analyzed sources before exclusions; the declaration files in the inventory describe projects, not source. */
 async function sources(root: string): Promise<string[]> {
   return (await inventory(root)).filter(file => file.endsWith('.py'))
 }
@@ -33,10 +30,10 @@ function run(workerData: { root: string; files?: string[]; references?: readonly
 
 export default {
   id: 'python',
-  watch: { include: ['**/*.py', '**/pyproject.toml', '**/setup.cfg', '**/requirements.txt'], exclude: excluded },
+  watch: { include: ['**/*.py', '**/pyproject.toml', '**/setup.cfg', '**/requirements.txt'], exclude: [] },
   listSourceFiles: sources,
-  async checkReadiness(root) {
-    if (!(await inventory(root)).some(file => file.endsWith('.py'))) {
+  async checkReadiness(root, _settings, excluded) {
+    if (!(await inventory(root, excluded)).some(file => file.endsWith('.py'))) {
       throw new Error('python: No supported Python source files were found in the Git repository.')
     }
     await access(worker)

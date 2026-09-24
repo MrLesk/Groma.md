@@ -13,4 +13,5 @@ const scanner = {
   scan: scanGoSource,
 } satisfies ScannerPlugin
 
-export default projectScanner(scanner, async root => (await goModules(root)).map(module => path.join(root, module)))
+export default projectScanner(scanner, async (root, _settings, excluded) =>
+  (await goModules(root, excluded)).map(module => path.join(root, module)))

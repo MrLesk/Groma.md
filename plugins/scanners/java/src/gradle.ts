@@ -4,7 +4,7 @@ import path from 'node:path'
 import { createScanObservation, type ScanDiagnostic, type ScanObservation } from '@groma/scanner'
 import { lang, type lexer, type parser } from 'good-enough-parser'
 import parserPackage from 'good-enough-parser/package.json'
-import { projectFiles } from '../../projects.ts'
+import { repositoryFiles } from '../../projects.ts'
 
 type Node = parser.Node
 
@@ -305,9 +305,15 @@ async function readOptional(file: string): Promise<string | undefined> {
   })
 }
 
-/** Existing directories of every Gradle project under root: script directories and literal includes. */
-export async function gradleProjects(root: string): Promise<{ directories: string[]; diagnostics: ScanDiagnostic[] }> {
-  const files = await projectFiles(root, file => [...buildScripts, ...settingsScripts].includes(path.posix.basename(file)))
+/**
+ * Existing directories of every Gradle project under root: the directories of the scripts `excluded` leaves in, and
+ * their literal includes.
+ */
+export async function gradleProjects(
+  root: string, excluded: (file: string) => boolean = () => false,
+): Promise<{ directories: string[]; diagnostics: ScanDiagnostic[] }> {
+  const scripts = [...buildScripts, ...settingsScripts]
+  const files = await repositoryFiles(root, file => scripts.includes(path.posix.basename(file)) && !excluded(file))
   const directories = new Set<string>()
   const diagnostics: ScanDiagnostic[] = []
   for (const file of files) {
@@ -330,14 +336,16 @@ export interface GradleProject {
 }
 
 /**
- * One project's own literal declarations; the settings script beside it names a root project.
- * The shared project scanner passes each project only its directory, so its scripts are read again here;
- * warnings come from gradleProjects.
+ * One project's own literal declarations from the scripts `excluded` leaves in; the settings script beside it names a
+ * root project. The shared project scanner passes each project only its directory, so its scripts are read again
+ * here; warnings come from gradleProjects.
  */
-export async function readGradleProject(directory: string): Promise<GradleProject> {
+export async function readGradleProject(
+  directory: string, excluded: (file: string) => boolean = () => false,
+): Promise<GradleProject> {
   const project: GradleProject = { name: path.basename(directory), sourceRoots: [conventionalSources] }
   for (const file of [...settingsScripts, ...buildScripts]) {
-    const source = await readOptional(path.join(directory, file))
+    const source = excluded(file) ? undefined : await readOptional(path.join(directory, file))
     if (source === undefined) continue
     const script = readGradleScript(source, file)
     project.file = file

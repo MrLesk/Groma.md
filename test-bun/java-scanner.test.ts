@@ -3,11 +3,14 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 
 import os from 'node:os'
 import path from 'node:path'
-import { buildWorker } from '../plugins/scanners/java/build.ts'
+import { pathToFileURL } from 'node:url'
+import { buildPackage, buildWorker } from '../plugins/scanners/java/build.ts'
+import manifest from '../plugins/scanners/java/package.json'
 import { summarizeMissingTypes } from '../plugins/scanners/java/src/missing-types.ts'
 import { javaCommand, run } from '../plugins/scanners/java/src/process.ts'
+import { exclusion } from '../src/scanner/modules/config.ts'
 
-import { createScanObservation, parseScanObservation, type ScanObservation } from '@groma/scanner'
+import { createScanObservation, parseScanObservation, type ScanObservation, type ScannerPlugin } from '@groma/scanner'
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-java-test-'))
@@ -130,3 +133,33 @@ test.concurrent('Java folds missing external types from every project into one s
   expect(missing[0]!.message).toContain('packages: beta, alpha.')
   expect(diagnostics.map(item => item.code).sort()).toEqual(['JAVA_MISSING_EXTERNAL_TYPES', 'compiler.err.prob.found.req'])
 })
+
+test.concurrent('Java reads no build script or source its exclusions name, while a ! pattern restores a package folder a default names', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-java-exclusions-'))
+  try {
+    const root = path.join(temporary, 'project')
+    const artifact = path.join(temporary, 'scanner')
+    await buildPackage(artifact)
+    const files: Record<string, string> = {
+      'build.gradle': "sourceSets.main.java.srcDirs = ['src/main/java', 'build/generated/java']\n",
+      'src/main/java/shop/Orders.java': 'package shop; public class Orders {}\n',
+      // The default `build/` also names this package folder, which a line in the scanner's own list restores.
+      'src/main/java/shop/build/Tool.java': 'package shop.build; public class Tool {}\n',
+      // If read, the declared root in the build directory fails the scan, and the script in Maven's output adds a warning.
+      'build/generated/java/shop/Broken.java': 'package shop; public class Broken {\n',
+      'target/plugin/build.gradle': 'sourceCompatibility = libs.versions.java.get()\n',
+    }
+    for (const [file, text] of Object.entries(files)) {
+      await mkdir(path.join(root, path.dirname(file)), { recursive: true })
+      await writeFile(path.join(root, file), text)
+    }
+    const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
+    expect(await git.exited, await new Response(git.stderr).text()).toBe(0)
+    const java: ScannerPlugin = (await import(pathToFileURL(path.join(artifact, 'src/index.js')).href)).default
+    const excluded = exclusion([...manifest.groma.scanner.exclude, '!src/main/java/shop/build/'])
+    const observation = (await java.scan(root, {}, excluded))!
+    expect(observation.files.map(file => file.file).sort())
+      .toEqual(['src/main/java/shop/Orders.java', 'src/main/java/shop/build/Tool.java'])
+    expect(observation.diagnostics.filter(diagnostic => diagnostic.file !== undefined && excluded(diagnostic.file))).toEqual([])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+}, 120000)

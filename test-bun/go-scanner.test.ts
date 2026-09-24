@@ -3,10 +3,11 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildWorker } from '../plugins/scanners/go/build.ts'
+import manifest from '../plugins/scanners/go/package.json'
 import { readGoCodeStructure, run, scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
 import plugin from '../plugins/scanners/go/src/index.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
+import { exclusion, readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
@@ -22,6 +23,13 @@ async function fixture(name = 'go-module') {
   await cp(path.join(fixtures, name), root, { recursive: true })
   expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
   return { root, worker: path.join(root, process.platform === 'win32' ? 'worker.exe' : 'worker') }
+}
+
+async function writeFiles(root: string, files: Record<string, string>) {
+  for (const [file, text] of Object.entries(files)) {
+    await mkdir(path.join(root, path.dirname(file)), { recursive: true })
+    await writeFile(path.join(root, file), text)
+  }
 }
 
 function lineOf(source: string, text: string): number {
@@ -116,21 +124,35 @@ goTest('Go reads and lists the tracked, unignored files the go command reads', a
   const { root, worker } = await fixture()
   try {
     await buildWorker(worker, go)
-    const files: Record<string, string> = {
+    await writeFiles(root, {
       'build/output.go': 'package build\n', 'generated/api.go': 'package generated\n',
       '_examples/demo.go': 'package main\nfunc main() {}\n', '.hidden/hidden.go': 'package hidden\n',
       'testdata/case.go': 'package fixture\n', 'ignored/local.go': 'package ignored\n', '.gitignore': 'ignored/\n',
       'tools/go.mod': 'module example.test/tools\n\ngo 1.22\n', 'tools/tools.go': 'package tools\n',
-    }
-    for (const [file, text] of Object.entries(files)) {
-      await mkdir(path.join(root, path.dirname(file)), { recursive: true })
-      await writeFile(path.join(root, file), text)
-    }
+    })
     const listed = await plugin.listSourceFiles!(root, {})
     // Build and generated folders hold source; ignored, underscore, dot and testdata paths do not.
     expect(listed).toEqual(['build/output.go', 'caller.go', 'generated/api.go', 'provider/provider.go', 'tools/tools.go'])
     // Each module scans on its own, and together they read exactly what the listing names.
     expect((await plugin.scan(root, { worker }))!.files.map(file => file.file).sort()).toEqual(listed)
+  } finally { await rm(root, { recursive: true, force: true }) }
+}, 60000)
+
+goTest('Go lists vendored source, and reads only the go.mod and .go files its exclusions keep', async () => {
+  const { root, worker } = await fixture()
+  try {
+    await buildWorker(worker, go)
+    // Each vendored input fails the scan if read: invalid syntax, and a go.mod without a module declaration.
+    await writeFiles(root, {
+      'vendor/example.org/dep/dep.go': 'package dep\nfunc Broken( {\n', 'vendor/example.org/tool/go.mod': 'go 1.22\n',
+      'api.pb.go': 'package dispatch\n',
+    })
+    // Vendoring is a default exclusion rather than a rule in code, so the listing still names vendored source.
+    expect(await plugin.listSourceFiles!(root, {})).toContain('vendor/example.org/dep/dep.go')
+    // A global pattern hides generated files, and a `!` pattern in the scanner's own list restores one.
+    const excluded = exclusion(['*.pb.go', ...manifest.groma.scanner.exclude, '!api.pb.go'])
+    expect((await plugin.scan(root, { worker }, excluded))!.files.map(file => file.file).sort())
+      .toEqual(['api.pb.go', 'caller.go', 'provider/provider.go'])
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 

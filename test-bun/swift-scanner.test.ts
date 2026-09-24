@@ -10,7 +10,6 @@ import { loadScannerRegistry } from '../src/scanner/registry.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
-import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { copiesOf, detectDuplicatedLogic } from '../src/architecture-findings.ts'
 
 async function setup(fixture = 'swift-source') {
@@ -147,18 +146,21 @@ test.concurrent('installed Swift package runs without SDKs and excludes source t
     await addScanner(root, artifact)
     const configPath = path.join(root, 'groma/scanners.json')
     const config = JSON.parse(await readFile(configPath, 'utf8'))
-    await writeFile(configPath, JSON.stringify({ ...config, exclude: ['Other.swift', 'Excluded.swift'] }))
+    // The entry holds the package defaults, which exclude Pods and Carthage, and restores Carthage.
+    const scanners = config.scanners.map((entry: { exclude: string[] }) => ({ ...entry, exclude: [...entry.exclude, '!Carthage/'] }))
+    await writeFile(configPath, JSON.stringify({ scanners, exclude: ['Other.swift', 'Excluded.swift'] }))
     await writeFile(path.join(root, 'Excluded.swift'), 'func bad(')
     await mkdir(path.join(root, 'Pods'))
     await writeFile(path.join(root, 'Pods/Bad.swift'), 'func bad(')
+    await mkdir(path.join(root, 'Carthage'))
+    await writeFile(path.join(root, 'Carthage/Restored.swift'), 'func restored() {}\n')
     await writeFile(path.join(root, '.gitignore'), 'Ignored.swift\n')
     await writeFile(path.join(root, 'Ignored.swift'), 'func bad(')
     const registry = await loadScannerRegistry(root)
     const batch = await registry.collectObservations(root)
     expect(batch.failures).toHaveLength(0)
-    expect(batch.observations[0]!.files.map(file => file.file)).toEqual(['Ledger.swift'])
+    expect(batch.observations[0]!.files.map(file => file.file)).toEqual(['Carthage/Restored.swift', 'Ledger.swift'])
     expect(registry.watchesFile('New.swift')).toBe(true)
-    expect(compileWatchPatterns(scanner.watch)('Pods/Bad.swift')).toBe(false)
     await writeFile(path.join(root, 'Ledger.swift'), 'func broken(')
     await expect(scanner.scan(root)).rejects.toThrow('SWIFT_SOURCE_INVALID')
     await writeFile(path.join(root, 'Ledger.swift'), new Uint8Array([0x2f, 0x2f, 0xe9, 0x0a]))

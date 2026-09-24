@@ -7,7 +7,7 @@ import type { CodeSymbol, HttpEndpointSegment, HttpRequestSegment, ScanHttpEndpo
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { httpRelationships } from '../src/http-relationships.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
-import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
+import { exclusion, readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { loadScannerRegistry } from '../src/scanner/registry.ts'
 import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
@@ -198,25 +198,31 @@ test.concurrent('a base_url set on any client outside a class leaves every class
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-test.concurrent('Python excludes ignored files, environments and tests while keeping tracked and untracked source', async () => {
-  const { root, temporary, scanner } = await fixture()
+test.concurrent('Python skips Git-ignored and excluded inputs, project declarations included, and reads tracked or restored source', async () => {
+  const { root, temporary, scanner, artifact } = await fixture()
   try {
     await writeFile(path.join(root, '.gitignore'), 'ignored.py\ntracked.py\n')
-    for (const file of ['ignored.py', 'tracked.py', 'test_bad.py', 'conftest.py']) {
-      await writeFile(path.join(root, file), file === 'tracked.py' ? 'def live(): pass\n' : 'invalid syntax @\n')
+    for (const file of ['ignored.py', 'tracked.py', 'test_bad.py', 'conftest.py', 'test_restored.py']) {
+      await writeFile(path.join(root, file), ['tracked.py', 'test_restored.py'].includes(file) ? 'def live(): pass\n' : 'invalid syntax @\n')
     }
-    for (const directory of ['.venv', 'venv', '__pycache__', 'tests', 'test', 'node_modules']) {
+    for (const directory of ['.venv', 'venv', '__pycache__', 'tests', 'test', 'build']) {
       await mkdir(path.join(root, directory))
       await writeFile(path.join(root, directory, 'bad.py'), 'invalid syntax @\n')
     }
+    await writeFile(path.join(root, 'build/pyproject.toml'), '[project\n')
     const git = Bun.spawn(['git', 'add', '-f', 'tracked.py'], { cwd: root })
     expect(await git.exited).toBe(0)
-    expect((await scanner.scan(root))!.files.map(item => item.file)).toEqual(['nested/worker.py', 'service.py', 'tracked.py'])
+    // The package's defaults as adding the scanner writes them, then a restore appended to its list.
+    const defaults: string[] = JSON.parse(await readFile(path.join(artifact, 'package.json'), 'utf8')).groma.scanner.exclude
+    const files = (await scanner.scan(root, {}, exclusion([...defaults, '!test_restored.py'])))!.files.map(item => item.file)
+    expect(files).toEqual(['nested/worker.py', 'service.py', 'test_restored.py', 'tracked.py'])
+    // Groma explains a file without an owner from this listing, so it names every source before exclusions.
+    expect(await scanner.listSourceFiles!(root)).toEqual(expect.arrayContaining([...files, 'tests/bad.py']))
     const watches = compileWatchPatterns(scanner.watch)
     expect(watches('nested/worker.py')).toBe(true)
     expect(watches('nested/pyproject.toml')).toBe(true)
-    expect(watches('.venv/bad.py')).toBe(false)
-    expect(watches('tests/bad.py')).toBe(false)
+    // Exclusions decide what triggers a rescan, so editing a restored file does.
+    expect(watches('test_restored.py')).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 

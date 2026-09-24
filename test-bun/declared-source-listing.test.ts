@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -20,7 +20,7 @@ test.concurrent('the Java listing reads each Maven source root the way the scan 
   const [root, top] = await Promise.all([repository('java-declared-roots'), repository('java-root-source')])
   try {
     // basedir, property, entity and CDATA roots, the project directory itself and a root inside a build directory
-    // are read; an aggregator has none.
+    // are listed, because the listing comes before exclusions; an aggregator has none.
     expect(await java.listSourceFiles(root)).toEqual([
       'basedir/source/A.java', 'cdata/src/cd/D.java', 'entity/src/a&b/E.java', 'gen/build/generated/java/G.java',
       'property/code/B.java', 'whole/W.java',
@@ -58,5 +58,21 @@ test.concurrent('the Rust listing follows the selected manifest to every target 
   try {
     expect(await rust.listSourceFiles(root, { manifest: 'app/Cargo.toml' }))
       .toEqual(['app/core/lib.rs', 'app/core/model.rs', 'app/src/bin/extra.rs', 'app/tools/cli.rs'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('the Rust listing names no file of a manifest Cargo cannot build', async () => {
+  const root = await repository('rust-declared-roots')
+  try {
+    // The listing reads manifests before exclusions, so a vendored one that is not TOML, or that has no target, must
+    // not fail the host's scan.
+    await mkdir(path.join(root, 'vendor/broken/src'), { recursive: true })
+    await writeFile(path.join(root, 'vendor/broken/Cargo.toml'), '[package')
+    await writeFile(path.join(root, 'vendor/broken/src/lib.rs'), 'pub fn broken() {}\n')
+    await mkdir(path.join(root, 'vendor/empty'))
+    await writeFile(path.join(root, 'vendor/empty/Cargo.toml'), '[package]\nname = "empty"\n')
+    expect(await rust.listSourceFiles(root)).toEqual([
+      'app/core/lib.rs', 'app/core/model.rs', 'app/src/bin/extra.rs', 'app/tools/cli.rs', 'worker/src/lib.rs',
+    ])
   } finally { await rm(root, { recursive: true, force: true }) }
 })

@@ -9,6 +9,18 @@
     "scanner": {
       "id": "python",
       "entry": "./src/index.ts",
+      "exclude": [
+        ".venv/",
+        "venv/",
+        "__pycache__/",
+        "test/",
+        "tests/",
+        "test_*.py",
+        "*_test.py",
+        "conftest.py",
+        "build/",
+        "dist/"
+      ],
       "discovery": {
         "technologies": [
           "python"

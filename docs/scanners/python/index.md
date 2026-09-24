@@ -35,11 +35,13 @@ not download Python packages or use project environments.
 
 ## Source evidence
 
-The scanner reads Git-tracked and unignored untracked `.py` files. It excludes
-shared generated/dependency directories, `.venv`, `venv`, `__pycache__`, `test`,
-`tests`, `test_*.py`, `*_test.py`, and `conftest.py`. It scans neither `.pyi`
-stubs nor notebooks. Configure additional exclusions through the shared
-Groma scanner settings.
+The scanner reads Git-tracked and unignored untracked `.py` files. It scans
+neither `.pyi` stubs nor notebooks. The package declares default
+[exclusions](../index.md#excluding-source-evidence) for virtual environments
+and bytecode caches (`.venv/`, `venv/`, `__pycache__/`), tests (`test/`,
+`tests/`, `test_*.py`, `*_test.py`, `conftest.py`), and build output (`build/`,
+`dist/`). The readiness check and scan read no source or project declaration
+that the scanner's exclusions name.
 
 `pyproject.toml`, `setup.py`, `setup.cfg`, and `requirements.txt` identify source
 projects. A file belongs to its nearest containing project; nested project roots

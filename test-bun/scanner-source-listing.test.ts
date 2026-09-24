@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
@@ -25,7 +25,7 @@ const listings: [ScannerPlugin, string, string[]][] = [
   [php, 'php-source', ['plugin.php', 'view.php']],
   [csharp, 'csharp-operations', [
     'App/Calls.cs', 'App/Program.cs', 'App/Wrapper.cs',
-    'Core/Partial.Declaration.cs', 'Core/Partial.Implementation.cs', 'Core/Providers.cs',
+    'Core/Partial.Declaration.cs', 'Core/Partial.Implementation.cs', 'Core/Providers.cs', 'tests/App.Tests/CallsTests.cs',
   ]],
   [java, 'java-maven', [
     'src/main/java/Caller.java', 'src/main/java/Port.java', 'src/main/java/Provider.java',
@@ -66,9 +66,11 @@ const listings: [ScannerPlugin, string, string[]][] = [
 
 async function repository(fixture: string): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-listing-'))
-  await cp(path.resolve(import.meta.dir, `../test/fixtures/${fixture}`), root, { recursive: true })
-  for (const name of await readdir(root, { recursive: true })) {
-    if (name.endsWith('.fixture')) await rename(path.join(root, name), path.join(root, name.replace(/\.fixture$/, '')))
+  const source = path.resolve(import.meta.dir, `../test/fixtures/${fixture}`)
+  // The fixture as Git sees it: listings come before exclusions, so ignored local build output would appear in them.
+  const listed = Bun.spawnSync(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: source })
+  for (const file of listed.stdout.toString().split('\0').filter(Boolean)) {
+    await cp(path.join(source, file), path.join(root, file.replace(/\.fixture$/, '')))
   }
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)

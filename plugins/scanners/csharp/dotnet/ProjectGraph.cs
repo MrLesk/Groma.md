@@ -51,11 +51,11 @@ internal sealed partial class ProjectGraph
         ProjectGraph graph = new(request);
         foreach (string input in request.Inputs.Select(input => Path.GetFullPath(Path.Combine(graph.Root, input))).Order(StringComparer.Ordinal))
         {
-            if (input.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)) graph.Visit(input, input: true);
+            if (input.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)) graph.Visit(input);
             else foreach (string project in SolutionProjects(input).Where(project => project.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
             {
                 graph.Solutions.TryAdd(project, input);
-                graph.Visit(project, input: false);
+                graph.Visit(project);
             }
         }
         graph.Projects.Sort((left, right) => string.CompareOrdinal(left.File.Path, right.File.Path));
@@ -80,14 +80,15 @@ internal sealed partial class ProjectGraph
     }
 
     /// <summary>
-    /// Loads a project once, after the projects it references, so each reference's own list is already complete. An input
-    /// project loads even when the host excluded it; any other project must be in the repository's inventory.
+    /// Loads a project once, after the projects it references, so each reference's own list is already complete. Only a
+    /// project in the repository's inventory loads, so a project the host excluded is never read, whether an input, a
+    /// solution entry or a reference names it.
     /// </summary>
-    private ProjectNode? Visit(string project, bool input)
+    private ProjectNode? Visit(string project)
     {
         if (loaded.TryGetValue(project, out ProjectNode? known)) return known;
         loaded[project] = null;
-        if (!input && !inventory.Contains(project)) return null;
+        if (!inventory.Contains(project)) return null;
         ProjectFile file = ProjectFile.Load(project, Root);
         if (file.Sdks.Count == 0)
         {
@@ -99,7 +100,7 @@ internal sealed partial class ProjectGraph
         foreach (string include in file.Items.Where(item => item.Type == "ProjectReference" && item.Include is not null).SelectMany(item => Split(item.Include!)))
         {
             string target = Path.GetFullPath(Path.Combine(file.Directory, ProjectFile.Slashes(include)));
-            if (target.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && Visit(target, input: false) is ProjectNode referenced)
+            if (target.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && Visit(target) is ProjectNode referenced)
                 references.AddRange([target, .. referenced.References]);
         }
         ProjectNode node = new(file, file.Property("AssemblyName") ?? Path.GetFileNameWithoutExtension(project),

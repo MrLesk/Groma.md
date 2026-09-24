@@ -2,7 +2,7 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { parseScanObservation, type CodeFile, type ScanObservation, type ScannerSettings, type SourceReference } from '@groma/scanner'
-import { projectFiles } from '../../projects.ts'
+import { repositoryFiles } from '../../projects.ts'
 import { validateInput, parseCSharpSettings, type CSharpConfig } from './config.ts'
 import { run } from './process.ts'
 
@@ -19,29 +19,21 @@ async function requireWorker(): Promise<string> {
 }
 
 /**
- * Build output, test code and generated files are never read. `bin` and `obj` match in any letter case, while the test
- * suffixes stay case-sensitive, so a folder such as Contests or Latest is still read.
+ * The tracked and unignored C# files that `excluded` leaves in, and the inputs among them: the configured input, or
+ * else every solution and project. The worker loads no other project and compiles no other repository source.
+ * Undefined without an input.
  */
-export const exclude = ['**/[bB][iI][nN]/**', '**/[oO][bB][jJ]/**', '**/[tT]est/**', '**/[tT]ests/**', '**/*Tests/**', '**/*.Test/**',
-  '**/*.[dD]esigner.cs', '**/*.g.cs', '**/*.g.i.cs', '**/*.generated.cs']
-const exclusions = exclude.map(pattern => new Bun.Glob(pattern))
-
-/**
- * The tracked, unignored and not excluded C# files, and every solution and project among them, or the configured
- * input. Undefined when the repository has no C# project.
- */
-async function csharpInventory(root: string, config: CSharpConfig, excluded?: (file: string) => boolean) {
-  const files = await projectFiles(root, file => /\.(?:cs|csproj|slnx?)$/i.test(file)
-    && !exclusions.some(pattern => pattern.match(file)) && !excluded?.(file))
-  const inputs = config.input
-    ? [path.relative(root, await validateInput(root, config.input)).split(path.sep).join('/')]
-    : files.filter(file => /\.(?:csproj|slnx?)$/i.test(file))
+async function csharpInventory(root: string, config: CSharpConfig, excluded: (file: string) => boolean = () => false) {
+  const files = await repositoryFiles(root, file => /\.(?:cs|csproj|slnx?)$/i.test(file) && !excluded(file))
+  const input = config.input && path.relative(root, await validateInput(root, config.input)).split(path.sep).join('/')
+  const inputs = input ? files.filter(file => file === input) : files.filter(file => /\.(?:csproj|slnx?)$/i.test(file))
   return inputs.length ? { files, inputs } : undefined
 }
 
-/** Checks that the repository declares a C# project or solution, or the configured input, and the packaged runtime. */
-export async function checkCSharpReadiness(repositoryRoot: string, settings: ScannerSettings = {}): Promise<void> {
-  if (await csharpInventory(path.resolve(repositoryRoot), parseCSharpSettings(settings)) === undefined)
+/** Checks that the files `excluded` leaves in hold a C# project or solution, or the configured input, and the packaged runtime. */
+export async function checkCSharpReadiness(repositoryRoot: string, settings: ScannerSettings = {},
+  excluded?: (file: string) => boolean): Promise<void> {
+  if (await csharpInventory(path.resolve(repositoryRoot), parseCSharpSettings(settings), excluded) === undefined)
     throw new Error('No C# project or solution was found. The C# scanner reads SDK-style .csproj projects and the .sln or .slnx files that list them.')
   await requireWorker()
 }
@@ -59,8 +51,8 @@ export async function scanCSharpSource(repositoryRoot: string, settings: Scanner
 }
 
 /**
- * Every C# file of the inventory once the repository declares a C# project. A project may compile any repository
- * file, so this superset never leaves out a file a scan reads, without evaluating a project.
+ * Every C# file of the inventory before exclusions, once the repository declares a C# project. A project may compile
+ * any repository file, so this superset never leaves out a file a scan reads, without evaluating a project.
  */
 export async function listCSharpSources(repositoryRoot: string, settings: ScannerSettings = {}): Promise<string[]> {
   const inventory = await csharpInventory(path.resolve(repositoryRoot), parseCSharpSettings(settings))

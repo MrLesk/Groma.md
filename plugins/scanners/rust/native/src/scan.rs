@@ -22,6 +22,8 @@ pub struct Input {
     pub targets: Vec<String>,
     pub crates: Vec<Value>,
     pub executables: Vec<Executable>,
+    /// Repository-relative Rust files the scanner's exclusions name. The scan reads none of them.
+    pub excluded: HashSet<String>,
 }
 
 #[derive(Deserialize)]
@@ -67,19 +69,24 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
     if crates.is_empty() {
         bail!("rust-analyzer loaded no selected library or binary targets");
     }
+    let relative = |file: &str| -> anyhow::Result<String> {
+        Ok(std::fs::canonicalize(file)?.strip_prefix(&repository_root)?.to_string_lossy().replace('\\', "/"))
+    };
+    let excluded = |file: FileId| {
+        relative(&vfs.file_path(file).to_string()).is_ok_and(|path| input.excluded.contains(&path))
+    };
     let mut physical = BTreeMap::<_, Vec<FileId>>::new();
-    for file_id in selected_files(&crates, &sema, &db)? {
+    for file_id in selected_files(&crates, &sema, &db, &excluded)? {
         let path = std::fs::canonicalize(vfs.file_path(file_id).to_string())?;
         physical.entry(path).or_default().push(file_id);
     }
     let mut entry_points = Vec::new();
-    let relative = |file: &str| -> anyhow::Result<String> {
-        Ok(std::fs::canonicalize(file)?.strip_prefix(&repository_root)?.to_string_lossy().replace('\\', "/"))
-    };
     for executable in &input.executables {
         let krate = crates.iter().find(|krate| vfs.file_path(krate.root_file(&db)).to_string() == executable.file);
-        if let Some(krate) = krate {
-            let members = selected_files(&[*krate], &sema, &db)?;
+        // An excluded root file declares no entry point: its file list would leave out the root itself, which the
+        // evidence contract rejects.
+        if let Some(krate) = krate && !excluded(krate.root_file(&db)) {
+            let members = selected_files(&[*krate], &sema, &db, &excluded)?;
             let own_files: Vec<_> = members.into_iter()
                 .map(|file| relative(&vfs.file_path(file).to_string())).collect::<anyhow::Result<_>>()?;
             entry_points.push(json!({"file": relative(&executable.file)?,
@@ -158,14 +165,21 @@ pub fn scan(input: Input) -> anyhow::Result<Value> {
     }))
 }
 
+/// Module files of these crates, less the files `excluded` names. The scan never reads an excluded file, so it
+/// reports nothing, and a module it declares that cannot load does not fail the scan.
 fn selected_files(
     crates: &[Crate],
     sema: &Semantics<'_, RootDatabase>,
     db: &RootDatabase,
+    excluded: &dyn Fn(FileId) -> bool,
 ) -> anyhow::Result<Vec<FileId>> {
     let mut files = HashSet::new();
     for krate in crates {
         for module in krate.modules(db) {
+            let file = sema.module_definition_node(module).file_id.file_id().map(|file| file.file_id(db));
+            if file.is_some_and(excluded) {
+                continue;
+            }
             let mut diagnostics = Vec::new();
             module.diagnostics(db, &mut diagnostics, false);
             for diagnostic in diagnostics {
@@ -176,8 +190,8 @@ fn selected_files(
                     );
                 }
             }
-            if let Some(file) = sema.module_definition_node(module).file_id.file_id() {
-                files.insert(file.file_id(db));
+            if let Some(file) = file {
+                files.insert(file);
             }
         }
     }

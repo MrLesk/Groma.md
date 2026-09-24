@@ -41,7 +41,7 @@ Declare the module entry in the package manifest:
     "scanner": {
       "id": "python",
       "entry": "./src/index.ts",
-      "exclude": ["**/.venv/", "**/tests/", "**/test_*.py"]
+      "exclude": [".venv/", "tests/", "test_*.py"]
     }
   }
 }
@@ -95,8 +95,9 @@ A scanner's exclusions remove excluded members, and remove a whole unit when its
 primary is excluded. Scanners must watch their companion file types as well as
 the declaring source.
 
-A plugin may also implement `async checkReadiness(repositoryRoot, settings): Promise<void>`.
+A plugin may also implement `async checkReadiness(repositoryRoot, settings, excluded): Promise<void>`.
 Return when supported source inputs and the scanner's own tools are available.
+It receives the same exclusion predicate as `scan` and skips the inputs it names.
 The installed scanner must carry the parsers, compiler libraries, workers and
 runtimes needed for its supported source scan. A fresh checkout must not need
 project dependency installation, a project build, or a separately installed

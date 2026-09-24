@@ -3,9 +3,13 @@ import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
 import { promisify } from 'node:util'
-import { isUnder, projectFiles, repositoryFiles } from '../../projects.ts'
+import { isUnder, repositoryFiles } from '../../projects.ts'
 
 export const execute = promisify(execFile)
+
+/** The scanner's exclusions: whether they name a repository-relative path with `/` separators. */
+export type Excluded = (file: string) => boolean
+export const noExclusions: Excluded = () => false
 
 interface DependencyTables {
   dependencies?: Record<string, Dependency>
@@ -30,10 +34,19 @@ export interface RustInput {
   root: string; manifest: string; name: string; targets: string[]; crates: Crate[]
   executables: { file: string; declaration: string; name: string }[]
 }
-export interface RustOptions { worker?: string }
+export interface RustOptions {
+  worker?: string
+  /** The scan reads no manifest or Rust file these exclusions name. */
+  excluded?: Excluded
+}
 
 export async function exists(file: string): Promise<boolean> {
   try { await access(file); return true } catch { return false }
+}
+
+/** A path inside the repository in the form exclusions test: relative, with `/` separators. */
+function repositoryPath(root: string, file: string): string {
+  return path.relative(root, file).split(path.sep).join('/')
 }
 
 function manifestAt(root: string, settings: ScannerSettings): string {
@@ -46,7 +59,8 @@ async function read(file: string): Promise<Manifest> {
   return Bun.TOML.parse(await readFile(file, 'utf8')) as Manifest
 }
 
-async function members(manifest: string, model: Manifest): Promise<string[]> {
+/** A manifest's own package and its workspace members, less those Cargo's `exclude` or the scanner's `excluded` names. */
+async function members(root: string, manifest: string, model: Manifest, excluded: Excluded): Promise<string[]> {
   const directory = path.dirname(manifest)
   const files = model.package ? [manifest] : []
   for (const pattern of model.workspace?.members ?? []) {
@@ -54,16 +68,19 @@ async function members(manifest: string, model: Manifest): Promise<string[]> {
     for await (const file of glob.scan({ cwd: directory })) {
       const member = path.posix.dirname(file)
       if (model.workspace?.exclude?.some(exclude => new Bun.Glob(exclude).match(member))) continue
-      files.push(path.resolve(directory, file))
+      const found = path.resolve(directory, file)
+      if (!excluded(repositoryPath(root, found))) files.push(found)
     }
   }
   const selected = new Set(files)
-  if (model.workspace) await includePathMembers(manifest, model, selected)
+  if (model.workspace) await includePathMembers(root, manifest, model, selected, excluded)
   return [...selected].sort()
 }
 
 /** Cargo also makes local path dependencies workspace members, including test and platform dependencies. */
-async function includePathMembers(manifest: string, model: Manifest, selected: Set<string>): Promise<void> {
+async function includePathMembers(
+  root: string, manifest: string, model: Manifest, selected: Set<string>, excluded: Excluded,
+): Promise<void> {
   const directory = path.dirname(manifest)
   for (const file of selected) {
     const pkg = { file, model: await read(file) }
@@ -71,7 +88,7 @@ async function includePathMembers(manifest: string, model: Manifest, selected: S
       const relative = path.relative(directory, path.dirname(dependency)).split(path.sep).join('/')
       if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) continue
       if (model.workspace?.exclude?.some(exclude => new Bun.Glob(exclude).match(relative))) continue
-      selected.add(dependency)
+      if (!excluded(repositoryPath(root, dependency))) selected.add(dependency)
     }
   }
 }
@@ -202,25 +219,28 @@ function dependencies(pkg: Package, manifest: string, model: Manifest, libraries
   return deps
 }
 
-async function workspaceContext(root: string, manifest: string, model: Manifest): Promise<Package> {
+async function workspaceContext(root: string, manifest: string, model: Manifest, excluded: Excluded): Promise<Package> {
   if (model.workspace) return { file: manifest, model }
   for (let directory = path.dirname(path.dirname(manifest)); directory === root || directory.startsWith(`${root}${path.sep}`); directory = path.dirname(directory)) {
     const candidate = path.join(directory, 'Cargo.toml')
-    if (!await exists(candidate)) continue
+    if (excluded(repositoryPath(root, candidate)) || !await exists(candidate)) continue
     const ancestor = await read(candidate)
-    if (ancestor.workspace && (await members(candidate, ancestor)).includes(manifest)) {
+    if (ancestor.workspace && (await members(root, candidate, ancestor, excluded)).includes(manifest)) {
       return { file: candidate, model: ancestor }
     }
   }
   return { file: manifest, model }
 }
 
-export async function readRustProject(root: string, settings: ScannerSettings): Promise<RustInput> {
+/** The worker's crate graph for one Cargo project, read from the manifests `excluded` does not name. */
+export async function readRustProject(
+  root: string, settings: ScannerSettings, excluded: Excluded = noExclusions,
+): Promise<RustInput> {
   const manifest = manifestAt(root, settings)
   const model = await read(manifest)
-  const { file: contextManifest, model: contextModel } = await workspaceContext(root, manifest, model)
-  const selected = new Set(model.workspace ? await members(manifest, model) : [manifest])
-  if (contextManifest !== manifest) await includePathMembers(contextManifest, contextModel, selected)
+  const { file: contextManifest, model: contextModel } = await workspaceContext(root, manifest, model, excluded)
+  const selected = new Set(model.workspace ? await members(root, manifest, model, excluded) : [manifest])
+  if (contextManifest !== manifest) await includePathMembers(root, contextManifest, contextModel, selected, excluded)
   const files = [...selected].sort()
   const packages = await Promise.all(files.map(async file => ({ file, model: await read(file) })))
   const active = packageFeatures(packages, contextManifest, contextModel)
@@ -235,12 +255,13 @@ export async function readRustProject(root: string, settings: ScannerSettings): 
   return { root, manifest, name: model.package?.name ?? path.basename(path.dirname(manifest)), targets: crates.map(crate => crate.root_module).sort(), crates, executables }
 }
 
-/** Target-directory sources plus literal path modules shared outside those directories. */
+/** Target-directory sources plus literal path modules shared outside those directories, before exclusions. */
 export async function rustSourceFiles(root: string, settings: ScannerSettings): Promise<string[]> {
   const directories: string[] = []
   for (const manifest of await rustProjects(root, settings)) {
-    const input = await readRustProject(root, { ...settings, manifest })
-    directories.push(...input.targets.map(file => path.relative(root, path.dirname(file)).split(path.sep).join('/')))
+    // Cargo builds nothing from a project whose manifests it cannot read or that has no library or binary target.
+    const input = await readRustProject(root, { ...settings, manifest }).catch(() => undefined)
+    directories.push(...(input?.targets ?? []).map(file => path.relative(root, path.dirname(file)).split(path.sep).join('/')))
   }
   const files = await repositoryFiles(root, file => file.endsWith('.rs'))
   const selected = new Set(files.filter(file => directories.some(directory => isUnder(file, directory))))
@@ -254,15 +275,26 @@ export async function rustSourceFiles(root: string, settings: ScannerSettings): 
   return [...selected].sort()
 }
 
-export async function rustProjects(root: string, settings: ScannerSettings): Promise<string[]> {
-  if (settings.manifest !== undefined) return [manifestAt(root, settings)]
+/**
+ * The Cargo projects to scan: the manifest `settings.manifest` names, or else each tracked and unignored `Cargo.toml`
+ * that no workspace already selected covers. A manifest `excluded` names is never read or selected.
+ */
+export async function rustProjects(
+  root: string, settings: ScannerSettings, excluded: Excluded = noExclusions,
+): Promise<string[]> {
+  if (settings.manifest !== undefined) {
+    const manifest = manifestAt(root, settings)
+    return excluded(repositoryPath(root, manifest)) ? [] : [manifest]
+  }
   const selected = new Set<string>()
   const covered = new Set<string>()
-  for (const file of await projectFiles(root, file => path.posix.basename(file) === 'Cargo.toml')) {
+  for (const file of await repositoryFiles(root, file => path.posix.basename(file) === 'Cargo.toml' && !excluded(file))) {
     const manifest = path.resolve(root, file)
     if (covered.has(manifest)) continue
     selected.add(manifest)
-    for (const member of await members(manifest, await read(manifest))) covered.add(member)
+    // A manifest Cargo cannot read covers no member; reading it as a project reports why.
+    const covers = await read(manifest).then(model => members(root, manifest, model, excluded)).catch(() => [])
+    for (const member of covers) covered.add(member)
   }
   return [...selected].sort()
 }

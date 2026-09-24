@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { isUnder, projectFiles, repositoryFiles } from '../../projects.ts'
+import { isUnder, repositoryFiles } from '../../projects.ts'
 import { projectScanner } from '../../project-scanner.ts'
 import type { ScannerPlugin } from '@groma/scanner'
 import { checkJavaReadiness, readJavaOutline, scanJavaSource } from './adapter.ts'
@@ -13,20 +13,26 @@ const scanner = {
     include: ['**/*.java', '**/pom.xml', '**/.mvn/**', ...[...buildScripts, ...settingsScripts].map(file => `**/${file}`)],
     exclude: [],
   },
-  checkReadiness: async root => { await checkJavaReadiness(root) },
+  checkReadiness: async (root, _settings, excluded) => { await checkJavaReadiness(root, {}, excluded) },
   readCodeStructure: readJavaOutline,
   scan: scanJavaSource,
 } satisfies ScannerPlugin
 
-/** Maven and Gradle project directories, with the Gradle declarations only a Gradle run could resolve. */
-async function javaProjects(root: string) {
-  const maven = await projectFiles(root, file => path.posix.basename(file) === 'pom.xml')
-  const gradle = await gradleProjects(root)
+/**
+ * Maven and Gradle project directories whose declarations `excluded` leaves in, with the Gradle declarations only a
+ * Gradle run could resolve.
+ */
+async function javaProjects(root: string, excluded: (file: string) => boolean = () => false) {
+  const maven = await repositoryFiles(root, file => path.posix.basename(file) === 'pom.xml' && !excluded(file))
+  const gradle = await gradleProjects(root, excluded)
   const directories = new Set([...maven.map(file => path.dirname(path.join(root, file))), ...gradle.directories])
   return { directories: [...directories].sort(), diagnostics: gradle.diagnostics }
 }
 
-/** The compiler reads every file under each project's source roots, never its test sources. */
+/**
+ * The files the build compiles, before exclusions: every file under each project's main source roots, never its test
+ * sources.
+ */
 async function javaSources(root: string): Promise<string[]> {
   const { directories } = await javaProjects(root)
   const roots: string[] = []
@@ -35,16 +41,15 @@ async function javaSources(root: string): Promise<string[]> {
       roots.push(path.relative(root, path.resolve(directory, source)).split(path.sep).join('/'))
     }
   }
-  // A declared root is read whole, even inside a build or generated directory.
   return repositoryFiles(root, file => file.endsWith('.java') && roots.some(source => isUnder(file, source)))
 }
 
 export default {
-  ...projectScanner(scanner, async root => (await javaProjects(root)).directories),
+  ...projectScanner(scanner, async (root, _settings, excluded) => (await javaProjects(root, excluded)).directories),
   listSourceFiles: javaSources,
-  scan: async (root, settings) => {
-    const projects = await javaProjects(root)
-    const observation = await projectScanner(scanner, async () => projects.directories).scan(root, settings)
+  scan: async (root, settings, excluded) => {
+    const projects = await javaProjects(root, excluded)
+    const observation = await projectScanner(scanner, async () => projects.directories).scan(root, settings, excluded)
     return withGradleDiagnostics(summarizeMissingTypes(observation), projects.diagnostics)
   },
 } satisfies ScannerPlugin

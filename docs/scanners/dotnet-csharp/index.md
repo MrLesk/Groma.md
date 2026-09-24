@@ -34,10 +34,10 @@ only: scanner evidence, OKF records and C4 boundaries are unchanged.
 The scanner reads the tracked, unignored and not excluded `.csproj`, `.sln` and
 `.slnx` files and every project they reference, and loads each project once,
 however many solutions list it. Set `settings.input` on the existing C# scanner
-entry to select one project or solution, with the projects it references,
-relative to the repository root. To explain a file without an owner, the scanner
-lists every C# file it does not exclude: a project may compile any repository
-file, so this never leaves out a file a scan reads.
+entry to select one of those projects or solutions, with the projects it
+references, relative to the repository root. To explain a file without an owner,
+the scanner lists every C# file before exclusions: a project may compile any
+repository file, so this never leaves out a file a scan reads.
 
 An in-memory Roslyn workspace reads project XML and authored C# files. The
 nearest `Directory.Build.props`, the project file, and the files either imports
@@ -56,12 +56,16 @@ other languages are skipped. A C# project that is not SDK-style is skipped with
 a `CSHARP_UNSUPPORTED_PROJECT` warning. Project references follow the SDK: they
 are transitive.
 
-The scanner excludes build output (`bin` and `obj`, in any letter case), test
-code (folders named `test` or `tests` in either initial case, folders whose
-names end in `Tests`, and `*.Test` folders) and generated files
-(`*.Designer.cs`, `*.g.cs`, `*.g.i.cs` and `*.generated.cs`). Like files
-excluded in `scanners.json`, excluded files are never read, so a declaration
-that only an excluded file provides is reported as missing where code uses it.
+The package declares default [exclusions](../index.md#excluding-source-evidence)
+for build output (`bin` and `obj`, in any letter case), test code (folders named
+`test` or `tests` in either initial case, folders whose names end in `Tests`,
+and `*.Test` folders), and generated files (`*.Designer.cs`, `*.g.cs`,
+`*.g.i.cs` and `*.generated.cs`). Excluded sources, projects and solutions are never
+read, whether a solution, a reference or `settings.input` names them, so a
+declaration that only an excluded file provides is reported as missing where
+code uses it. An included project's nearest `Directory.Build.props` and the
+files it imports are its build context, and are read even when excluded. Which
+files a project compiles stays built in.
 
 For executable projects, Roslyn's resolved entry point supplies an execution fact
 with its source file, project declaration, assembly name and the project's own

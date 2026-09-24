@@ -9,15 +9,35 @@
       "source": "./plugins/scanners/csharp",
       "settings": {
         "input": "plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj"
-      }
+      },
+      "exclude": [
+        "[bB][iI][nN]/",
+        "[oO][bB][jJ]/",
+        "[tT]est/",
+        "[tT]ests/",
+        "*Tests/",
+        "*.Test/",
+        "*.[dD]esigner.cs",
+        "*.g.cs",
+        "*.g.i.cs",
+        "*.generated.cs"
+      ]
     },
     {
       "id": "go",
-      "source": "./plugins/scanners/go"
+      "source": "./plugins/scanners/go",
+      "exclude": [
+        "vendor/"
+      ]
     },
     {
       "id": "java",
-      "source": "./plugins/scanners/java"
+      "source": "./plugins/scanners/java",
+      "exclude": [
+        "target/",
+        "build/",
+        ".gradle/"
+      ]
     },
     {
       "id": "react",
@@ -28,7 +48,11 @@
       "source": "./plugins/scanners/rust",
       "settings": {
         "manifest": "plugins/scanners/rust/native/Cargo.toml"
-      }
+      },
+      "exclude": [
+        "target/",
+        "vendor/"
+      ]
     },
     {
       "id": "typescript",

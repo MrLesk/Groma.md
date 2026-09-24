@@ -28,12 +28,12 @@ On another checkout, `groma scanner install` restores that selection before
 
 Tracked and unignored `.swift` files are read at every repository depth,
 including tests and generated sources such as `*.pb.swift`. `Package.swift` and
-its `Package@swift-<version>.swift` variants are build declarations and are not
-scanned as application code. The common scanner directory exclusions apply,
-together with `.build`, `Pods`, `Carthage` and DocC catalogs (`*.docc`), whose
-snippets no build compiles. Files excluded in `scanners.json` are never read, so
-an excluded file cannot fail the scan. Source changes and new Swift files
-trigger the existing shared watch session.
+its `Package@swift-<version>.swift` variants are build declarations, and DocC
+catalogs (`*.docc`) hold snippets that no build compiles, so neither is scanned
+as application code. The package declares default
+[exclusions](../index.md#excluding-source-evidence) for the `.build`, `Pods`
+and `Carthage` folders. Excluded files are never read, so an excluded file cannot fail the scan. Source
+changes and new Swift files trigger the existing shared watch session.
 
 Xcode projects and Swift package manifests are not executed or evaluated.
 Source files form one source group; directories, imports and extension names

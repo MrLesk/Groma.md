@@ -154,8 +154,11 @@ export interface ScannerPlugin {
   id: string
   /** Repository-relative patterns for source and configuration changes that trigger analysis. */
   watch: { include: string[]; exclude: string[] }
-  /** Check source inputs and scanner-owned tools. Project dependency installation or builds must not be prerequisites. */
-  checkReadiness?(repositoryRoot: string, settings?: ScannerSettings): Promise<void>
+  /**
+   * Check source inputs and scanner-owned tools, skipping inputs `excluded` names, as `scan` does. Project dependency
+   * installation or builds must not be prerequisites.
+   */
+  checkReadiness?(repositoryRoot: string, settings?: ScannerSettings, excluded?: (file: string) => boolean): Promise<void>
   /** Source outline for Code references, required of official scanners; this data is never architecture persistence. */
   readCodeStructure?(repositoryRoot: string, references: readonly SourceReference[], settings?: ScannerSettings): Promise<CodeFile[]>
   /**

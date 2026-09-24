@@ -27,6 +27,15 @@ literal source settings and properties: main source directory, language release,
 encoding and artifact name. Defaults are `src/main/java`, the bundled compiler's
 language version and UTF-8. POM-only aggregators supply no source observation.
 
+The package declares default
+[exclusions](../index.md#excluding-source-evidence): `target/`, `build/` and
+`.gradle/`. Each pattern matches a
+folder of that name anywhere, including a package folder such as
+`com/acme/build/`. The scan and the readiness check skip every POM, Gradle
+script and source that the scanner's exclusions name, including sources under a
+declared source root such as `build/generated/java`. Test source sets stay out
+whatever the list says, because only main source roots are read.
+
 The scanner does not evaluate Maven, parent POMs, profiles, build plugins,
 annotation processors or dependency declarations. It does not load project
 JARs or generated outputs. Custom build-added roots are outside the supported

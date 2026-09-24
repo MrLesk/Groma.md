@@ -8,6 +8,11 @@
     "scanner": {
       "id": "java",
       "entry": "./src/index.ts",
+      "exclude": [
+        "target/",
+        "build/",
+        ".gradle/"
+      ],
       "discovery": {
         "technologies": [
           "java"

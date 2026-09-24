@@ -19,7 +19,7 @@ async function sourceReadiness(
   if (await scannerSourcesExcluded(scanner, root)) {
     return { project: 'ready', message: 'All source files are excluded.' }
   }
-  await scanner.plugin.checkReadiness(root, scanner.settings)
+  await scanner.plugin.checkReadiness(root, scanner.settings, scanner.excluded)
   return { project: 'ready', message: 'Preparation check passed; compilation is checked during scan.' }
 }
 

@@ -8,6 +8,10 @@
     "scanner": {
       "id": "rust",
       "entry": "./src/index.ts",
+      "exclude": [
+        "target/",
+        "vendor/"
+      ],
       "discovery": {
         "technologies": [
           "rust"

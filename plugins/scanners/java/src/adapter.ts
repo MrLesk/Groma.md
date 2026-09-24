@@ -13,21 +13,24 @@ export interface JavaScanOptions {
   timeout?: number
 }
 
-export async function checkJavaReadiness(repositoryRoot: string, options: JavaScanOptions = {}) {
+/** `excluded` takes paths relative to `projectRoot`. */
+export async function checkJavaReadiness(projectRoot: string, options: JavaScanOptions = {},
+  excluded: (file: string) => boolean = () => false) {
   const jar = options.worker ?? worker
   if (!await exists(jar)) throw new Error('JAVA_WORKER_MISSING: Install the packaged Java scanner, or build it with bun plugins/scanners/java/build.ts.')
   const command = runtime
   try {
-    const modules = await run(command, ['--list-modules'], repositoryRoot)
+    const modules = await run(command, ['--list-modules'], projectRoot)
     if (!modules.includes('jdk.compiler@')) throw new Error('The selected runtime has no Java compiler module.')
   }
   catch (error) { throw new Error(`JAVA_RUNTIME_MISSING: Reinstall the Java scanner with its bundled compiler runtime. ${error}`) }
-  const input = await readJavaInput(repositoryRoot)
+  const input = await readJavaInput(projectRoot, excluded)
   return { input, command, jar }
 }
 
-export async function scanJavaSource(repositoryRoot: string, options: JavaScanOptions = {}): Promise<ScanObservation | undefined> {
-  const { input, command, jar } = await checkJavaReadiness(repositoryRoot, options)
+export async function scanJavaSource(projectRoot: string, options: JavaScanOptions = {},
+  excluded: (file: string) => boolean = () => false): Promise<ScanObservation | undefined> {
+  const { input, command, jar } = await checkJavaReadiness(projectRoot, options, excluded)
   if (!input) return undefined
   let stdout: string
   try {

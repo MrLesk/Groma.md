@@ -30,8 +30,8 @@ async function workerPath(options: GoScanOptions): Promise<string> {
   return worker
 }
 
-export async function checkGoReadiness(repositoryRoot: string, options: GoScanOptions = {}) {
-  const root = await realpath(repositoryRoot)
+export async function checkGoReadiness(moduleRoot: string, options: GoScanOptions = {}) {
+  const root = await realpath(moduleRoot)
   const worker = await workerPath(options)
   await access(path.join(root, 'go.mod'))
   return { root, worker }
@@ -44,10 +44,14 @@ export async function readGoCodeStructure(repositoryRoot: string, references: re
   return JSON.parse(await run(worker, ['outline', repositoryRoot], repositoryRoot, { input: JSON.stringify(references) }))
 }
 
-/** Scans one module: the worker reads the files sources.ts selects, then applies the build context. */
-export async function scanGoSource(repositoryRoot: string, options: GoScanOptions = {}): Promise<ScanObservation> {
-  const { root, worker } = await checkGoReadiness(repositoryRoot, options)
-  const files = await moduleSources(root)
+/**
+ * Scans one module: the worker reads its go.mod, which module selection kept, and the files sources.ts selects less
+ * those `excluded` names, then applies the build context.
+ */
+export async function scanGoSource(moduleRoot: string, options: GoScanOptions = {},
+  excluded: (file: string) => boolean = () => false): Promise<ScanObservation> {
+  const { root, worker } = await checkGoReadiness(moduleRoot, options)
+  const files = await moduleSources(root, excluded)
   try { return parseScanObservation(await run(worker, [root], root, { input: JSON.stringify(files) })) }
   catch (error) { throw new Error(`GO_SOURCE_INVALID: No observation was produced. Check Go source syntax and module declarations. ${error}`) }
 }
