@@ -116,8 +116,9 @@ test.concurrent('React binds a handler a TypeScript module defines', async () =>
   try {
     await writeFile(path.join(root, 'handlers.ts'), 'export const receive = (value: string) => { console.log(value) }\n')
     const host = path.join(root, 'host.tsx')
+    // The line ending stays: a Windows checkout writes it as CRLF.
     await writeFile(host, (await readFile(host, 'utf8'))
-      .replace('  const receive = (value: string) => { console.log(value) }\n', '')
+      .replace('  const receive = (value: string) => { console.log(value) }', '')
       .replace("import { Editor } from './editor'", "import { Editor } from './editor'\nimport { receive } from './handlers'"))
     expectCallbackRow((await scanner.scan(root))!, 'handlers.ts')
   } finally { await rm(temporary, { recursive: true, force: true }) }

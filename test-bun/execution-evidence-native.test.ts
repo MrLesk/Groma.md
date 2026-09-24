@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { parseScanObservation, type ScannerPlugin } from '@groma/scanner'
@@ -24,8 +24,10 @@ async function example(files: Record<string, string>, action: (root: string, art
   } finally { await rm(directory, { recursive: true, force: true }) }
 }
 
-async function packaged(build: (directory: string) => Promise<void>, artifact: string): Promise<ScannerPlugin> {
-  await build(artifact)
+/** Builds the scanner package, or copies a prebuilt one: CI caches the Swift package, whose build takes minutes. */
+async function packaged(build: (directory: string) => Promise<void>, artifact: string, prebuilt?: string): Promise<ScannerPlugin> {
+  if (prebuilt) await cp(prebuilt, artifact, { recursive: true })
+  else await build(artifact)
   return (await import(path.join(artifact, 'src/index.js'))).default
 }
 
@@ -46,7 +48,7 @@ test.concurrent('Python execution guards and console scripts identify entries wi
 
 test.concurrent('Swift reports the main attribute without treating source files or imports as applications', async () => {
   await example({ 'App.swift': '@main struct App { static func main() {} }', 'Library.swift': 'struct Library {}' }, async (root, artifact) => {
-    const scan = await (await packaged(buildSwift, artifact)).scan(root)
+    const scan = await (await packaged(buildSwift, artifact, process.env.GROMA_TEST_SWIFT_PACKAGE)).scan(root)
     expect(scan!.entryPoints).toEqual([{ file: 'App.swift', declaration: 'App.swift', name: 'App', files: ['App.swift'] }])
   })
 }, 60000)

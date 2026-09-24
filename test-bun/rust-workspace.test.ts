@@ -49,7 +49,7 @@ test.concurrent('explicit binaries without paths use Cargo source conventions ev
     await writeFile(path.join(root, 'app/src/main.rs'), 'fn main() {}\n')
     await writeFile(path.join(root, 'app/src/bin/tool/main.rs'), 'fn main() {}\n')
     const input = await readRustProject(root, { manifest: 'app/Cargo.toml' })
-    expect(input.executables.map(entry => path.relative(root, entry.file))).toEqual(['app/src/main.rs', 'app/src/bin/tool/main.rs'])
+    expect(input.executables.map(entry => path.relative(root, entry.file).split(path.sep).join('/'))).toEqual(['app/src/main.rs', 'app/src/bin/tool/main.rs'])
   })
 })
 

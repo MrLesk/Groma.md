@@ -177,7 +177,9 @@ function extractArchive(
       cwd: repositoryRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
-    const extract = spawn('tar', ['-x', '-C', destination], {
+    // tar runs in the destination: Git for Windows' GNU tar cannot open a drive path such as C:\... given to -C.
+    const extract = spawn('tar', ['-x'], {
+      cwd: destination,
       stdio: ['pipe', 'ignore', 'pipe'],
     })
     let stderr = ''

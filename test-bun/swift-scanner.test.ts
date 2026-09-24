@@ -76,7 +76,8 @@ test.concurrent('Swift comparable bodies normalize bindings while retaining memb
     expect(findings.some(finding => finding.match === 'exact'
       && new Set(finding.instances.map(instance => instance.file)).size === 2)).toBe(true)
     // The outline row of a signature spread over several lines still shows the copies of its body.
-    const other = (await readFile(path.join(root, 'Other.swift'), 'utf8')).split('\n')
+    // A Windows checkout ends the fixture's lines with CRLF.
+    const other = (await readFile(path.join(root, 'Other.swift'), 'utf8')).split(/\r?\n/)
     expect(copiesOf(findings, 'Other.swift', other.indexOf('func wrapped(') + 1, 'wrapped')).toBeDefined()
     expect(tokens('access')).not.toEqual(tokens('otherAccess'))
     expect(tokens('access')).toContain('local:0')
