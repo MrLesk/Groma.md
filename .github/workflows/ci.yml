@@ -12,10 +12,6 @@ permissions:
 env:
   BUN_VERSION: 1.4.1
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   check:
     name: check-${{ matrix.os }}
