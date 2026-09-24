@@ -25,7 +25,9 @@ async function fixture(name = 'go-module') {
 }
 
 function lineOf(source: string, text: string): number {
-  return source.slice(0, source.indexOf(text)).split('\n').length
+  // A Windows checkout may end lines with CRLF, which does not change line numbers.
+  const lines = source.replaceAll('\r\n', '\n')
+  return lines.slice(0, lines.indexOf(text)).split('\n').length
 }
 
 function calls(observation: ScanObservation) {
@@ -51,7 +53,8 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
     ])
     expect(at('port.Work()')).toMatchObject({ targets: [], unresolved: true })
     expect(at('actions.Apply()')).toMatchObject({ targets: [], unresolved: true })
-    expect(at('Wrap()\n}').providers[0]!.position).toBe(source.indexOf('func Wrap'))
+    // The call before the closing brace, in either line ending.
+    expect(at(source.match(/Wrap\(\)\r?\n}/)![0]).providers[0]!.position).toBe(source.indexOf('func Wrap'))
     expect(at('alias.Build() }()').caller.name).toBe('closure')
     expect(at('alias.Build() }()').caller.position).toBe(source.indexOf('func() {'))
     expect(at('worker.Work()').caller.position).toBe(source.indexOf('func Run'))

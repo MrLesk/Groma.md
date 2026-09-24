@@ -11,6 +11,7 @@ permissions:
 
 env:
   BUN_VERSION: 1.4.1
+  RUST_VERSION: 1.91.1
 
 jobs:
   check:
@@ -35,12 +36,47 @@ jobs:
               'packages/scanner/**',
               'docs/scanners/swift/**',
               'bun.lock', 'LICENSE') }}
+      - name: Cache C# test package
+        id: csharp-package
+        uses: actions/cache@v6
+        with:
+          path: scanner-packages/csharp
+          key: >-
+            csharp-test-package-${{ matrix.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles(
+              'plugins/scanners/csharp/**',
+              'plugins/scanners/projects.ts',
+              'packages/scanner/**',
+              'scripts/package-csharp-scanner.ts',
+              'bun.lock', 'LICENSE') }}
+      - name: Cache Rust test package
+        id: rust-package
+        uses: actions/cache@v6
+        with:
+          path: plugins/scanners/rust/dist
+          key: >-
+            rust-test-package-${{ matrix.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ env.RUST_VERSION }}-${{ hashFiles(
+              'plugins/scanners/rust/**',
+              'plugins/scanners/projects.ts',
+              'plugins/scanners/observations.ts',
+              'packages/scanner/**',
+              'bun.lock', 'LICENSE') }}
       - uses: ./.github/actions/setup-swift
         if: steps.swift-package.outputs.cache-hit != 'true'
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: plugins/scanners/go/worker/go.mod
+          cache-dependency-path: plugins/scanners/go/worker/go.sum
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install Rust build toolchain
+        if: steps.rust-package.outputs.cache-hit != 'true'
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal
+        shell: bash
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -51,10 +87,29 @@ jobs:
         if: steps.swift-package.outputs.cache-hit != 'true'
         run: bun plugins/scanners/swift/build.ts scanner-packages/swift
         shell: bash
+      - name: Build C# test package
+        if: steps.csharp-package.outputs.cache-hit != 'true'
+        run: |
+          dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locked-mode
+          bun scripts/package-csharp-scanner.ts scanner-packages/csharp
+        shell: bash
+      - name: Build Rust test package
+        if: steps.rust-package.outputs.cache-hit != 'true'
+        run: RUSTUP_TOOLCHAIN="$RUST_VERSION" bun plugins/scanners/rust/build.ts
+        shell: bash
       - name: Run repository checks
         env:
           GROMA_TEST_SWIFT_PACKAGE: scanner-packages/swift
-        run: bun run check
+          GROMA_TEST_CSHARP_PACKAGE: ${{ github.workspace }}/scanner-packages/csharp
+          GROMA_TEST_GO: go
+        # The Rust build names the worker's folder after Bun's platform and architecture.
+        run: |
+          platform=$(bun -e 'process.stdout.write(`${process.platform}-${process.arch}`)')
+          export GROMA_TEST_RUST="$GITHUB_WORKSPACE/plugins/scanners/rust/dist/bin/$platform/groma-rust-scanner$([ "$RUNNER_OS" = Windows ] && echo .exe)"
+          bun run check
+        shell: bash
+      - name: Run C# worker tests
+        run: bun run test:csharp
         shell: bash
       - name: Build standalone binary
         run: bun run build
