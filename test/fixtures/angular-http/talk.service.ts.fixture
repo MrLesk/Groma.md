@@ -1,5 +1,5 @@
 import { Inject, Injectable, inject } from '@angular/core'
-import { HttpClient, HttpRequest } from '@angular/common/http'
+import { HttpClient, HttpRequest, httpResource } from '@angular/common/http'
 import { API_ROOT, API_TOKEN } from 'app-config'
 import { environment } from './environment'
 
@@ -142,5 +142,23 @@ export class SpeakerAccountService {
 
   moved() {
     return this.http.get(this.moving + '/talks')
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class TalkFeedService {
+  private readonly http = inject(HttpClient)
+  // A field initializer runs while the class is constructed.
+  readonly feed = this.http.get('/api/feed')
+  // The function passed to httpResource supplies the URL; a request object states its method.
+  readonly talk = httpResource(() => `/api/talks/${this.selected()}`)
+  readonly saved = httpResource(() => ({ url: '/api/saved', method: 'POST' }))
+
+  constructor() {
+    this.http.get('/api/boot')
+  }
+
+  selected() {
+    return 'first'
   }
 }

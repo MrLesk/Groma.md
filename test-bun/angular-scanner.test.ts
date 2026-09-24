@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin, SourceReference } from '@groma/scanner'
@@ -18,13 +18,13 @@ import { readCodeStructure } from '../src/viewers/source/structure.ts'
 const fixture = path.resolve(import.meta.dir, '../test/fixtures/angular-output')
 const outlineFixture = path.resolve(import.meta.dir, '../test/fixtures/angular-outline')
 
-async function setup() {
+/** A Git repository that `fill` writes, and the Angular package built beside it. */
+async function repository(fill: (root: string) => Promise<unknown>) {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-angular-test-'))
   const root = path.join(temporary, 'project')
   const artifact = path.join(temporary, 'scanner')
-  await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
-  await cp(fixture, root, { recursive: true })
-  for (const name of ['emitter', 'host']) await rename(path.join(root, `${name}.ts.fixture`), path.join(root, `${name}.ts`))
+  await mkdir(root, { recursive: true })
+  await fill(root)
   const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
   expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
   await buildPackage(artifact)
@@ -32,15 +32,21 @@ async function setup() {
   return { temporary, root, artifact, scanner }
 }
 
-async function outlineSetup() {
-  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-angular-outline-'))
-  const root = path.join(temporary, 'project')
-  const artifact = path.join(temporary, 'scanner')
-  await cp(outlineFixture, root, { recursive: true })
-  await buildPackage(artifact)
-  const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
-  return { temporary, root, artifact, scanner }
-}
+const setup = () => repository(async root => {
+  await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+  await cp(fixture, root, { recursive: true })
+  for (const name of ['emitter', 'host']) await rename(path.join(root, `${name}.ts.fixture`), path.join(root, `${name}.ts`))
+})
+
+const outlineSetup = () => repository(root => cp(outlineFixture, root, { recursive: true }))
+
+/** A repository of the given sources. */
+const workspace = (files: Record<string, string>) => repository(async root => {
+  for (const [file, text] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true })
+    await writeFile(path.join(root, file), text)
+  }
+})
 
 function owner(model: AnnotatedArchitectureModel, file: string) {
   const matches = model.elements.filter(element => element.code.some(reference => reference.file === file))
@@ -205,5 +211,74 @@ test.concurrent('a file Angular and TypeScript both own shows one outline', asyn
     // The component's Code lists this source under both scanners; only the TypeScript link names ProfileComponent.
     expect(files).toEqual(await scanner.readCodeStructure!(root, [{ file: 'profile.component.ts', symbols: ['ProfileComponent'] }]))
     expect(files?.[0]?.declarations.find(declaration => declaration.name === 'ProfileComponent')?.entry).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Angular scans an Nx application through its solution config without specs or unreadable settings', async () => {
+  const shop = 'apps/shop/src'
+  const { temporary, root, scanner } = await workspace({
+    // Nx declares Angular once at the workspace root and keeps each project's configs beside it.
+    'package.json': JSON.stringify({ dependencies: { '@angular/core': '21.2.17' } }),
+    'nx.json': '{}',
+    'tsconfig.base.json': JSON.stringify({ compilerOptions: { experimentalDecorators: true, resolveJsonModule: true } }),
+    'apps/shop/project.json': JSON.stringify({ name: 'shop', targets: { build: {
+      options: { browser: `${shop}/main.ts`, polyfills: ['zone.js', `${shop}/polyfills.ts`] },
+      configurations: { production: { fileReplacements: [{ replace: `${shop}/env.ts`, with: `${shop}/env.prod.ts` }] } },
+    } } }),
+    'apps/shop/tsconfig.json': JSON.stringify({ files: [], references: [{ path: './tsconfig.app.json' }] }),
+    // A TypeScript 6 option the scanner's compiler does not know.
+    'apps/shop/tsconfig.app.json': JSON.stringify({ extends: '../../tsconfig.base.json', compilerOptions: { stableTypeOrdering: true }, include: ['src/**/*.ts'] }),
+    [`${shop}/main.ts`]: "import { Shop } from './shop'\nimport { env } from './env'\nexport const app = [Shop, env]\n",
+    [`${shop}/polyfills.ts`]: 'export {}\n',
+    [`${shop}/env.ts`]: 'export const env = {}\n',
+    [`${shop}/env.prod.ts`]: 'export const env = {}\n',
+    [`${shop}/shop.ts`]: "import { Component } from '@angular/core'\nimport data from './data.json'\n\n"
+      + "@Component({ templateUrl: './shop.html', styleUrl: './missing.css' })\nexport class Shop { data = data }\n",
+    [`${shop}/shop.html`]: '<p>Shop</p>\n',
+    [`${shop}/data.json`]: '{}\n',
+    [`${shop}/shop.spec.ts`]: "import { Shop } from './shop'\nexport const spec = Shop\n",
+  })
+  try {
+    await scanner.checkReadiness!(root)
+    const observation = (await scanner.scan(root))!
+    const observed = observation.files.map(file => file.file)
+    // The absent stylesheet is left out of the component's source unit.
+    expect(observation.sourceUnits?.find(unit => unit.primary === `${shop}/shop.ts`)?.files.toSorted()).toEqual([`${shop}/shop.html`, `${shop}/shop.ts`])
+    for (const file of [`${shop}/shop.spec.ts`, `${shop}/data.json`]) expect(observed).not.toContain(file)
+    expect(await scanner.listSourceFiles!(root)).not.toContain(`${shop}/shop.spec.ts`)
+    expect(observation.diagnostics.map(item => item.code)).toEqual(expect.arrayContaining(['angular-unreadable-config', 'angular-missing-resource']))
+    expect(observation.entryPoints).toEqual([expect.objectContaining({ name: 'shop', file: `${shop}/main.ts`,
+      files: expect.arrayContaining([`${shop}/polyfills.ts`, `${shop}/env.prod.ts`, `${shop}/shop.html`]) })])
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Angular binds directive outputs and template emits from inline templates to the parent method', async () => {
+  const { temporary, root, scanner } = await workspace({
+    'package.json': JSON.stringify({ dependencies: { '@angular/core': '21.2.17' } }),
+    'tsconfig.json': JSON.stringify({ compilerOptions: { experimentalDecorators: true }, include: ['*.ts'] }),
+    // The directive emits, with an EventEmitter's next, an output its base class declares.
+    'sort.ts': "import { Directive, EventEmitter, HostListener, Output } from '@angular/core'\n\n"
+      + 'export class Sortable {\n  @Output() sorted = new EventEmitter<string>()\n}\n\n'
+      + "@Directive({ selector: '[appSort]' })\nexport class Sort extends Sortable {\n"
+      + "  @HostListener('click') click() { this.sorted.next('name') }\n}\n",
+    'remove.ts': "import { Component, output } from '@angular/core'\n\n"
+      + "@Component({ selector: 'app-remove', template: `<button (click)=\"removed.emit(true)\">Remove</button>` })\n"
+      + 'export class Remove { removed = output<boolean>() }\n',
+    'list.ts': "import { Component } from '@angular/core'\nimport { Sort } from './sort'\nimport { Remove } from './remove'\n\n"
+      + 'const TABLE = [Sort, Remove] as const\n\n'
+      + "@Component({ selector: 'app-list', imports: [TABLE], template: `<th appSort (sorted)=\"sort($event)\"></th>\n"
+      + '  <app-remove (removed)="remove()" />` })\nexport class List {\n  sort(key: string) { return key }\n  remove() { return true }\n}\n',
+  })
+  try {
+    const observation = (await scanner.scan(root))!
+    const owners = new Map(observation.files.map(file => [file.file, file.file]))
+    expect(inferRelationships([observation], owners).map(row => [row.source, row.target]).sort()).toEqual([
+      ['remove.ts', 'list.ts'],
+      ['sort.ts', 'list.ts'],
+    ])
+    // An inline template's binding keeps its position in the class file.
+    const list = await readFile(path.join(root, 'list.ts'), 'utf8')
+    const position = list.indexOf('(removed)')
+    expect(observation.invocations!.map(call => call.binding)).toContainEqual({ file: 'list.ts', line: list.slice(0, position).split('\n').length, position })
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

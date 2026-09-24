@@ -80,7 +80,7 @@ The official producers currently recognize these source forms:
 | Rust | Cargo binary targets | That binary crate's modules; no library or dependency crates |
 | Java | `public static void main(String[])`, including varargs | That project's compiler source set |
 | Python | Module execution guard, `__main__.py`, or `project.scripts` | Resolved local imports within the declared project |
-| JavaScript, TypeScript, React, Vue, Angular | Source-backed package commands/bins, HTML script entries, Angular build entry declarations, and readable Bun browser/compiled build entries | Resolved local modules within the declared package; framework companion files join their source unit |
+| JavaScript, TypeScript, React, Vue, Angular | Source-backed package commands/bins, HTML script entries, Angular CLI and Nx build targets, and readable Bun browser/compiled build entries | Resolved local modules within the declared package; the polyfills and environment replacements a build target names; framework companion files join their source unit |
 | PHP | Source-backed Composer bins and literal PHP script commands | Explicitly included local sources within that Composer package |
 | Swift | `@main`, `@UIApplicationMain` or `@NSApplicationMain` type, or `main.swift` top-level code | Its source file; project target membership is not analyzed |
 

@@ -39,15 +39,24 @@ export function hasDependency(manifest: Record<string, Record<string, unknown> |
     .some(section => typeof manifest[section]?.[dependency] === 'string')
 }
 
-function hasProjectConfig(directory: string, configs: Set<string>, inherit: boolean): boolean {
+function hasProjectConfig(directory: string, configs: Set<string>, options: FrameworkConfigs): boolean {
+  if (options.nestedConfig && [...configs].some(config => directory === '.' || config.startsWith(`${directory}/`))) return true
   for (let current = directory; ; current = path.posix.dirname(current)) {
     if (configs.has(current)) return true
-    if (!inherit || current === '.') return false
+    if (!options.inheritConfig || current === '.') return false
   }
 }
 
+/** Where a framework package may keep the TypeScript config that compiles it, besides its own directory. */
+export interface FrameworkConfigs {
+  /** In a repository ancestor. */
+  inheritConfig?: boolean
+  /** In project directories below it, as Nx workspaces that declare dependencies once at their root do. */
+  nestedConfig?: boolean
+}
+
 export async function frameworkProjects(
-  root: string, dependency: string, extensions: readonly string[], options: { inheritConfig?: boolean } = {},
+  root: string, dependency: string, extensions: readonly string[], options: FrameworkConfigs = {},
 ): Promise<string[]> {
   const files = await projectFiles(root, () => true)
   const manifests = files.filter(file => path.posix.basename(file) === 'package.json')
@@ -55,7 +64,7 @@ export async function frameworkProjects(
   const candidates = new Set<string>()
   for (const file of manifests) {
     const directory = path.posix.dirname(file)
-    if (!hasProjectConfig(directory, configs, options.inheritConfig === true)) continue
+    if (!hasProjectConfig(directory, configs, options)) continue
     const manifest = JSON.parse(await readFile(path.join(root, file), 'utf8'))
     if (hasDependency(manifest, dependency)) candidates.add(directory)
   }

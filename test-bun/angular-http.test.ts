@@ -104,7 +104,13 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
       'send GET /<unknown>',
       // A field holds its one assignment, here a configured base and a literal path.
       'users GET configured:/api/speakers/users',
-    ])
+      // The constructor runs its own calls and the field initializers.
+      'constructor GET /api/boot',
+      'constructor GET /api/feed',
+      // httpResource sends GET unless its request object states another method.
+      'callback at 154 GET /api/talks/<dynamic>',
+      'callback at 155 POST /api/saved',
+    ].sort())
     // `request(new HttpRequest(...))` states no separate URL, so `packaged` reports nothing.
     expect(requests(observation).some(request => request.startsWith('packaged'))).toBe(false)
     // Router routes and interceptors answer no request, and the DraftService `get` is not a client.

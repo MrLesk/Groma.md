@@ -379,7 +379,7 @@ same JSON, which their module reads with `parseScanObservation`.
   The ID matches the plugin ID, such as `react`. Technology describes the
   ecosystem, such as `typescript/react`, `typescript/vue`, or `c#/.NET`.
   Engine names the actual analysis tool, such as `typescript-sdk`,
-  `@angular/compiler-cli`, or `roslyn`. Its version is the tool's version.
+  `@angular/compiler`, or `roslyn`. Its version is the tool's version.
 - `roots`: source analysis units, such as solutions, projects, packages, modules,
   or inferred source groups. Each has an observation-local `id`, `kind`, and
   `name`. Optional `file` identifies its defining repository file; optional

@@ -14,9 +14,16 @@ groma:
       file: plugins/scanners/angular/src/http.ts
       symbol: angularHttpRequests
     - scanner: typescript
-      file: plugins/scanners/angular/src/components.ts
+      file: plugins/scanners/angular/src/project.ts
+    - scanner: typescript
+      file: plugins/scanners/angular/src/evidence.ts
+    - scanner: typescript
+      file: plugins/scanners/angular/src/template.ts
+      symbol: Templates
+    - scanner: typescript
+      file: plugins/scanners/angular/src/directives.ts
   group: Language analysis
 description: Analyses Angular components, templates and HTTP bindings
 ---
 
-Checks Angular source and templates with the Angular compiler. Returns declarations, template callback evidence and supported HTTP requests and endpoints.
+Compiles each Angular project through the TypeScript configs that own its sources, including solution configs and Nx projects, and parses component templates with the Angular template parser. Returns declarations, component source units, output bindings to parent methods, supported HTTP requests and application entries.
