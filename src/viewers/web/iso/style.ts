@@ -3,7 +3,7 @@ import { layerCss } from '../layers/paint.ts'
 import { glowCss } from './glow.ts'
 import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
 import type { Plane, ProjectionView } from './project.ts'
-import { FACADE_MARK, SIDE, SURFACE_TILE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
+import { FACADE_MARK, SIDE, SURFACE_TILE, depthOf, emphasis, facadeDetailsVisible, strokeAt, surfacePatternsVisible, tintAt } from './scale.ts'
 import type { Level } from './scale.ts'
 import { mark, node, type SvgNode } from './svg.ts'
 
@@ -83,6 +83,11 @@ function surfaceColours(kind: string, depth: number, palette?: Palette): string 
   return `#map .${kind} .ground, #map .${kind} .top { fill: ${paintTint(tintAt(depth), palette)}; }
     #map .${kind} .right { fill: ${paintTint(tintAt(depth + SIDE.right), palette)}; }
     #map .${kind} .left { fill: ${paintTint(tintAt(depth + SIDE.left), palette)}; }`
+}
+
+/** The camera attributes that stop facade and surface patterns below readable size at zoom `k`; the map and its covers set the same ones. */
+export function patternAttributes(k: number): Record<string, boolean> {
+  return { 'data-facades-hidden': !facadeDetailsVisible(k), 'data-surface-patterns-hidden': !surfacePatternsVisible(k) }
 }
 
 /** Supplying a palette resolves theme values and compensates strokes for a fixed SVG camera. Covers render these rules with resvg, which ignores :is(), so selectors stay plain. */

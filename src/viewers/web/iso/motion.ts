@@ -79,10 +79,7 @@ export function createCameraMotion(initial: Camera) {
   }
 }
 
-/**
- * Camera frames share the same paint callback as direct gestures and respect reduced motion. Navigation announces its
- * destination through `approach` before it moves; direct gestures never do, or a pinch would redraw the map every frame.
- */
+/** Camera frames share the same paint callback as direct gestures and respect reduced motion. */
 export function createCameraAnimator(initial: Camera, paint: () => void, approach: (destination: Camera) => void) {
   const motion = createCameraMotion(initial)
   let frame: number | undefined
@@ -96,12 +93,13 @@ export function createCameraAnimator(initial: Camera, paint: () => void, approac
     paint()
     if (moving) frame = requestAnimationFrame(tick)
   }
-  const move = (to: Camera, animate = true): void => {
+  const start = (to: Camera, animate: boolean): void => {
     stopFrame()
-    if (animate) approach(to)
-    motion.move(to, performance.now(), animate && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+    motion.move(to, performance.now(), animate)
     frame = requestAnimationFrame(tick)
   }
+  /** Moves at once, as direct gestures do; it never announces a destination, or a pinch would redraw the map every frame. */
+  const jump = (to: Camera): void => start(to, false)
   return {
     get current() { return motion.current },
     get target() { return motion.target },
@@ -110,9 +108,14 @@ export function createCameraAnimator(initial: Camera, paint: () => void, approac
       motion.frame(to, amount)
       frame = requestAnimationFrame(tick)
     },
-    move,
+    /** Announces the destination through `approach`, then animates there unless the viewer prefers reduced motion. */
+    navigate(to: Camera): void {
+      approach(to)
+      start(to, !matchMedia('(prefers-reduced-motion: reduce)').matches)
+    },
+    jump,
     /** Stops a transition or glide where the camera is shown now. */
-    hold: () => move(motion.current, false),
+    hold: () => jump(motion.current),
     /** Reduced motion leaves the camera where the drag left it. */
     glide(velocity: Point) {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return

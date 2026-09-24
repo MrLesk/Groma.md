@@ -3,19 +3,17 @@ import type { Point } from '../../../types.ts'
 import { layerLabelsSvg, layerPlanesSvg } from '../layers/paint.ts'
 import type { LayeredScene } from '../layers/separation.ts'
 import type { Camera } from './camera.ts'
+import { type CameraView, createCameraLayer } from './camera-layer.ts'
 import { createGlows } from './glow.ts'
 import { buildingsSvg, facadeDefs } from './paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from './paint-ground.ts'
 import { routesSvg } from './paint-routes.ts'
 import { createGrid } from './grid.ts'
 import { DEFAULT_PROJECTION } from './project.ts'
-import { facadeDetailsVisible, surfacePatternsVisible, weightAt } from './scale.ts'
-import { HOVERABLE, mapDefs } from './style.ts'
+import { weightAt } from './scale.ts'
+import { HOVERABLE, mapDefs, patternAttributes } from './style.ts'
 import { patch, svg } from './svg.ts'
 import { surfaceLabelStep } from './text.ts'
-
-/** The map settles this long after its camera last moved or it was last repainted: a zoom-in or gesture commits its SVG scale, a layer the compositor scaled is rebuilt sharp, and hover and glows return. Panning keeps the cached layer. */
-const SETTLE_MS = 250
 
 interface RouteNode {
   group: SVGGElement
@@ -30,11 +28,7 @@ export interface IsoMap {
   dragging(active: boolean): void
   /** Applies the camera and reports whether its compositor scale changed. */
   move(camera: Camera, zoomRatio: number): boolean
-  /**
-   * Navigation is about to head for `destination`. A zoom-out draws the destination into the SVG at once and shows the
-   * current view from it, enlarged: shrinking a close-up picture instead makes Safari paint the whole map at close-up
-   * resolution.
-   */
+  /** Navigation is about to head for `destination`; a zoom-out draws it first, as the camera layer explains. */
   approach(destination: Camera, zoomRatio: number): void
   /**
    * Draws the scene into the existing layers, reusing their elements; a repaint counts as map motion. Returns true
@@ -84,12 +78,6 @@ function paintSurface(name: string, layers: SVGGElement[]) {
   return { surface, scene, world }
 }
 
-/** A camera with the zoom ratio its stroke weight follows. */
-interface CameraView {
-  camera: Camera
-  zoomRatio: number
-}
-
 /** What the highlight setters read from the scene besides the drawn elements: each route's ids and ends, and the surface under each body. */
 function highlightInputs(scene: LayeredScene) {
   return {
@@ -109,10 +97,17 @@ export function createMap(host: HTMLElement): IsoMap {
   root.setAttribute('aria-label', 'Architecture map')
   root.tabIndex = 0
   const grid = createGrid()
-  const camera = document.createElement('div')
-  camera.className = 'camera'
-  // The cached layer stays promoted at rest: promoting it again when a pan starts makes Safari redraw the whole map.
-  camera.style.willChange = 'transform'
+  const layer = createCameraLayer({
+    draw: view => drawCamera(view),
+    moving: () => glows.hide(true),
+    settled: () => {
+      // A drag held still keeps its hover: the point under the pointer is the drag cover, not the map.
+      if (dragCover.hidden) hover(pointer === undefined ? undefined : document.elementFromPoint(pointer.x, pointer.y))
+      updateGlows()
+      glows.hide(false)
+    },
+  })
+  const camera = layer.element
   const layers = {
     sheet: svg('g', {}, 'sheet'),
     islands: svg('g', {}, 'islands'),
@@ -138,34 +133,20 @@ export function createMap(host: HTMLElement): IsoMap {
   let items = new Map<string, Element>()
   let painted: LayeredScene | undefined
   let routes = new Map<string, RouteNode>()
-  /** The camera the map shows now, and the one last written into the SVG; between them the cached layer moves. */
-  let latest: CameraView | undefined
-  let committed: CameraView | undefined
-  let settleTimer: ReturnType<typeof setTimeout> | undefined
-  let movedAt = 0
   let labelStep = surfaceLabelStep(1)
-  /** True from a repaint until the camera is next committed or the map settles: the cached layer no longer shows the picture. */
-  let repainted = false
-  /** True once the compositor has scaled the cached layer since it was last rebuilt. */
-  let scaled = false
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
   /** The scene inputs the current highlights were applied with, as JSON. */
   let highlighted = ''
-  /**
-   * True from a camera change or a repaint until the map settles; hover highlights and glows wait for it. It lives
-   * here rather than as an attribute on the map host, because flipping such an attribute restyles every map element.
-   */
-  let moving = false
   /** The element carrying the hover look, and where the mouse last was over the map. */
   let hovered: Element | undefined
   let pointer: Point | undefined
 
   /** Selection and flow focus share one glow per visible body, including their overlapping endpoints. Glows wait while the map moves. */
   const updateGlows = (): void => {
-    if (painted === undefined || moving) return
+    if (painted === undefined || layer.moving) return
     const focused = [...items].filter(([, item]) => item.matches('.component-focus, :is(.building, .slab, .island).focused'))
-    glows.show(painted, focused.map(([id]) => id), committed?.camera)
+    glows.show(painted, focused.map(([id]) => id), layer.drawn)
   }
 
   /**
@@ -174,7 +155,7 @@ export function createMap(host: HTMLElement): IsoMap {
    * which stalls Safari on a zoomed-out map.
    */
   const hover = (target: EventTarget | null | undefined): void => {
-    if (moving) return
+    if (layer.moving) return
     const next = target instanceof Element ? target.closest(HOVERABLE) ?? undefined : undefined
     if (next === hovered) return
     hovered?.classList.remove('hovered')
@@ -212,84 +193,17 @@ export function createMap(host: HTMLElement): IsoMap {
     surfaces = new Map(inputs.surfaces)
   }
 
-  /** Refresh scale-dependent SVG together; per-frame writes invalidate Safari's cached layer. */
-  const commitCamera = (view: CameraView): void => {
-    const current = view.camera
+  /** Writes the SVG for a camera: surface titles at its zoom's step, glows, world transforms, stroke weight and pattern attributes. */
+  const drawCamera = ({ camera: current, zoomRatio }: CameraView): void => {
     // Surface titles move to the settled zoom's step through the same painters; only their attributes change.
     if (painted !== undefined && surfaceLabelStep(current.k) !== labelStep) drawSurfaces(painted, current.k)
     glows.move(current)
     for (const { world } of paintSurfaces) {
       world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
     }
-    committed = view
-    camera.style.setProperty('--weight', String(weightAt(view.zoomRatio)))
+    camera.style.setProperty('--weight', String(weightAt(zoomRatio)))
     camera.style.setProperty('--camera-scale', String(current.k))
-    camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
-    camera.toggleAttribute('data-surface-patterns-hidden', !surfacePatternsVisible(current.k))
-    repainted = false
-    // The cached layer keeps a transform at rest: removing it and setting it again on the next pan makes Safari redraw the whole map.
-    camera.style.transform = 'translate(0px, 0px) scale(1)'
-  }
-
-  /** Shows `shown` by moving the cached picture that the SVG holds for `drawn`. */
-  const showCached = (shown: Camera, drawn: Camera): void => {
-    const ratio = shown.k / drawn.k
-    camera.style.transform = `translate(${shown.x - drawn.x * ratio}px, ${shown.y - drawn.y * ratio}px) scale(${ratio})`
-    if (ratio !== 1) scaled = true
-  }
-
-  /**
-   * Once the compositor has scaled the cached layer, Safari keeps drawing it below full resolution, even with the zoom
-   * committed into the SVG. Changing its will-change around a forced layout makes Safari rebuild it sharp without
-   * drawing a frame uncached, which would hold Safari for hundreds of milliseconds on a zoomed-out map. It runs in the
-   * frame after the settle: in the settle's own frame, where a zoom-in commits, it leaves the map soft.
-   */
-  const rebuildCachedLayer = (): void => {
-    camera.style.willChange = 'auto'
-    void camera.offsetWidth
-    camera.style.willChange = 'transform'
-  }
-
-  /**
-   * The map settles once nothing has moved it for SETTLE_MS; one timer waits for that instead of restarting on every
-   * frame. The timer hands over to an animation frame, which runs after the camera's own: a long frame can hold a
-   * camera transition past SETTLE_MS, and settling in between would commit a camera that the next frame replaces.
-   */
-  const settle = (): void => {
-    const wait = movedAt + SETTLE_MS - performance.now()
-    if (wait > 0) {
-      waitToSettle(wait)
-      return
-    }
-    settleTimer = undefined
-    moving = false
-    repainted = false
-    if (latest !== undefined && (latest.camera.k !== committed?.camera.k || latest.zoomRatio !== committed?.zoomRatio)) commitCamera(latest)
-    if (scaled) {
-      scaled = false
-      requestAnimationFrame(rebuildCachedLayer)
-    }
-    // A drag held still keeps its hover: the point under the pointer is the drag cover, not the map.
-    if (dragCover.hidden) hover(pointer === undefined ? undefined : document.elementFromPoint(pointer.x, pointer.y))
-    updateGlows()
-    glows.hide(false)
-  }
-
-  const waitToSettle = (ms: number): void => {
-    settleTimer = setTimeout(() => requestAnimationFrame(settle), ms)
-  }
-
-  const scheduleSettle = (): void => {
-    movedAt = performance.now()
-    if (settleTimer === undefined) waitToSettle(SETTLE_MS)
-  }
-
-  const markMoving = (): void => {
-    if (!moving) {
-      moving = true
-      glows.hide(true)
-    }
-    scheduleSettle()
+    for (const [name, set] of Object.entries(patternAttributes(current.k))) camera.toggleAttribute(name, set)
   }
 
   root.addEventListener('pointermove', event => {
@@ -310,27 +224,15 @@ export function createMap(host: HTMLElement): IsoMap {
     move(current, zoomRatio) {
       // Before the unchanged-camera return: a repaint can change the projection without moving the camera.
       grid.follow(current, painted?.view ?? DEFAULT_PROJECTION)
-      const scaleChanged = current.k !== latest?.camera.k || zoomRatio !== latest?.zoomRatio
-      const cameraChanged = current.x !== latest?.camera.x || current.y !== latest?.camera.y || current.k !== latest?.camera.k
-      if (!cameraChanged && !scaleChanged) return false
-      latest = { camera: current, zoomRatio }
-      markMoving()
-      // A repainted picture has no cached layer worth moving, so the camera goes straight into the SVG.
-      if (committed === undefined || repainted) commitCamera(latest)
-      else showCached(current, committed.camera)
-      return scaleChanged
+      return layer.move({ camera: current, zoomRatio })
     },
     approach(destination, zoomRatio) {
-      if (latest === undefined || committed === undefined || destination.k >= committed.camera.k) return
-      commitCamera({ camera: destination, zoomRatio })
-      showCached(latest.camera, destination)
-      markMoving()
+      layer.approach({ camera: destination, zoomRatio })
     },
     paint(scene) {
       painted = scene
-      const reshaped = draw(scene, latest?.camera.k ?? 1)
-      repainted = true
-      markMoving()
+      const reshaped = draw(scene, layer.shown?.k ?? 1)
+      layer.invalidate()
       const inputs = highlightInputs(scene)
       const key = JSON.stringify(inputs)
       if (!reshaped && key === highlighted) return false

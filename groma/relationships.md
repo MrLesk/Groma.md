@@ -68,6 +68,7 @@ title: Architecture relationships
 | [src/viewers/tui/panes/screen.ts](../src/viewers/tui/panes/screen.ts) | [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | Invokes supplied callbacks: onHierarchyRow, onMapCell | typescript |
 | [src/viewers/web/atoms/settings-dialog.ts](../src/viewers/web/atoms/settings-dialog.ts) | [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | Invokes supplied callback: onClose | typescript |
 | [src/viewers/web/authoring.ts](../src/viewers/web/authoring.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: live, world | typescript |
+| [src/viewers/web/iso/camera-layer.ts](../src/viewers/web/iso/camera-layer.ts) | [src/viewers/web/iso/map.ts](../src/viewers/web/iso/map.ts) | Invokes supplied callbacks: draw, moving, settled | typescript |
 | [src/viewers/web/iso/pointer.ts](../src/viewers/web/iso/pointer.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: editProject, orbit, orbiting, pan, select, zoom | typescript |
 | [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callback: world | typescript |
 | [src/viewers/web/search/session.ts](../src/viewers/web/search/session.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: anchorOf, apply, openTask, previewMap, snapshot, taskElements | typescript |

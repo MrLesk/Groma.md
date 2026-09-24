@@ -111,7 +111,8 @@ function fitScene(frame: MapFrame): Camera {
   return pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
 }
 let fitted: Camera = fitScene(viewport())
-const camera = createCameraAnimator(fitted, applyCamera, to => map.approach(to, to.k / fitted.k))
+function zoomRatio(view: Camera): number { return view.k / fitted.k }
+const camera = createCameraAnimator(fitted, applyCamera, to => map.approach(to, zoomRatio(to)))
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
 /** A world update's blend: the camera tracks its fit on every frame, through the last, instead of refitting a selection. */
@@ -128,14 +129,14 @@ function known(id: string | undefined): boolean {
 
 function applyCamera(): void {
   const current = camera.current
-  const scaleChanged = map.move(current, current.k / fitted.k)
+  const scaleChanged = map.move(current, zoomRatio(current))
   pins.place(current)
   if (scaleChanged) zoomHost.textContent = zoomReadout(current, fitted) || '100%'
 }
 
 function refit(): void {
   fitted = fitScene(viewport())
-  camera.move(fitted)
+  camera.navigate(fitted)
   touched = false
 }
 
@@ -143,7 +144,7 @@ function fitControl(): void { animateControl(document.getElementById('fit')!, 'f
 function zoomStep(factor: number, control: HTMLElement): void {
   animateControl(control, 'zoom')
   const frame = viewport()
-  camera.move(zoomAbout(camera.target, factor, { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 }, fitted))
+  camera.navigate(zoomAbout(camera.target, factor, { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 }, fitted))
   touched = true
 }
 
@@ -250,7 +251,7 @@ function select(id: string, additive = false, origin: 'panel' | 'map' = 'panel')
 
 function applyFocus(next: Camera | undefined, frame: MapFrame): void {
   if (next === undefined) return
-  camera.move(pan(next, frame.x, frame.y))
+  camera.navigate(pan(next, frame.x, frame.y))
   touched = true
 }
 function focusActiveTasks(): void {
@@ -298,12 +299,12 @@ const searchControl = createSearchSession({
   openTask: id => applyTaskSelection(openWorkSelection(activeTaskIds, id)),
   snapshot: () => ({ selection, camera: { ...camera.current }, touched, detailsTab }),
   previewMap(ids, nextCamera) {
-    if (nextCamera !== undefined) { camera.move(nextCamera); touched = true }
+    if (nextCamera !== undefined) { camera.navigate(nextCamera); touched = true }
     map.select(ids ?? selectedArchitecture(selection))
   },
   apply(next, commitUrl) {
     ({ selection, touched, detailsTab } = next)
-    if (!commitUrl) camera.move(next.camera)
+    if (!commitUrl) camera.navigate(next.camera)
     paintViewState(commitUrl)
     if (commitUrl) focusArchitecture(selectedArchitecture(selection))
   },
@@ -332,11 +333,11 @@ bindMapPointer(host, map, {
   orbiting: () => mapMotion.view === 'layers',
   hold: camera.hold,
   zoom(factor, point) {
-    camera.move(zoomAbout(camera.current, factor, point, fitted), false)
+    camera.jump(zoomAbout(camera.current, factor, point, fitted))
     touched = true
   },
   pan(dx, dy) {
-    camera.move(pan(camera.current, dx, dy), false)
+    camera.jump(pan(camera.current, dx, dy))
     touched = true
   },
   glide: camera.glide,
@@ -400,7 +401,7 @@ function repaintScene(fit: boolean): void {
     const focus = mapMotion.view === 'layers' ? undefined : fitArchitecture(scene, world, selectedArchitecture(selection), frame)
     camera.frame(focus === undefined ? fitted : pan(focus, frame.x, frame.y), mapMotion.framing)
     touched = focus !== undefined
-  } else camera.move(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k), false)
+  } else camera.jump(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k))
   following = mapMotion.morphing
   applyCamera()
   if (rehighlight) paintMapState()
@@ -423,7 +424,7 @@ let lastViewport = viewport()
 const resizeObserver = new ResizeObserver(() => {
   const next = viewport()
   if (touched) {
-    camera.move(pan(
+    camera.navigate(pan(
       camera.target,
       next.x + next.width / 2 - lastViewport.x - lastViewport.width / 2,
       next.y + next.height / 2 - lastViewport.y - lastViewport.height / 2,
@@ -445,7 +446,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   scene = projectedScene()
   fitted = fitScene(viewport())
   // A settling sheet is followed from where the camera is; an instant change flies to the new fit.
-  const settle = () => mapMotion.morphing ? camera.frame(fitted, 0) : camera.move(fitted)
+  const settle = () => mapMotion.morphing ? camera.frame(fitted, 0) : camera.navigate(fitted)
   if (reset) {
     authoring.cancel()
     source.clear()

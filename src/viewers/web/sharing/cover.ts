@@ -8,8 +8,7 @@ import { buildingsSvg, facadeDefs } from '../iso/paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from '../iso/paint-ground.ts'
 import { routesSvg } from '../iso/paint-routes.ts'
 import { presentScene } from '../iso/presentation.ts'
-import { facadeDetailsVisible, surfacePatternsVisible } from '../iso/scale.ts'
-import { mapDefs, mapDrawingCss } from '../iso/style.ts'
+import { mapDefs, mapDrawingCss, patternAttributes } from '../iso/style.ts'
 import { markup, node } from '../iso/svg.ts'
 import { NESTED_POSE } from '../layers/orbit.ts'
 import type { WebMapPayload } from '../payload.ts'
@@ -57,7 +56,7 @@ export function renderCover(payload: CoverPayload, theme: WebTheme): string {
     <rect width="1200" height="630" fill="${palette.paper}"/>
     <g clip-path="url(#cover-frame)">
       <use xlink:href="#field"/>
-      <g class="camera"${facadeDetailsVisible(camera.k) ? '' : ' data-facades-hidden=""'}${surfacePatternsVisible(camera.k) ? '' : ' data-surface-patterns-hidden=""'}
+      <g class="camera"${Object.entries(patternAttributes(camera.k)).map(([name, set]) => (set ? ` ${name}=""` : '')).join('')}
         transform="translate(${camera.x} ${camera.y}) scale(${camera.k})">${drawing}</g>
       <g clip-path="url(#cover-footer)"><use xlink:href="#field" filter="url(#frost)"/></g>
       <rect x="28" y="478" width="1144" height="126" rx="20" fill="${palette.paper}" fill-opacity="0.56"
