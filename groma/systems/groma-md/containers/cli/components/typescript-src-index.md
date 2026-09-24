@@ -8,6 +8,7 @@ groma:
   code:
     - scanner: typescript
       file: plugins/scanners/typescript/src/index.ts
+      symbol: scanner
     - scanner: typescript
       file: plugins/scanners/typescript/src/scan.ts
       symbol: scanTypeScriptSource
@@ -27,6 +28,9 @@ groma:
     - scanner: typescript
       file: plugins/scanners/typescript/src/source-usage.ts
       symbol: usedImportSpecifiers
+    - scanner: typescript
+      file: plugins/scanners/typescript/src/source-symbols.ts
+      symbol: exportSymbols
   group: Language analysis
 description: Analyses TypeScript projects with the compiler
 ---

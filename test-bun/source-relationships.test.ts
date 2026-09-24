@@ -97,6 +97,24 @@ test.concurrent('operation resolution follows aliases but preserves executable w
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test.concurrent('a call to an overloaded function reaches its implementation and binds the callbacks it supplies', async () => {
+  const root = await repository()
+  try {
+    await writeFile(path.join(root, 'src/worker.ts'), `
+export function run(actions: { deliver(value: string): string }): string
+export function run(actions: { deliver(value: string): string }, label: string): string
+export function run(actions: { deliver(value: string): string }): string {
+  return actions.deliver('result')
+}
+`)
+    const observation = (await scanTypeScriptSource(root))!
+    const operations = new Map(observation.operations!.map(operation => [operation.id, operation.file]))
+    const callback = observation.invocations!.find(invocation => invocation.member === 'deliver')!
+    expect(callback.targets.map(id => operations.get(id))).toEqual(['src/provider.ts'])
+    expect(callback.binding?.file).toBe('src/caller.ts')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test.concurrent('uncertain alternatives prevent emission even when one known callback target remains', async () => {
   const root = await repository()
   try {

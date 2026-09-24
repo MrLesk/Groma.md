@@ -12,6 +12,10 @@ const FIRST_PLACEHOLDER = /:([A-Za-z_]\w*)/
 const WILDCARD = /^\*([A-Za-z_]\w*)?$/
 /** Express 5's optional group of one trailing parameter, `/talks{/:id}`. */
 const OPTIONAL_GROUP = /\{\/:([A-Za-z_]\w*)\}$/
+/** Express 5's optional trailing wildcard, `/files{/*path}` or `/files/{*path}`: any remainder, even none. */
+const OPTIONAL_WILDCARD = /(?:\{\/\*|\/\{\*)([A-Za-z_]\w*)\}$/
+/** Express 5's optional group that starts a segment, such as `{/:id}` before more path: the segments before it stand. */
+const SEGMENT_GROUP = '{/'
 /** Route syntax that is not literal text. */
 const SYNTAX = /[:*(){}?+]/
 /** A pattern that matches within one segment: digits, word characters, classes of those and quantifiers. */
@@ -52,16 +56,23 @@ function segment(part: string, last: boolean, bareWildcard: boolean): HttpEndpoi
 
 /**
  * The path a route pattern serves: literal text, `:name` and `:name?` parameters, an optional trailing
- * `{/:name}` group, and a trailing `*`, `*name` or `(.*)` catch-all, which `bareWildcard` routers such as
+ * `{/:name}` group or `{/*name}` wildcard, and a trailing `*`, `*name` or `(.*)` catch-all, which `bareWildcard` routers such as
  * Hono also match without it. A typed or pattern parameter, and text mixed with a placeholder, is
  * constrained. A pattern that may span segments, or that states nothing certain, becomes a
  * constrained optional catch-all in place of itself and everything after it, so no route is omitted.
  */
 export function endpointPath(pattern: string, bareWildcard = false): HttpEndpointSegment[] {
-  const group = OPTIONAL_GROUP.exec(pattern)
+  const group = OPTIONAL_GROUP.exec(pattern) ?? OPTIONAL_WILDCARD.exec(pattern)
   if (group !== null) {
     const path = endpointPath(pattern.slice(0, group.index), bareWildcard)
-    return path.at(-1)?.kind === 'catch-all' ? path : [...path, { kind: 'parameter', name: group[1]!, optional: true }]
+    const optional: HttpEndpointSegment = group[0].includes('*')
+      ? { kind: 'catch-all', name: group[1]!, optional: true } : { kind: 'parameter', name: group[1]!, optional: true }
+    return path.at(-1)?.kind === 'catch-all' ? path : [...path, optional]
+  }
+  const opening = pattern.indexOf(SEGMENT_GROUP)
+  if (opening >= 0) {
+    const path = endpointPath(pattern.slice(0, opening), bareWildcard)
+    return path.at(-1)?.kind === 'catch-all' ? path : [...path, remainder()]
   }
   const pieces = pattern.split('/').filter(part => part !== '')
   const path: HttpEndpointSegment[] = []

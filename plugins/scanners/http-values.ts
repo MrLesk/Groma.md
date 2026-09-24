@@ -24,6 +24,7 @@ interface Variable extends Node { name: Node; initializer?: Node; parent: Node &
 interface BindingElement extends Node { name?: Node; propertyName?: Node; parent: Node & { parent: Node } }
 interface Field extends Node { name: Node; initializer?: Node; parent: Node }
 interface ClassLike extends Node { heritageClauses?: ArrayLike<{ token: number; types: ArrayLike<{ expression: Node }> }> }
+interface Enum extends Node { members: readonly (Node & { name: Node; initializer?: Node })[] }
 
 export interface UrlCompiler extends IndexCompiler, SyntaxCompiler {
   SyntaxKind: IndexCompiler['SyntaxKind'] & SyntaxCompiler['SyntaxKind'] & { ThisKeyword: number; ExtendsKeyword: number }
@@ -45,6 +46,7 @@ export interface UrlCompiler extends IndexCompiler, SyntaxCompiler {
   isSetAccessorDeclaration(node: Node): boolean
   isPropertyDeclaration(node: Node): node is Field
   isClassLike(node: Node): boolean
+  isEnumDeclaration(node: Node): node is Enum
 }
 
 /** What every HTTP reader of a scan shares: the compiler's syntax, its checker, and how the sources use each variable. */
@@ -153,6 +155,11 @@ async function variableHeld(context: UrlContext, name: Node, path: readonly stri
   if (declaration === undefined || declarationFile(declaration) || ambient(ts, declaration)) return 'unseen'
   // A function the name declares is the value it holds, such as a route's handler.
   if (path.length === 0 && ts.isFunctionDeclaration(declaration)) return { node: declaration }
+  // An enum member is a constant nothing in the program can change, such as `RouteKey.Asset`.
+  if (path.length === 1 && ts.isEnumDeclaration(declaration)) {
+    const member = declaration.members.find(entry => ts.isIdentifier(entry.name) && entry.name.text === path[0])
+    return member?.initializer === undefined ? 'unknown' : held(context, member.initializer, [], depth + 1)
+  }
   if (!ts.isVariableDeclaration(declaration) || declaration.initializer === undefined) return 'unknown'
   if (!ts.isIdentifier(declaration.name) || !await unassigned(context, declaration)) return 'unknown'
   if (path.length > 0 && !await context.bindings.unchanged(declaration, path, name)) return 'unknown'

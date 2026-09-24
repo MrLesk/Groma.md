@@ -15,6 +15,9 @@ hidden.get('/hidden', handle)
 patterns.get(`/versions/v-${routeFor('latest')}`, handle)
 patterns.get('/assets/:rest(.*)', handle)
 patterns.get('/archives/:name(.*\\.zip)', handle)
+// Express 5's optional wildcard may match nothing more, and a group before more path blocks from its place.
+patterns.get('/files{/*path}', handle)
+patterns.get('/users{/:id}/posts', handle)
 
 function routeFor(name: string): string {
   return `/${name}`

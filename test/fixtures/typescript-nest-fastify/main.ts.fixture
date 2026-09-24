@@ -1,6 +1,10 @@
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter } from '@nestjs/platform-fastify'
+// The application compiles a controller that a library's own config owns.
+import { SpeakersController } from './library/controller'
 
 export async function bootstrap(module: unknown): Promise<void> {
   await NestFactory.create(module, new FastifyAdapter())
 }
+
+export const controllers = [SpeakersController]

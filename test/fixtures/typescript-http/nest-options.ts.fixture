@@ -1,0 +1,21 @@
+import { Controller, Get } from '@nestjs/common'
+
+enum Route {
+  Votes = 'votes',
+}
+
+@Controller({ path: 'rooms' })
+export class RoomsController {
+  @Get(':id')
+  find(): string {
+    return 'room'
+  }
+}
+
+@Controller(Route.Votes)
+export class VotesController {
+  @Get()
+  list(): string {
+    return 'votes'
+  }
+}

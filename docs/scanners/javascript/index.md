@@ -81,7 +81,12 @@ identity and curation, and repeated scans preserve one physical owner and the
 authored architecture. JavaScript edits and new files refresh through the shared
 scanner watcher.
 Each literal local `node`, `bun`, `tsx` or `ts-node` command in an unquoted
-`&&`-chained package script can supply an execution entry.
+`&&`-chained package script can supply an execution entry. Environment
+assignments or `cross-env` may come before the runtime, and runtime options and
+a `run` or `watch` subcommand before the script; the first remaining word must
+name the script, so a preloaded module or `bun build` supplies none. An HTML
+page's script supplies one too, named after the page, or after its folder for
+an `index.html`.
 
 ## Source outline
 
@@ -131,7 +136,7 @@ that file states it and a value from another file is one the scanner cannot see.
 
 | Construct | Reported |
 | --- | --- |
-| `fetch(url, init)`, including a `node-fetch` default import or a named `undici` import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read, or an input that is not a URL, such as a `Request`, leave it out |
+| `fetch(url, init)`, including a `node-fetch` default import or a named `undici` import | Request; a literal `method` gives the method, no options means `GET`, and options the scanner cannot read, or an input that is neither URL text nor typed as a primitive such as a string, for example a `Request`, leave it out |
 | `axios.get`, `.post`, `.put`, `.patch`, `.delete`, `.head`, `.options`, `.postForm`, `.putForm`, `.patchForm` | Request with that method; form helpers use their matching HTTP method |
 | `axios(config)`, `axios.request(config)` | Request from the config's `url`; its `method`, else the client's, else `GET` |
 | `axios.create(config)` instances | Request whose path follows the config's `baseURL`, and whose method defaults to the config's |
@@ -215,13 +220,15 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 7. **Constrained segments.** Route patterns are literal text, `:name`, `:name?`,
    Express 5's trailing optional group `{/:name}`, and a trailing `*`, `*name`,
    `(.*)` or `:name(.*)` catch-all, which needs at least one segment because a
-   request path cannot tell `/files` from `/files/`; Hono's trailing `*` also
-   matches the path without it. A pattern parameter, such as `:id(\d+)`, and
+   request path cannot tell `/files` from `/files/`; Hono's trailing `*` and
+   Express 5's trailing `{/*name}` or `/{*name}` also match the path without it.
+   A pattern parameter, such as `:id(\d+)`, and
    text mixed with a placeholder, such as `talk-:id`, are constrained
    parameters. A pattern that may span segments or that the scanner cannot
    state, such as a regular expression, another optional group or a catch-all
    that is not last, becomes a constrained optional catch-all in place of itself
-   and the rest of the route, so no route is omitted.
+   and the rest of the route, so no route is omitted; the whole segments before
+   it stand.
 8. **Registration order.** Express, Hono and Koa routers take the first
    registered match, so their endpoints carry `order`: the application, named by
    the file that creates it and the variable that holds it, such as

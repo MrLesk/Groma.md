@@ -127,17 +127,20 @@ function withPrefix(placement: Placement, registrar: Registrar): Placement {
 /**
  * Whether a mounted entry is under the mount. Hono's `route` and a Koa router's `use` copy the routes
  * the child has when the call runs, so an entry is under it only when it comes first; the others serve
- * the child's routes as they change. The copy's order is known only between top-level statements of
- * one file.
+ * the child's routes as they change. The copy's order is known between top-level statements of one
+ * file, and for a mount in another file, which runs after the top-level statements of the file that
+ * creates the child: an import finishes its module first, a circular import being the accepted exception.
  */
-function underMount(routing: Routing, mount: Registration, entry: Node): 'yes' | 'no' | 'unknown' {
+function underMount(routing: Routing, mount: Registration, entry: Node, child: Node): 'yes' | 'no' | 'unknown' {
   const { ts } = routing.context
   const parent = routing.registrars.get(mount.declaration)!
   const copies = (parent.framework === 'hono' && mount.member === 'route')
     || (parent.framework === 'koa' && parent.kind === 'router' && mount.member === 'use')
   if (!copies) return 'yes'
-  const ordered = mount.call.getSourceFile() === entry.getSourceFile() && atTopLevel(ts, mount.call) && atTopLevel(ts, entry)
-  if (!ordered) return 'unknown'
+  if (mount.call.getSourceFile() !== entry.getSourceFile()) {
+    return entry.getSourceFile() === child.getSourceFile() && atTopLevel(ts, entry) ? 'yes' : 'unknown'
+  }
+  if (!atTopLevel(ts, mount.call) || !atTopLevel(ts, entry)) return 'unknown'
   return entryStart(ts, entry) < entryStart(ts, mount.call) ? 'yes' : 'no'
 }
 
@@ -162,7 +165,7 @@ function placements(routing: Routing, declaration: Node, entry: Node, seen: Read
   }
   // A mount whose prefix is unknown blocks its parent's paths instead of placing these routes.
   return entries.flatMap(({ registration, prefix, position }) => {
-    const under = prefix === undefined ? 'no' : underMount(routing, registration, entry)
+    const under = prefix === undefined ? 'no' : underMount(routing, registration, entry, declaration)
     if (under === 'no') return []
     return placements(routing, registration.declaration, registration.call, new Set([...seen, declaration])).map(parent => {
       const at = below(parent, prefix!, routing.indices.get(registration.call), position)

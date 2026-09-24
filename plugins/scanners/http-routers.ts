@@ -1,3 +1,4 @@
+import { inBatches } from './http-checker.ts'
 import type { Node, TextNode } from './http-syntax.ts'
 import { declarationOf, heldAt, importOrigin, literalText, unassigned, type UrlCompiler, type UrlContext } from './http-values.ts'
 
@@ -166,11 +167,12 @@ async function collectRegistrars(context: RouterContext, sources: readonly Node[
       }
     })
   }
-  const registrars = new Map<Node, Registrar>()
-  for (const declaration of declarations) {
+  const found = await inBatches(declarations, async declaration => {
     const registrar = await registrarOf(context, declaration.initializer, declaration.name.text)
-    if (registrar !== undefined && await unassigned(context, declaration)) registrars.set(declaration, registrar)
-  }
+    return registrar !== undefined && await unassigned(context, declaration) ? registrar : undefined
+  })
+  const registrars = new Map<Node, Registrar>()
+  for (const [index, registrar] of found.entries()) if (registrar !== undefined) registrars.set(declarations[index]!, registrar)
   return registrars
 }
 
@@ -223,16 +225,15 @@ async function receiverDeclaration(
 async function collectRegistrations(
   context: RouterContext, calls: readonly Call[], registrars: Map<Node, Registrar>,
 ): Promise<Registration[]> {
-  const registrations: Registration[] = []
-  for (const call of calls) {
+  const candidates = calls.flatMap(call => {
     const member = memberOf(context.ts, call)
-    if (member === undefined || !candidate(member)) continue
-    const declaration = await receiverDeclaration(context, call, registrars)
-    if (declaration !== undefined && registers(member, registrars.get(declaration)!.framework)) {
-      registrations.push({ call, declaration, member })
-    }
-  }
-  return registrations
+    return member !== undefined && candidate(member) ? [{ call, member }] : []
+  })
+  const declarations = await inBatches(candidates, ({ call }) => receiverDeclaration(context, call, registrars))
+  return candidates.flatMap(({ call, member }, index) => {
+    const declaration = declarations[index]
+    return declaration !== undefined && registers(member, registrars.get(declaration)!.framework) ? [{ call, declaration, member }] : []
+  })
 }
 
 /**

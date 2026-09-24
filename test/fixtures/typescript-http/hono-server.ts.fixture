@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { items } from './hono-routes'
 
 const rooms = new Hono()
 const site = new Hono()
@@ -17,6 +18,9 @@ site.use('*', forward)
 const late = new Hono()
 site.route('/late', late)
 late.get('/talks', forward)
+
+// A child from another module has its top-level routes before this file runs.
+site.route('/shop', items)
 
 function listRooms(): string {
   return 'rooms'

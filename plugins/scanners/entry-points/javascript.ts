@@ -19,14 +19,44 @@ function declaredBins(declaration: string, manifest: Record<string, unknown>): S
     ? [{ declaration, name, file: path.posix.join(path.posix.dirname(declaration), target) }] : [])
 }
 
+const RUNTIMES = new Set(['node', 'bun', 'tsx', 'ts-node'])
+/** Runtime options whose value is the next word, such as a preloaded module or a config file, never the script. */
+const VALUE_OPTIONS = new Set(['-r', '--require', '--import', '--tsconfig'])
+const SCRIPT = /^[\w./-]+\.[cm]?[jt]sx?$/
+
+/** The position of a command's program, after environment assignments such as `NODE_ENV=production` or `cross-env`. */
+function runtimeAt(words: readonly string[]): number {
+  let index = words[0] === 'cross-env' ? 1 : 0
+  while (/^[A-Za-z_]\w*=/.test(words[index] ?? '')) index += 1
+  return index
+}
+
+/**
+ * The script a literal runtime command runs: after environment assignments or `cross-env`, the runtime, its options
+ * and a `run` or `watch` subcommand, the first word must name a script, so `bun build src/app.ts` runs nothing.
+ */
+function commandScript(command: string): string | undefined {
+  const words = command.trim().split(/\s+/)
+  let index = runtimeAt(words)
+  if (!RUNTIMES.has(words[index] ?? '')) return undefined
+  let subcommand = true
+  for (index += 1; index < words.length; index += 1) {
+    const word = words[index]!
+    if (VALUE_OPTIONS.has(word)) index += 1
+    else if (subcommand && (word === 'run' || word === 'watch')) subcommand = false
+    else if (!word.startsWith('-')) return SCRIPT.test(word) ? word : undefined
+  }
+  return undefined
+}
+
 function declaredScripts(declaration: string, scripts: Record<string, unknown> | undefined): SourceEntry[] {
   return Object.entries(scripts ?? {}).flatMap(([name, script]) => {
     if (typeof script !== 'string') return []
     // Only split literal chains: a quoted shell fragment can contain && without running another command.
     const commands = /["'`]/.test(script) ? [script] : script.split(/\s+&&\s+/)
     return commands.flatMap(command => {
-      const match = /^(?:node|bun|tsx|ts-node)\s+(?:run\s+)?([\w./-]+\.(?:[cm]?[jt]sx?))(?:\s|$)/.exec(command)
-      return match ? [{ declaration, name, file: path.posix.join(path.posix.dirname(declaration), match[1]!) }] : []
+      const file = commandScript(command)
+      return file === undefined ? [] : [{ declaration, name, file: path.posix.join(path.posix.dirname(declaration), file) }]
     })
   })
 }
@@ -43,12 +73,15 @@ function angularEntries(declaration: string, source: string): SourceEntry[] {
 
 function browserEntries(declaration: string, source: string, packages: ReadonlySet<string>): SourceEntry[] {
   const scripts = [...source.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi)]
+  const folder = path.posix.dirname(declaration)
+  // A bundler's `index.html` names nothing, so its application takes its folder's name.
+  const page = path.posix.basename(declaration, '.html')
+  const name = page === 'index' && folder !== '.' ? path.posix.basename(folder) : page
   return scripts.flatMap(match => {
     const src = match[1]!
     if (/^(?:[a-z]+:|\/\/)/i.test(src)) return []
-    const base = src.startsWith('/') ? packageFor(declaration, packages) : path.posix.dirname(declaration)
-    return [{ file: path.posix.join(base, src.replace(/^\//, '')), declaration,
-      name: path.posix.basename(declaration, '.html') }]
+    const base = src.startsWith('/') ? packageFor(declaration, packages) : folder
+    return [{ file: path.posix.join(base, src.replace(/^\//, '')), declaration, name }]
   })
 }
 

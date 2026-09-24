@@ -62,16 +62,33 @@ for (const example of examples) test.concurrent(`${example.scanner.id} reports d
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
-test.concurrent('each literal command in a package script reports its own JavaScript entry', async () => {
+test.concurrent('each literal command in a package script, and each page script, reports its own JavaScript entry', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-js-chained-entries-'))
   try {
+    // Environment assignments, runtime options and a `run` or `watch` subcommand come before the script;
+    // a preloaded module is not the script, and a bundler command runs nothing.
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: {
       test: 'node ./index.js && node ./cjs.js && node ./formatting.js',
+      watch: 'tsx watch ./watched.js',
+      configured: 'tsx --tsconfig ./tsconfig.json ./configured.js',
+      flagged: 'ts-node --esm ./flagged.js',
+      preloaded: 'node --require ./preload.js ./preloaded.js',
+      env: 'NODE_ENV=production PORT=3000 node ./env.js',
+      cross: 'cross-env NODE_ENV=production node ./cross.js',
+      build: 'bun build ./bundle.js --outdir dist',
     } }))
-    for (const file of ['index.js', 'cjs.js', 'formatting.js']) await writeFile(path.join(root, file), 'console.log(1)\n')
+    const files = ['index.js', 'cjs.js', 'formatting.js', 'watched.js', 'configured.js', 'flagged.js', 'preload.js',
+      'preloaded.js', 'env.js', 'cross.js', 'bundle.js']
+    for (const file of files) await writeFile(path.join(root, file), 'console.log(1)\n')
+    // A bundler's index.html takes its folder's name.
+    await mkdir(path.join(root, 'web'))
+    await writeFile(path.join(root, 'web/index.html'), '<script type="module" src="./main.js"></script>')
+    await writeFile(path.join(root, 'web/main.js'), 'console.log(1)\n')
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
     const scan = (await javascript.scan(root))!
-    expect(scan.entryPoints?.map(entry => entry.file).sort()).toEqual(['cjs.js', 'formatting.js', 'index.js'])
+    expect(scan.entryPoints?.map(entry => entry.file).sort()).toEqual(['cjs.js', 'configured.js', 'cross.js', 'env.js',
+      'flagged.js', 'formatting.js', 'index.js', 'preloaded.js', 'watched.js', 'web/main.js'])
+    expect(scan.entryPoints?.find(entry => entry.file === 'web/main.js')?.name).toBe('web')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

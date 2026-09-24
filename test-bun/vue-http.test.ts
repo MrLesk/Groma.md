@@ -81,7 +81,7 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
       'web/client.ts#configured GET configured:/talks',
       'web/client.ts#configuredCall PUT /api/talks',
       'web/client.ts#fetchNamed GET /api/talks/named',
-      'web/client.ts#helper no-method /<unknown>',
+      'web/client.ts#helper GET /<unknown>',
       // Nuxt's baseURL option: a host is never path text, a URL that already starts with the base is
       // kept, and the base joins any other.
       'web/client.ts#hosted GET /<unknown>/talks',

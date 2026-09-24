@@ -7,7 +7,7 @@ import {
 import { below, type Placed, type Placement } from '../../http-order.ts'
 import { blockedPath, endpointPath, readablePrefix } from '../../http-paths.ts'
 import type { RouterContext } from '../../http-routers.ts'
-import { importOrigin, urlParts } from '../../http-values.ts'
+import { heldAt, heldParts, importOrigin } from '../../http-values.ts'
 
 /** NestJS method decorators from `@nestjs/common`. */
 const controllerMembers = new Map([
@@ -55,11 +55,17 @@ async function decoratorCall(context: RouterContext, node: Node, name: string): 
   return undefined
 }
 
-/** A decorator's path, or undefined with the literal text it starts with when the path is computed. */
+/**
+ * A decorator's path, or undefined with the literal text it starts with when the path is computed. A controller may
+ * state it as an option, `@Controller({ path: 'cats' })`, and one without the option serves from its root.
+ */
 async function decoratorPath(context: RouterContext, decorator: CallExpression): Promise<{ path?: string; prefix: string }> {
   const [argument] = decorator.arguments
   if (argument === undefined) return { path: '', prefix: '' }
-  const parts = await urlParts(context, argument)
+  const held = await heldAt(context, argument)
+  const stated = typeof held === 'object' && context.ts.isObjectLiteralExpression(held.node) ? await heldAt(context, argument, 'path') : held
+  if (stated === 'absent') return { path: '', prefix: '' }
+  const parts = await heldParts(context, stated)
   return parts.length === 1 && parts[0]!.kind === 'text' ? { path: parts[0]!.text, prefix: '' } : { prefix: readablePrefix(parts) }
 }
 

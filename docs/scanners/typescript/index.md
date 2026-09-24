@@ -4,7 +4,7 @@ The TypeScript scanner reports supported `.ts` and `.tsx` files without requirin
 
 It uses `git ls-files`, the configured globs, and `.gitignore` to select files. Declaration, test, and spec files are excluded by default. The compiler resolves used imports, including aliases and package exports, to selected repository source. External dependencies do not become source entries.
 
-Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file. Scanned package `bin` entries and files with no incoming source imports are candidate module roots below the package root. Imported helpers do not become additional roots because they have dependencies or multiple callers. A package can have several candidates, with or without `bin` metadata. If no candidate exists, the first scanned file supplies one root. Import distance assigns other files to the nearest root, with common directories as the deterministic fallback. The import graph remains internal analysis data.
+Each file remains one atomic evidence entry with every recognized exported function, class, interface, type, enum, or variable declared in that file, whether its own `export` keyword, the file's export lists, `export default name` or a destructured export publishes it. A file never imports itself: augmenting a module with `declare module` adds no edge. Scanned package `bin` entries and files with no incoming source imports are candidate module roots below the package root. Imported helpers do not become additional roots because they have dependencies or multiple callers. A package can have several candidates, with or without `bin` metadata. If no candidate exists, the first scanned file supplies one root. Import distance assigns other files to the nearest root, with common directories as the deterministic fallback. The import graph remains internal analysis data.
 
 These source roots and file memberships are evidence, not confirmed application boundaries: imports alone cannot identify separate processes, deployed applications, or shared-library ownership. Core preserves curated multi-file components and their C4 ownership, and creates a singleton only for a previously unknown file.
 
@@ -13,13 +13,16 @@ These source roots and file memberships are evidence, not confirmed application 
 
 Each nested `tsconfig.json` and its referenced configurations supplies compiler
 options for its included files. Configurations with no matching inputs contribute
-no files; other configuration errors still stop the scan. The nearest containing configuration owns a file;
-a referenced configuration wins a tie with its entry configuration. Source files
-outside configured sets still receive source analysis with the default compiler
+no files. A configuration that extends a config the checkout lacks, such as an
+uninstalled package base or a generated file, keeps its own settings and the scan
+reports a warning; other configuration errors still stop the scan. The nearest containing configuration owns a file,
+before a configuration elsewhere that also includes it; a referenced configuration wins a tie with its entry
+configuration. Source files outside configured sets still receive source analysis with the default compiler
 options. Physical source files and operations remain single entries. Compiler contexts
 contribute all invocation claims so core can detect conflicting resolutions. The compiler resolves operation
 aliases across re-exports before core applies file ownership, and it
-retains executable wrappers as separate operations. Supported concrete object
+retains executable wrappers as separate operations. A call to an overloaded function reaches its implementation.
+Supported concrete object
 arguments and parameter forwarding identify supplied named callbacks. Unknown
 values, unsupported member origins, and bounded paths remain unresolved.
 
@@ -92,7 +95,7 @@ program never assigns again holds it. The routers are read by the reader the
 | `express()` and `express.Router()` | Endpoint per `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `all` call with a handler |
 | `Fastify()` | The same calls, and `route({ method, url, handler })`, including a method array |
 | `new Hono()` | The same calls |
-| `@Controller` classes | Endpoint per `@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Head`, `@Options`, `@All` method from `@nestjs/common` |
+| `@Controller` classes, with the path as the argument or its `path` option | Endpoint per `@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Head`, `@Options`, `@All` method from `@nestjs/common` |
 | `Bun.serve({ routes })` | Endpoint per route: a function serves every method, an object one endpoint per known method key |
 
 Values and options follow the shared rules the framework scanners apply, as
@@ -100,7 +103,7 @@ the [React scanner](../react/index.md#http-endpoints-and-requests) states them:
 a changed, duplicated or computed option is never taken for the literal it once
 held, options the scanner cannot read leave the method out and, for axios, the
 base unknown, and a `fetch` input that is not a URL, such as a `Request`, states
-no method. A request's own `baseURL` replaces the client's; a base joins a
+no method, while one the checker types as a primitive, such as a string, is a URL. A request's own `baseURL` replaces the client's; a base joins a
 relative path with one slash, and an absolute URL replaces it. Exactly one
 assignment to `defaults.baseURL` or `defaults.method` on `axios` or on an
 instance sets it, and any other change to `defaults` hides both; interceptors
@@ -131,7 +134,8 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    a helper that forwards a parameter reports unknown text. Author those rows.
 5. **Bases.** A variable with a literal initializer that the program never
    assigns again, a property of an object literal it holds while nothing in the
-   program can change that property, and a template of those are literal text. A
+   program can change that property, a string enum member such as
+   `@Controller(RouteKey.Assets)`, and a template of those are literal text. A
    value the scanner cannot see is configuration and sets `configured`:
    `process.env.X`, `import.meta.env.X`, a name only a declaration file or a
    `declare` statement states, and an imported package constant. A field read
@@ -147,13 +151,15 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
 7. **Constrained segments.** Route patterns are literal text, `:name`, `:name?`,
    Express 5's trailing optional group `{/:name}`, and a trailing `*`, `*name`,
    `(.*)` or `:name(.*)` catch-all, which needs at least one segment because a
-   request path cannot tell `/files` from `/files/`; Hono's trailing `*` also
-   matches the path without it, so it is an optional catch-all. A pattern
+   request path cannot tell `/files` from `/files/`; Hono's trailing `*` and
+   Express 5's trailing `{/*name}` or `/{*name}` also match the path without it,
+   so they are optional catch-alls. A pattern
    parameter, such as `:id(\d+)` or Hono's `:id{[0-9]+}`, and text mixed with a
    placeholder, such as `talk-:id`, are constrained parameters. A pattern that
    may span segments or that the scanner cannot state, such as another optional
    group or a mid-path wildcard, becomes a constrained optional catch-all in
-   place of itself and the rest of the route, so no route is omitted.
+   place of itself and the rest of the route, so no route is omitted; the whole
+   segments before it stand, so `/users{/:id}/posts` blocks below `/users`.
 8. **Registration order.** Express, Hono and NestJS behind Express take the
    first registered match, so their endpoints carry `order`, ranked by the
    [JavaScript scanner's routing model](../javascript/index.md#http-facts) with
@@ -161,7 +167,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    an export registers nothing, and a hand-off counts in the file that creates
    the registrar and in every file that registers on it; a file that only
    imports it and hands it on runs after that file's top-level registrations, a
-   circular import being the accepted exception. A function from the
+   circular import being the accepted exception. For the same reason, a Hono
+   `route` in another file copies every top-level route of the file that creates
+   the child. A function from the
    application's own module is middleware, because the checker sees it, and a
    value loaded from one that is neither a router nor a function blocks as a
    router the scan cannot follow. Koa is not read. NestJS behind Express
@@ -169,4 +177,7 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    its application, named by the file that calls `NestFactory.create`, shares
    one position; a computed `@Controller` path blocks every route below it, and
    a computed route its own. NestJS behind a `FastifyAdapter` prefers the most
-   specific route and carries no order.
+   specific route and carries no order. A compiler program that sees no
+   `NestFactory.create`, such as a controller library's own configuration or a
+   test outside every configuration, names the controller's own file as the
+   application; a program that places the same route in an application wins.

@@ -1,0 +1,6 @@
+import { SpeakersController } from '../library/controller'
+
+// A check outside the application's config compiles the controller in a program of its own.
+export function check(): string {
+  return new SpeakersController().find()
+}

@@ -210,14 +210,10 @@ test.concurrent('JavaScript client calls report the method and the path parts th
     // method are reported as the source states them. A variable this file never assigns again and a
     // property of an object only this file holds are literal; an exported object, which another file
     // can change, a script's top-level names, which are globals, a reassigned variable or property, and
-    // a request's own host are not. A `fetch` input that is not URL text may be a Request with its own
-    // method, and settings the scan cannot read state no method.
+    // a request's own host are not. A `fetch` input the checker does not type as a primitive may be a
+    // Request with its own method, and settings the scan cannot read state no method.
     expect(requests).toEqual([
-      ['-', '/?', 'client/fetch.mjs'],
-      ['-', '/?', 'client/globals.js'],
       ['-', '/?', 'client/jquery.js'],
-      ['-', '/?', 'client/options.mjs'],
-      ['-', '/?', 'client/values.mjs'],
       // An option name the scan cannot read could be the method.
       ['-', '/api/computed', 'client/options.mjs'],
       ['-', '/api/rooms', 'client/jquery.js'],
@@ -226,7 +222,12 @@ test.concurrent('JavaScript client calls report the method and the path parts th
       ['DELETE', '/api/twice', 'client/options.mjs'],
       ['DELETE', '/status', 'client/axios.mjs'],
       ['DELETE', '/status', 'client/jquery.js'],
+      // A string the scan cannot read is still a URL, which carries no method.
+      ['GET', '/?', 'client/fetch.mjs'],
+      ['GET', '/?', 'client/globals.js'],
       ['GET', '/?', 'client/jquery.js'],
+      ['GET', '/?', 'client/options.mjs'],
+      ['GET', '/?', 'client/values.mjs'],
       ['GET', '/?/api/talks', 'client/options.mjs'],
       ['GET', '/?/rooms', 'client/fetch.mjs'],
       ['GET', '/?/talks', 'client/fetch.mjs'],

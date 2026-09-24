@@ -1,0 +1,9 @@
+import { Hono } from 'hono'
+
+export const items = new Hono()
+
+items.get('/items', listItems)
+
+function listItems(): string {
+  return 'items'
+}

@@ -8,6 +8,7 @@ groma:
   code:
     - scanner: typescript
       file: plugins/scanners/csharp/src/index.ts
+      symbol: scanner
     - scanner: typescript
       file: plugins/scanners/csharp/src/config.ts
     - scanner: typescript

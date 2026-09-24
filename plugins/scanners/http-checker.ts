@@ -18,13 +18,26 @@ export interface Checker {
   aliased(symbol: CheckerSymbol): Promise<CheckerSymbol>
   /** Whether the symbol is a module, as a namespace import or a dynamic import holds one. */
   module(symbol: CheckerSymbol): boolean
-  /** The symbol's value declaration, else its first declaration. */
+  /**
+   * The symbol's value declaration, else its first declaration. A declaration file states no value, so an adapter
+   * may answer nothing for one; readers treat both answers as a value they cannot see.
+   */
   declaration(symbol: CheckerSymbol): Promise<Node | undefined>
   declarationCount(symbol: CheckerSymbol): number
   exportsOf(module: CheckerSymbol): Promise<CheckerSymbol[]>
   /** Whether an expression's value is primitive, so nothing can change what it holds through it. */
   primitiveAt(node: Node): Promise<boolean>
   same(left: CheckerSymbol, right: CheckerSymbol): boolean
+}
+
+/**
+ * Ask about each item concurrently, in bounded batches, with the answers in the items' order. A compiler behind a
+ * process boundary answers many questions at once far faster than one at a time.
+ */
+export async function inBatches<Item, Answer>(items: readonly Item[], ask: (item: Item) => Promise<Answer>): Promise<Answer[]> {
+  const answers: Answer[] = []
+  for (let offset = 0; offset < items.length; offset += 256) answers.push(...await Promise.all(items.slice(offset, offset + 256).map(ask)))
+  return answers
 }
 
 interface ClassicSymbol { flags: number; valueDeclaration?: Node; declarations?: readonly Node[] }

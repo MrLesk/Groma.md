@@ -177,10 +177,15 @@ function declarationsIn(scope: OutlineScope, statements: readonly Node[]): CodeD
   })
 }
 
+/** The local names a source publishes through its own export lists, `export default name` or `export = name`. */
+export function listedExportNames(ts: OutlineSyntax, source: Statements): Set<string> {
+  return new Set(source.statements.flatMap(statement => listedExports(ts.SyntaxKind, statement)))
+}
+
 /** Outline one parsed source in source order. */
 export function outlineSource(ts: OutlineSyntax, source: SourceFile, context: OutlineContext): CodeDeclaration[] {
   const k = ts.SyntaxKind
-  const exported = new Set([...source.statements.flatMap(statement => listedExports(k, statement)), ...context.exported ?? []])
+  const exported = new Set([...listedExportNames(ts, source), ...context.exported ?? []])
   const scope = { k, source, symbols: context.symbols, exported, topLevelPrivate: context.topLevelPrivate ?? false }
   return declarationsIn(scope, source.statements)
 }

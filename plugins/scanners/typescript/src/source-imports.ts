@@ -12,6 +12,9 @@ export async function resolvedImports(root: string, source: SourceFile, specifie
   visit(source)
   const symbols = await checker.getSymbolAtLocation(nodes)
   const declarations = await Promise.all(symbols.flatMap(symbol => symbol?.declarations ?? []).map(handle => handle.resolve()))
+  const own = path.relative(root, source.fileName).split(path.sep).join('/')
+  // `declare module 'x'` beside an import of 'x' augments that module here; a file never imports itself.
   return [...new Set(declarations.flatMap(declaration => declaration
-    ? [path.relative(root, declaration.getSourceFile().fileName).split(path.sep).join('/')] : []))].sort()
+    ? [path.relative(root, declaration.getSourceFile().fileName).split(path.sep).join('/')] : []))]
+    .filter(file => file !== own).sort()
 }

@@ -1,20 +1,21 @@
 import path from 'node:path'
 import {
-  isAsExpression, isBinaryExpression, isCallExpression, isConditionalExpression, isIdentifier,
+  isAsExpression, isBinaryExpression, isCallExpression, isConditionalExpression, isFunctionDeclaration, isIdentifier,
   isMethodDeclaration, isNonNullExpression, isObjectLiteralExpression, isParameterDeclaration,
   isParenthesizedExpression, isPropertyAccessExpression, isPropertyAssignment, isShorthandPropertyAssignment,
   isVariableDeclaration, isSpreadAssignment, NodeFlags, SyntaxKind,
   type CallExpression, type Node, type SourceFile,
 } from 'typescript/unstable/ast'
-import { SymbolFlags, type Checker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
+import { SymbolFlags, type Checker as NativeChecker, type Symbol as CompilerSymbol } from 'typescript/unstable/async'
 import type { ScanHttpEndpoint, ScanHttpRequest, ScanInvocation, ScanOperation } from '@groma/scanner'
 
+import { inBatches, type Checker } from '../../http-checker.ts'
 import { axiosRequest, fetchRequest, runtimeFetch } from '../../http-clients.ts'
 import type { RouterContext } from '../../http-routers.ts'
 import type { Node as SharedNode } from '../../http-syntax.ts'
 import { urlContext } from '../../http-values.ts'
 import { typeScriptOperations } from '../../typescript-operations.ts'
-import { nativeChecker, syntax } from './http-checker.ts'
+import { sourceDeclaration, syntax } from './native-checker.ts'
 import { httpEndpoints } from './http-endpoints.ts'
 
 interface Values {
@@ -65,9 +66,9 @@ class OperationResolver {
   private readonly declarations = new Map<number, Promise<Node | undefined>>()
 
   private readonly root: string
-  private readonly checker: Checker
+  private readonly checker: NativeChecker
 
-  constructor(root: string, checker: Checker) { this.root = root; this.checker = checker }
+  constructor(root: string, checker: NativeChecker) { this.root = root; this.checker = checker }
 
   async prepare(sources: SourceFile[]): Promise<void> {
     const names: Node[] = []
@@ -109,7 +110,11 @@ class OperationResolver {
     if (!result) {
       result = (async () => {
         const canonical = symbol.flags & SymbolFlags.Alias ? await this.checker.getAliasedSymbol(symbol) : symbol
-        return canonical.valueDeclaration?.resolve()
+        const value = await sourceDeclaration(canonical.valueDeclaration)
+        // An overloaded function's first signature has no body; its implementation is the declaration with one.
+        if (value === undefined || executable(value) || !isFunctionDeclaration(value) || canonical.declarations.length < 2) return value
+        const declarations = await Promise.all(canonical.declarations.map(sourceDeclaration))
+        return declarations.find(declaration => declaration !== undefined && executable(declaration)) ?? value
       })()
       this.declarations.set(symbol.id, result)
     }
@@ -211,7 +216,7 @@ function propertyValue(node: Node): Node | undefined {
 }
 
 /** A supplied callback is tied to a concrete argument path, not a merged global target set. */
-export async function sourceOperations(root: string, sources: SourceFile[], checker: Checker): Promise<{
+export async function sourceOperations(root: string, sources: SourceFile[], checker: NativeChecker, sharedChecker: Checker): Promise<{
   operations: ScanOperation[]
   invocations: ScanInvocation[]
   httpEndpoints: ScanHttpEndpoint[]
@@ -235,25 +240,22 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
     node.forEachChild(child => visit(child))
   }
   for (const source of sources) visit(source)
-  const invocations: ScanInvocation[] = []
-  for (let offset = 0; offset < resolver.calls.length; offset += 256) {
-    invocations.push(...(await Promise.all(resolver.calls.slice(offset, offset + 256).map(async call => {
-      const values = await resolver.resolve(call.expression, 0, true)
-      return values.map(value => {
-        const targets = value.nodes.filter(node => executable(node) && owned.has(location(root, node).file))
-        return {
-          source: operation(caller(call)),
-          targets: [...new Set(targets.map(operation))],
-          unresolved: value.unresolved || targets.length !== value.nodes.length,
-          line: location(root, call).line,
-          position: call.getStart(),
-          ...(isPropertyAccessExpression(call.expression) ? { member: call.expression.name.text } : {}),
-          ...(value.binding ? { binding: value.binding } : {}),
-        }
-      })
-    }))).flat())
-  }
-  const facts = await sourceHttpFacts(root, sources, checker, resolver, owned, operation)
+  const invocations: ScanInvocation[] = (await inBatches(resolver.calls, async call => {
+    const values = await resolver.resolve(call.expression, 0, true)
+    return values.map(value => {
+      const targets = value.nodes.filter(node => executable(node) && owned.has(location(root, node).file))
+      return {
+        source: operation(caller(call)),
+        targets: [...new Set(targets.map(operation))],
+        unresolved: value.unresolved || targets.length !== value.nodes.length,
+        line: location(root, call).line,
+        position: call.getStart(),
+        ...(isPropertyAccessExpression(call.expression) ? { member: call.expression.name.text } : {}),
+        ...(value.binding ? { binding: value.binding } : {}),
+      }
+    })
+  })).flat()
+  const facts = await sourceHttpFacts(root, sources, sharedChecker, resolver, owned, operation)
   return { operations: [...operations.values()], invocations, ...facts }
 }
 
@@ -261,7 +263,7 @@ export async function sourceOperations(root: string, sources: SourceFile[], chec
 async function sourceHttpFacts(
   root: string,
   sources: SourceFile[],
-  checker: Checker,
+  sharedChecker: Checker,
   resolver: OperationResolver,
   owned: Set<string>,
   operation: (node: Node) => string,
@@ -272,7 +274,7 @@ async function sourceHttpFacts(
     return values.some(value => value.unresolved) ? undefined : values.flatMap(value => value.nodes)
   }
   const context: RouterContext = {
-    ...urlContext(syntax, nativeChecker(checker), sources),
+    ...urlContext(syntax, sharedChecker, sources),
     frameworks: new Set(['express', 'fastify', 'hono']),
     // The program holds every file that imports a registrar.
     exportsHandOff: false,
@@ -284,10 +286,9 @@ async function sourceHttpFacts(
       return handlers.length === 1 ? operation(handlers[0]!) : operation(caller(native(registration)))
     },
   }
-  const httpRequests: ScanHttpRequest[] = []
-  for (const call of resolver.calls) {
+  const httpRequests: ScanHttpRequest[] = (await inBatches(resolver.calls, async call => {
     const request = await fetchRequest(context, call, callee => runtimeFetch(context, callee)) ?? await axiosRequest(context, call)
-    if (request !== undefined) httpRequests.push({ operation: context.callerOperation(call), ...request })
-  }
+    return request === undefined ? [] : [{ operation: context.callerOperation(call), ...request }]
+  })).flat()
   return { httpEndpoints: await httpEndpoints(context, sources, resolver.calls), httpRequests }
 }

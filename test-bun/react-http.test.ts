@@ -88,7 +88,7 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       'fromBase GET /<unknown>/talks',
       // A helper reads its path from a string parameter, which is a URL rather than a Request, and its
       // caller reports nothing.
-      'helper no-method /<unknown>',
+      'helper GET /<unknown>',
       // An instance joins its base and a path with one slash, and uses the method its configuration states.
       'joined POST /api/talks',
       // Literal fragments that together state a host are not a path.
@@ -104,7 +104,7 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       // An instance whose configuration comes from a call has an unknown base.
       'readBase GET /<unknown>/talks',
       // A property the sources assign again no longer holds its literal.
-      'reassignedProperty no-method /<unknown>',
+      'reassignedProperty GET /<unknown>',
       // A request's own baseURL replaces the client's, and a host is never path text.
       'requestBase GET /<unknown>/api/talks',
       // A Request carries a method of its own, so the call states none.
@@ -117,22 +117,22 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
       // The query is dropped, computed or not.
       'search GET /api/talks',
       // A parameter typed like an object literal can hold any such object.
-      'typedParameter no-method /<unknown>',
+      'typedParameter GET /<unknown>',
       // An axios config the scanner cannot read may hold a method and a base, so it leaves both unknown.
       'unresolved no-method /<unknown>/api/talks',
       'upload POST /api/talks',
       // An object is not the literal it was written as once an alias, a function it is handed to, one of
       // its methods or accessors, another file, or a module object holding it can change it: a namespace
       // import, a re-exported namespace, or a dynamic import's result.
-      'viaAccessor no-method /<unknown>',
-      'viaAlias no-method /<unknown>',
-      'viaArgument no-method /<unknown>',
-      'viaDynamicImport no-method /<unknown>',
-      'viaHandedImport no-method /<unknown>',
-      'viaMethod no-method /<unknown>',
-      'viaNamespace no-method /<unknown>',
-      'viaOtherFile no-method /<unknown>',
-      'viaReexport no-method /<unknown>',
+      'viaAccessor GET /<unknown>',
+      'viaAlias GET /<unknown>',
+      'viaArgument GET /<unknown>',
+      'viaDynamicImport GET /<unknown>',
+      'viaHandedImport GET /<unknown>',
+      'viaMethod GET /<unknown>',
+      'viaNamespace GET /<unknown>',
+      'viaOtherFile GET /<unknown>',
+      'viaReexport GET /<unknown>',
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)

@@ -145,6 +145,6 @@ export async function scanTypeScriptSource(
     invocations: graph.invocations,
     httpEndpoints: graph.httpEndpoints,
     httpRequests: graph.httpRequests,
-    diagnostics: [],
+    diagnostics: graph.diagnostics,
   }), { imports: new Map(graph.files.map(node => [node.file, node.imports])), entries: graph.entries })
 }

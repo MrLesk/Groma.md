@@ -95,6 +95,8 @@ test.concurrent('every supported framework reports its served endpoints in the o
       'hono-server.ts#site@3 PURGE /cache/:**! hono-server.ts#(anonymous)',
       'hono-server.ts#site@4 * /api/:**! hono-server.ts#(anonymous)',
       'hono-server.ts#site@5 * /:**! hono-server.ts#(anonymous)',
+      // A child from another module has its top-level routes before the file that imports it runs.
+      'hono-server.ts#site@6 GET /shop/items hono-routes.ts#listItems',
       // A hand-off in the file that creates the application, before routes another file registers, or
       // inside any statement but a top-level one, runs at a place the scan cannot order.
       'hosted-app.ts#hosted@0 * /:**! hosted-app.ts#(anonymous)',
@@ -105,9 +107,12 @@ test.concurrent('every supported framework reports its served endpoints in the o
       'legacy-server.ts#app@0 GET /talks legacy-server.ts#listTalks',
       // NestJS behind Express registers its routes in an order the scan does not follow, so they share
       // one; a computed controller path blocks every route below it, and a computed route its own.
+      // A controller path may be an option or a string enum member.
       'nest-main.ts@0 GET /:**! nest-controller.ts#list',
+      'nest-main.ts@0 GET /rooms/:id nest-options.ts#find',
       'nest-main.ts@0 GET /speakers/:id nest-controller.ts#find',
       'nest-main.ts@0 GET /talks/:**! nest-controller.ts#find',
+      'nest-main.ts@0 GET /votes nest-options.ts#list',
       'nest-main.ts@0 POST /speakers nest-controller.ts#create',
       // Routers one call mounts are tried in the order it lists them, chained registrations in the order
       // they are written, and an application handed to other code may gain any route there.
@@ -137,6 +142,9 @@ test.concurrent('every supported framework reports its served endpoints in the o
       'unsupported.ts#patterns@3 GET /versions/:**! unsupported.ts#(anonymous)',
       'unsupported.ts#patterns@4 GET /assets/:rest+ unsupported.ts#handle',
       'unsupported.ts#patterns@5 GET /archives/:name*! unsupported.ts#handle',
+      // Express 5's optional wildcard may match nothing more; a group before more path blocks from its place.
+      'unsupported.ts#patterns@6 GET /files/:path* unsupported.ts#handle',
+      'unsupported.ts#patterns@7 GET /users/:**! unsupported.ts#handle',
     ])
   } finally { await clean() }
 })
@@ -144,7 +152,9 @@ test.concurrent('every supported framework reports its served endpoints in the o
 test.concurrent('NestJS behind a FastifyAdapter prefers the most specific route and states no order', async () => {
   const { scan, clean } = await scanFixture('typescript-nest-fastify')
   try {
-    expect(endpointTable(scan)).toEqual(['GET /speakers/:id controller.ts#find'])
+    // A program that compiles the controller without the file creating the application states nothing else,
+    // whether the controller's own library config or a check outside every config.
+    expect(endpointTable(scan)).toEqual(['GET /speakers/:id library/controller.ts#find'])
   } finally { await clean() }
 })
 
@@ -158,15 +168,17 @@ test.concurrent('fetch and axios requests keep every proven part and mark the re
     // Nothing from a reassignable axios instance, a named axios import such as isAxiosError, or a name
     // that shadows the axios import.
     expect(requests.sort()).toEqual([
-      '(unknown) /? client.ts#loadComputed',
-      // A changed property is no longer its literal, and an input that is not a URL may carry a method.
-      '(unknown) /? values.ts#changed',
+      // An input that is not a URL may carry a method.
       '(unknown) /? values.ts#requested',
       '(unknown) /api/speakers axios-client.ts#sendSpeaker',
       '(unknown) /api/talks client.ts#sendChosen',
       // An option name the scanner cannot read could be the method.
       '(unknown) /api/talks values.ts#computedKey',
       'DELETE <base>/speakers/{} axios-client.ts#removeSpeaker',
+      // A string the scan cannot read is still a URL, which carries no method; a changed property is no
+      // longer its literal.
+      'GET /? client.ts#loadComputed',
+      'GET /? values.ts#changed',
       // A request's own baseURL replaces the client's, and a host is never path text.
       'GET /?/api/talks values.ts#requestBase',
       // A field a subclass declares again, or a write through any object assigns again, is unknown.
@@ -236,20 +248,20 @@ test.concurrent('values fold as the framework scanners fold them, whatever chang
     expect(requestsIn(scan, 'uncertain.tsx')).toEqual([
       'continued GET /<unknown>/talks',
       'joinedHost GET /<unknown>/talks',
-      'reassignedProperty no-method /<unknown>',
+      'reassignedProperty GET /<unknown>',
       'requested no-method /<unknown>',
       'returned GET /<unknown>/talks',
       'routed GET /api/talks',
-      'typedParameter no-method /<unknown>',
-      'viaAccessor no-method /<unknown>',
-      'viaAlias no-method /<unknown>',
-      'viaArgument no-method /<unknown>',
-      'viaDynamicImport no-method /<unknown>',
-      'viaHandedImport no-method /<unknown>',
-      'viaMethod no-method /<unknown>',
-      'viaNamespace no-method /<unknown>',
-      'viaOtherFile no-method /<unknown>',
-      'viaReexport no-method /<unknown>',
+      'typedParameter GET /<unknown>',
+      'viaAccessor GET /<unknown>',
+      'viaAlias GET /<unknown>',
+      'viaArgument GET /<unknown>',
+      'viaDynamicImport GET /<unknown>',
+      'viaHandedImport GET /<unknown>',
+      'viaMethod GET /<unknown>',
+      'viaNamespace GET /<unknown>',
+      'viaOtherFile GET /<unknown>',
+      'viaReexport GET /<unknown>',
     ])
     // A `fetch` the program declares, or imports from its own module or a package other than
     // `node-fetch`, is that function.

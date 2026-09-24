@@ -23,6 +23,8 @@ const cases = [
   ['empty-type', "import type {} from './target.ts'", false],
   ['dynamic', "export const load = () => import('./target.ts')", true],
   ['comment', "// import { Value } from './target.ts'\nexport const answer = 1", false],
+  // Augmenting a package the checkout lacks declares that module here; the file does not import itself.
+  ['augmented', "import { Value } from 'absent'; declare module 'absent' { interface Extra {} }\nexport const answer = Value", false],
 ] as const
 
 test.concurrent('exported abstract classes retain class symbol identity', async () => {
@@ -60,6 +62,13 @@ test.concurrent('export symbols come from declarations rather than generated sou
       'export let mutable = 2',
       'export var older = 3',
       'export declare class Declared {}',
+      // An export list names a declaration of the file, and a destructured export declares each name.
+      'const listed = 1',
+      'function named() {}',
+      'type Listed = string',
+      'export { listed as renamed, named }',
+      'export type { Listed }',
+      'export const { left, right: [inner] } = { left: 1, right: [2] }',
     ].join('\n'))
     const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stderr: 'pipe' })
     expect(await git.exited).toBe(0)
@@ -68,6 +77,7 @@ test.concurrent('export symbols come from declarations rather than generated sou
       ['run', 'function'], ['Service', 'class'], ['Input', 'interface'],
       ['Output', 'type'], ['Mode', 'enum'], ['fixed', 'const'],
       ['mutable', 'let'], ['older', 'var'], ['Declared', 'class'],
+      ['listed', 'const'], ['named', 'function'], ['Listed', 'type'], ['left', 'const'], ['inner', 'const'],
     ].map(([name, kind]) => ({ id: `source.ts#${name}`, name, kind })))
   } finally {
     await rm(root, { recursive: true, force: true })

@@ -175,20 +175,45 @@ test.concurrent('TypeScript uses nested config aliases and refreshes resolution 
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('empty TypeScript fixture configurations do not block valid source, but invalid options do', async () => {
+test.concurrent('the config whose directory contains a file owns it, not a deeper config that includes it from elsewhere', async () => {
+  const root = await repository()
+  try {
+    await mkdir(path.join(root, 'app'), { recursive: true })
+    await mkdir(path.join(root, 'spec/deep'), { recursive: true })
+    await writeFile(path.join(root, 'app/tsconfig.json'), JSON.stringify({ compilerOptions: {
+      module: 'preserve', moduleResolution: 'bundler', paths: { '@local': ['./target.ts'] },
+    } }))
+    await writeFile(path.join(root, 'spec/deep/tsconfig.json'), JSON.stringify({
+      include: ['../../app/**/*'], compilerOptions: { module: 'preserve', moduleResolution: 'bundler' },
+    }))
+    await writeFile(path.join(root, 'app/entry.ts'), "import { work } from '@local'; export function run() { return work() }")
+    await writeFile(path.join(root, 'app/target.ts'), 'export function work() { return 1 }')
+    const graph = await buildImportGraph(root)
+    expect(graph.files.find(file => file.file === 'app/entry.ts')!.imports).toEqual(['app/target.ts'])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('TypeScript configs with no inputs or an absent base keep valid source, but invalid options block it', async () => {
   const root = await repository()
   try {
     await writeFile(path.join(root, 'tsconfig.json'), JSON.stringify({ files: [], references: [{ path: './app' }] }))
     await mkdir(path.join(root, 'app'))
-    await writeFile(path.join(root, 'app/tsconfig.json'), JSON.stringify({ compilerOptions: { noLib: true, types: [] } }))
-    await writeFile(path.join(root, 'app/entry.ts'), 'export function run() { return 1 }')
+    // A fresh checkout has neither installed package bases nor generated configs; the config's own settings remain.
+    await writeFile(path.join(root, 'app/tsconfig.json'), JSON.stringify({
+      extends: ['@tsconfig/node20/tsconfig.json', './.generated/tsconfig.json'],
+      compilerOptions: { noLib: true, types: [], module: 'preserve', moduleResolution: 'bundler', paths: { '@local': ['./target.ts'] } },
+    }))
+    await writeFile(path.join(root, 'app/entry.ts'), "import { work } from '@local'; export function run() { return work() }")
+    await writeFile(path.join(root, 'app/target.ts'), 'export function work() { return 1 }')
     await mkdir(path.join(root, 'test/fixture'), { recursive: true })
     const emptyConfig = path.join(root, 'test/fixture/tsconfig.json')
     await writeFile(emptyConfig, JSON.stringify({ include: ['*.tsx'] }))
     await writeFile(path.join(root, 'test/fixture/view.tsx.fixture'), 'export const view = <div />')
     const graph = await buildImportGraph(root)
-    expect(graph.files.map(file => file.file)).toEqual(['app/entry.ts'])
+    expect(graph.files.map(file => file.file).sort()).toEqual(['app/entry.ts', 'app/target.ts'])
+    expect(graph.files.find(file => file.file === 'app/entry.ts')!.imports).toEqual(['app/target.ts'])
     expect(graph.operations.some(operation => operation.file === 'app/entry.ts' && operation.name === 'run')).toBe(true)
+    expect(graph.diagnostics.map(item => [item.severity, item.file])).toEqual([['warning', 'app/tsconfig.json'], ['warning', 'app/tsconfig.json']])
     await writeFile(emptyConfig, JSON.stringify({ compilerOptions: { target: 'invalid' }, include: ['*.tsx'] }))
     await expect(buildImportGraph(root)).rejects.toThrow('target')
   } finally { await rm(root, { recursive: true, force: true }) }

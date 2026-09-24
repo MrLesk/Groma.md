@@ -53,14 +53,20 @@ export async function runtimeFetch(context: UrlContext, callee: Node): Promise<F
   return fetch ? 'fetch' : undefined
 }
 
-/** String syntax and a runtime URL object carry no request method; a Request object may carry one. */
-async function urlWithoutMethod(context: UrlContext, input: Held): Promise<boolean> {
+/**
+ * String syntax, a value the checker types as a primitive, such as a string, and a runtime URL object carry no
+ * request method; a Request object may carry one.
+ */
+async function urlWithoutMethod(context: UrlContext, url: Node, input: Held): Promise<boolean> {
   if (input === 'unseen') return true
-  if (typeof input !== 'object') return false
-  const value = unwrapped(context.ts, input.node)
-  if (urlText(context.ts, value)) return true
-  return context.ts.isNewExpression(value) && context.ts.isIdentifier(value.expression)
-    && value.expression.text === 'URL' && await runtimeGlobal(context, value.expression)
+  if (typeof input === 'object') {
+    const value = unwrapped(context.ts, input.node)
+    if (urlText(context.ts, value)) return true
+    const urlObject = context.ts.isNewExpression(value) && context.ts.isIdentifier(value.expression)
+      && value.expression.text === 'URL' && await runtimeGlobal(context, value.expression)
+    if (urlObject) return true
+  }
+  return context.checker.primitiveAt(url)
 }
 
 /**
@@ -75,7 +81,7 @@ export async function fetchRequest(
   const kind = url === undefined ? undefined : await client(call.expression)
   if (url === undefined || kind === undefined) return undefined
   const input = await heldAt(context, url)
-  const method = await urlWithoutMethod(context, input) ? await declaredMethod(context, options, 'GET') : undefined
+  const method = await urlWithoutMethod(context, url, input) ? await declaredMethod(context, options, 'GET') : undefined
   const parts = await urlParts(context, url)
   const target = kind === 'ofetch' ? withBase(await optionsBase(context, options, []), parts) : parts
   return { ...(method === undefined ? {} : { method }), ...requestUrl(target) }
@@ -167,20 +173,26 @@ async function axiosClient(context: UrlContext, node: Node): Promise<Client | un
   return await isAxios(context, node) ? defaultClient(context) : createdClient(context, node)
 }
 
+/** A member call such as `api.get(url)`; only an axios member sends, so other calls never reach the client lookup. */
+async function memberRequest(context: UrlContext, receiver: Node, member: string, call: Call): Promise<RequestFact | undefined> {
+  const method = SHORTHAND.get(member)
+  if (method === undefined && member !== 'request') return undefined
+  const client = await axiosClient(context, receiver)
+  if (client === undefined) return undefined
+  const [first, second, third] = call.arguments
+  if (method !== undefined && first !== undefined) {
+    return sent(context, client, await urlParts(context, first), method, WITH_BODY.has(member) ? third : second)
+  }
+  return member === 'request' ? configRequest(context, client, first) : undefined
+}
+
 /** The request an axios call sends, through `axios` itself or an instance of it. */
 export async function axiosRequest(context: UrlContext, call: Call): Promise<RequestFact | undefined> {
   const { ts } = context
   const callee = call.expression
-  const [first, second, third] = call.arguments
+  const [first, second] = call.arguments
   if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.name)) {
-    const client = await axiosClient(context, callee.expression)
-    if (client === undefined) return undefined
-    const member = callee.name.text
-    const method = SHORTHAND.get(member)
-    if (method !== undefined && first !== undefined) {
-      return sent(context, client, await urlParts(context, first), method, WITH_BODY.has(member) ? third : second)
-    }
-    return member === 'request' ? configRequest(context, client, first) : undefined
+    return memberRequest(context, callee.expression, callee.name.text, call)
   }
   const client = await axiosClient(context, callee)
   if (client === undefined || first === undefined) return undefined
