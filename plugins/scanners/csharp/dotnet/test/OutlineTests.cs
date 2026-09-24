@@ -36,4 +36,15 @@ public sealed class OutlineTests
             "Archive:12 internal [Store:14 public]",
         }, files[1].Declarations.Select(Summary));
     }
+
+    [Fact]
+    public async Task ExtensionBlocksScanAndListTheirMethodsUnderTheirClass()
+    {
+        using ScannerFixture fixture = new();
+        fixture.Write("App/Text.cs", "namespace Fixture; public static class Text { extension(string value) { public int Twice() => value.Length * 2; } }");
+        ScanObservation scan = await fixture.ScanAsync();
+        Assert.Contains(scan.Operations!, operation => operation.File == "App/Text.cs" && operation.Name.Contains("Twice", StringComparison.Ordinal));
+        CodeFile file = Assert.Single(SourceOutline.Read(new OutlineRequest(fixture.Root, [new SourceReference("App/Text.cs", [])])));
+        Assert.Equal(["Twice"], Assert.Single(file.Declarations).Members.Select(member => member.Name));
+    }
 }

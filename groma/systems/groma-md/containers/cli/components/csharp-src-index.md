@@ -19,4 +19,4 @@ groma:
 description: Starts the C# worker and converts its result into scan evidence
 ---
 
-Selects declared C# projects and starts the bundled .NET worker. Converts its source analysis and outlines into the shared scanner contract.
+Sends the repository's tracked C# inventory and inputs to the bundled .NET worker in one request, so each project loads once, and returns the observation and source outlines through the shared scanner contract. Leaves build output, test code and generated files out of the inventory, and lists every other C# file to explain files without an owner.

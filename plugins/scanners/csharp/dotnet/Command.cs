@@ -1,5 +1,9 @@
 namespace Groma.CSharpScanner;
 
+/// <summary>
+/// The worker's two requests, each a JSON document on standard input: a scan observation and the outline of Code files.
+/// Requests travel on standard input because repository inventories exceed command-line length limits.
+/// </summary>
 public static class ScannerCommand
 {
     public static async Task<int> RunAsync(
@@ -11,15 +15,13 @@ public static class ScannerCommand
     {
         try
         {
-            if (args is ["--outline"])
-            {
-                string outlineRequest = await standardInput.ReadToEndAsync(cancellationToken);
-                await standardOutput.WriteAsync(SourceOutline.Run(outlineRequest, cancellationToken));
-                return 0;
-            }
-            ScanRequest request = ScanRequest.Parse(args);
-            string json = (await new RoslynScanner().ScanAsync(request, cancellationToken)).ToCanonicalJson();
-            await standardOutput.WriteAsync(json);
+            if (args is not (["--scan"] or ["--outline"]))
+                throw new ArgumentException("Usage: csharp-scanner --scan|--outline, with its JSON request on standard input.");
+            string request = await standardInput.ReadToEndAsync(cancellationToken);
+            string output = args[0] == "--outline"
+                ? SourceOutline.Run(request, cancellationToken)
+                : (await new RoslynScanner().ScanAsync(ScanRequest.Parse(request), cancellationToken)).ToCanonicalJson();
+            await standardOutput.WriteAsync(output);
             return 0;
         }
         catch (OperationCanceledException)

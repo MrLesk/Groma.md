@@ -12,12 +12,10 @@ internal sealed class OperationEvidence(string repositoryRoot)
 
     public IEnumerable<ScanOperation> Operations => operations.Values;
 
-    public IEnumerable<ScanInvocation> Invocations => invocations.Select(pending =>
-    {
-        string[] targets = pending.Target is not null && operations.ContainsKey(pending.Target)
-            ? [pending.Target] : [];
-        return new ScanInvocation(pending.Source, targets, pending.Unresolved || targets.Length == 0, pending.Line, pending.Member);
-    });
+    /// <summary>Calls that reach an operation this observation declares; a call into a package or the framework reaches none.</summary>
+    public IEnumerable<ScanInvocation> Invocations => invocations
+        .Where(pending => operations.ContainsKey(pending.Target))
+        .Select(pending => new ScanInvocation(pending.Source, [pending.Target], pending.Unresolved, pending.Line, pending.Member));
 
     /// <summary>Extracts this file's operations and calls, and returns the operation each node belongs to.</summary>
     public IReadOnlyDictionary<SyntaxNode, string> Extract(SyntaxNode root, SemanticModel model, string file, CancellationToken cancellationToken)
@@ -26,9 +24,15 @@ internal sealed class OperationEvidence(string repositoryRoot)
         foreach (SyntaxNode node in root.DescendantNodesAndSelf())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            IMethodSymbol? method = ExecutableMethod(node, model, cancellationToken);
-            if (method is null) continue;
             string id = OperationId.Of(file, node);
+            if (node is AnonymousFunctionExpressionSyntax lambda)
+            {
+                if (IsExpressionTree(lambda, model, cancellationToken)) continue;
+                operations.TryAdd(id, new ScanOperation(id, file, lambda is AnonymousMethodExpressionSyntax ? "anonymous method" : "lambda expression"));
+                callers.Add(node, id);
+                continue;
+            }
+            if (ExecutableMethod(node, model, cancellationToken) is not IMethodSymbol method) continue;
             operations.TryAdd(id, ScanOperationOf(id, file, node, method, model, cancellationToken));
             callers.Add(node, id);
         }
@@ -41,26 +45,20 @@ internal sealed class OperationEvidence(string repositoryRoot)
         foreach (SyntaxNode node in root.DescendantNodes().Where(IsExplicitCall))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string? caller = Caller(node, callers);
-            if (caller is null) continue;
-            IOperation? operation = model.GetOperation(node, cancellationToken);
-            if (operation is not (IInvocationOperation or IObjectCreationOperation or IDynamicInvocationOperation or IDynamicObjectCreationOperation or IFunctionPointerInvocationOperation or IInvalidOperation)) continue;
-            (IMethodSymbol? target, bool unresolved) = Target(operation);
-            if (model.GetDiagnostics(node.Span, cancellationToken).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
-                (target, unresolved) = (null, true);
-            string? targetId = OperationId.OfMethod(repositoryRoot, target);
-            string? member = target?.Name ?? (node is InvocationExpressionSyntax call ? CallName(call.Expression) : null);
-            invocations.Add(new PendingInvocation(caller, targetId, unresolved,
-                node.GetLocation().GetLineSpan().StartLinePosition.Line + 1, member));
+            // A call with a type error stays unresolved, so it names no target.
+            if (Caller(node, callers) is not string caller
+                || model.GetDiagnostics(node.Span, cancellationToken).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)) continue;
+            (IMethodSymbol? target, bool unresolved) = Target(model.GetOperation(node, cancellationToken));
+            if (OperationId.OfMethod(repositoryRoot, target) is not string id) continue;
+            invocations.Add(new PendingInvocation(caller, id, unresolved, node.GetLocation().GetLineSpan().StartLinePosition.Line + 1, target!.Name));
         }
         return callers;
     }
 
-    /// <summary>Named operations carry the source range and tokens core compares; lambdas and anonymous methods do not.</summary>
+    /// <summary>Named operations carry their source range and body tokens; lambdas and anonymous methods do not.</summary>
     private static ScanOperation ScanOperationOf(string id, string file, SyntaxNode node, IMethodSymbol method, SemanticModel model, CancellationToken cancellationToken)
     {
         string name = method.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
-        if (node is AnonymousFunctionExpressionSyntax) return new ScanOperation(id, file, name);
         FileLinePositionSpan lines = node.GetLocation().GetLineSpan();
         return new ScanOperation(id, file, name, lines.StartLinePosition.Line + 1, lines.EndLinePosition.Line + 1, OperationTokens.Of(node, method, model, cancellationToken));
     }
@@ -70,17 +68,30 @@ internal sealed class OperationEvidence(string repositoryRoot)
         BaseMethodDeclarationSyntax declaration when declaration.Body is not null || declaration.ExpressionBody is not null => model.GetDeclaredSymbol(declaration, token) as IMethodSymbol,
         AccessorDeclarationSyntax accessor when accessor.Body is not null || accessor.ExpressionBody is not null => model.GetDeclaredSymbol(accessor, token) as IMethodSymbol,
         LocalFunctionStatementSyntax local => model.GetDeclaredSymbol(local, token) as IMethodSymbol,
-        AnonymousFunctionExpressionSyntax lambda when !IsExpressionTree(lambda, model, token) => (model.GetOperation(lambda, token) as IAnonymousFunctionOperation)?.Symbol,
         ArrowExpressionClauseSyntax arrow when arrow.Parent is PropertyDeclarationSyntax property => (model.GetDeclaredSymbol(property, token) as IPropertySymbol)?.GetMethod,
         ArrowExpressionClauseSyntax arrow when arrow.Parent is IndexerDeclarationSyntax indexer => (model.GetDeclaredSymbol(indexer, token) as IPropertySymbol)?.GetMethod,
         _ => null,
     };
 
+    /// <summary>
+    /// A lambda converted to Expression&lt;T&gt; is data, not code that runs. As an argument it is one only when the call binds
+    /// to a parameter of that type: when binding fails, Roslyn's recovery guesses a candidate differently from run to run.
+    /// </summary>
     private static bool IsExpressionTree(AnonymousFunctionExpressionSyntax lambda, SemanticModel model, CancellationToken token)
     {
-        ITypeSymbol? converted = model.GetTypeInfo(lambda, token).ConvertedType;
         INamedTypeSymbol? expression = model.Compilation.GetTypeByMetadataName("System.Linq.Expressions.Expression`1");
-        return expression is not null && SymbolEqualityComparer.Default.Equals(converted?.OriginalDefinition, expression);
+        if (expression is null) return false;
+        if (lambda.Parent is ArgumentSyntax { Parent.Parent: ExpressionSyntax call } argument)
+        {
+            IArgumentOperation? bound = (model.GetOperation(call, token) switch
+            {
+                IInvocationOperation invocation => invocation.Arguments,
+                IObjectCreationOperation creation => creation.Arguments,
+                _ => [],
+            }).FirstOrDefault(candidate => candidate.Syntax == argument);
+            return SymbolEqualityComparer.Default.Equals(bound?.Parameter?.Type.OriginalDefinition, expression);
+        }
+        return SymbolEqualityComparer.Default.Equals(model.GetTypeInfo(lambda, token).ConvertedType?.OriginalDefinition, expression);
     }
 
     private static bool IsExplicitCall(SyntaxNode node) =>
@@ -98,12 +109,14 @@ internal sealed class OperationEvidence(string repositoryRoot)
         return null;
     }
 
+    /// <summary>
+    /// The method a call reaches. Interface and overridable targets stay unresolved, because the runtime may pick another
+    /// implementation.
+    /// </summary>
     private static (IMethodSymbol? Target, bool Unresolved) Target(IOperation? operation) => operation switch
     {
-        IInvocationOperation invocation => (invocation.TargetMethod,
-            invocation.TargetMethod.MethodKind == MethodKind.DelegateInvoke || invocation.TargetMethod.IsAbstract ||
-            invocation.TargetMethod.ContainingType.TypeKind == TypeKind.Interface ||
-            (invocation.IsVirtual && !invocation.TargetMethod.IsSealed && !invocation.TargetMethod.ContainingType.IsSealed)),
+        IInvocationOperation invocation => (invocation.TargetMethod, invocation.TargetMethod.ContainingType.TypeKind == TypeKind.Interface
+            || (invocation.IsVirtual && !invocation.TargetMethod.IsSealed && !invocation.TargetMethod.ContainingType.IsSealed)),
         IObjectCreationOperation creation => (creation.Constructor, false),
         _ => (null, true),
     };
@@ -117,5 +130,5 @@ internal sealed class OperationEvidence(string repositoryRoot)
         _ => null,
     };
 
-    private sealed record PendingInvocation(string Source, string? Target, bool Unresolved, int Line, string? Member);
+    private sealed record PendingInvocation(string Source, string Target, bool Unresolved, int Line, string Member);
 }

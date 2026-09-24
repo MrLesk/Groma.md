@@ -15,7 +15,7 @@ public sealed class HttpEvidenceTests
             $"{request.Method ?? "?"} {(request.Configured == true ? "configured " : "")}{Route(request.Path)} <- {operations[request.Operation].Name}";
 
         // Absent: the [area] token; a conventionally routed controller; an abstract, partial or internal controller; a
-        // controller whose base declares a public method or a [Route], is marked [NonController] or is not declared in
+        // controller whose base declares a public method, is marked [NonController] or is not declared in
         // source; a class that is not a controller; non-action methods ([NonAction], private, static, generic); an
         // [AcceptVerbs] action; a computed pattern or method list; a Map branch; a reassigned or computed group; and a
         // route on an IEndpointRouteBuilder that arrives as a parameter.
@@ -47,6 +47,8 @@ public sealed class HttpEvidenceTests
             "GET /api/async/Newest <- Shop.AsyncController.Recent()",
             "GET /api/rooted <- Shop.RootedController.List()",
             "GET /api/routes <- Shop.RoutesController.Read()",
+            // A base's [Route] is the prefix of a controller that declares none, as ASP.NET Core reads it.
+            "GET /api/shared/:id~ <- Shop.DerivedController.Read(int)",
             "GET /api/speakers/:id~ <- lambda expression",
             "GET /api/speakers/drafts/:id~/:rest* <- lambda expression",
             "GET /health <- lambda expression",
@@ -67,6 +69,8 @@ public sealed class HttpEvidenceTests
         {
             "DELETE /api/talks/dynamic <- Shop.TalkClient.Remove(int)",
             "GET /api/talks <- Shop.TalkClient.List()",
+            // A client from IHttpClientFactory, held by a local.
+            "GET /api/talks/drafts <- Shop.FactoryClient.Drafts()",
             "GET /api/talks/dynamic <- Shop.TalkClient.Read(int)",
             "GET /api/talks/feed <- Shop.TalkClient.FeedItems()",
             "GET /api/talks/latest <- Shop.TalkClient.Latest()",
@@ -94,6 +98,8 @@ public sealed class HttpEvidenceTests
             "GET configured /api/talks <- Shop.ITalksApi.List()",
             "GET configured /api/talks/dynamic <- Shop.ITalksApi.Read(int)",
             "HEAD /ping <- Shop.TalkClient.Ping()",
+            // A request message held by a local states the method and URL SendAsync sends.
+            "POST /api/talks/publish <- Shop.FactoryClient.Publish()",
             "POST configured /api/talks <- Shop.ITalksApi.Create(string)",
             "POST configured /api/talks <- Shop.TalkClient.Save(string)",
         }, scan.HttpRequests!.Select(Sent).Order(StringComparer.Ordinal));
@@ -142,6 +148,21 @@ public sealed class HttpEvidenceTests
         // Paths built from [controller] or [action] are unknown, while a literal controller route still reports.
         Assert.DoesNotContain(paths, path => path.StartsWith("/api/Talks", StringComparison.Ordinal) || path.StartsWith("/api/async", StringComparison.Ordinal));
         Assert.Contains("/api/rooted", paths);
+    }
+
+    [Fact]
+    public async Task AControllerTakesItsRouteFromABaseInAnotherProject()
+    {
+        using ScannerFixture fixture = new();
+        fixture.Write("G/Web/Web.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><ItemGroup><ProjectReference Include=\"../Api/Api.csproj\" /></ItemGroup></Project>");
+        fixture.Write("G/Web/AppsController.cs",
+            "namespace G; public sealed class AppsController : Api.ApiController { [Microsoft.AspNetCore.Mvc.HttpGet(\"apps/{app}\")] public string Get(string app) => app; }");
+        fixture.Write("G/Api/Api.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+        fixture.Write("G/Api/ApiController.cs", "namespace G.Api; public static class Routes { public const string Prefix = \"/api\"; } "
+            + "[Microsoft.AspNetCore.Mvc.Route(Routes.Prefix)] public abstract class ApiController : Microsoft.AspNetCore.Mvc.Controller { }");
+        ScanObservation scan = await fixture.ScanAsync(Path.Combine(fixture.Root, "G/Web/Web.csproj"));
+        ScanHttpEndpoint endpoint = Assert.Single(scan.HttpEndpoints!);
+        Assert.Equal("GET /api/apps/:app", $"{endpoint.Method} {Route(endpoint.Path)}");
     }
 
     private static string Route(IReadOnlyList<ScanHttpSegment> path) => "/" + string.Join("/", path.Select(segment => segment.Kind switch

@@ -65,8 +65,7 @@ internal static class HttpEndpoints
     private static void Controller(TypeDeclarationSyntax type, SemanticModel model, string file, TokenConventions conventions,
         List<ScanHttpEndpoint> endpoints, CancellationToken cancellationToken)
     {
-        if (!IsControllerWithKnownRoutes(type, model, cancellationToken)
-            || ClassPrefixes(type.AttributeLists, model, cancellationToken) is not { } prefixes) return;
+        if (ControllerRoutes(type, model, cancellationToken) is not { } routes || ClassPrefixes(routes, cancellationToken) is not { } prefixes) return;
         string? controller = ControllerName(type, conventions);
         foreach (MethodDeclarationSyntax action in type.Members.OfType<MethodDeclarationSyntax>())
         {
@@ -97,18 +96,20 @@ internal static class HttpEndpoints
     /// <summary>
     /// ASP.NET Core's controller rule as far as source shows it: a public, top-level, non-generic, non-abstract class
     /// declared in one place, named *Controller, marked [Controller] or deriving from ControllerBase or Controller, and
-    /// not [NonController], counting attributes its bases carry. A controller also serves its bases' public methods
-    /// and [Route] prefixes, so a base between it and ControllerBase that declares either, or that the source does not
-    /// declare, leaves its routes unknown and it reports nothing.
+    /// not [NonController], counting attributes its bases carry. A controller also serves its bases' public methods, so a
+    /// base between it and ControllerBase that declares one, or that the source does not declare, leaves its routes
+    /// unknown. Its class routes are the [Route] attributes of the most derived class that declares any, as MVC reads
+    /// them, each with the semantic model of the file declaring it. Null when the type is not such a controller.
     /// </summary>
-    private static bool IsControllerWithKnownRoutes(TypeDeclarationSyntax type, SemanticModel model, CancellationToken cancellationToken)
+    private static List<(AttributeSyntax Attribute, SemanticModel Model)>? ControllerRoutes(TypeDeclarationSyntax type, SemanticModel model, CancellationToken cancellationToken)
     {
         if (model.GetDeclaredSymbol(type, cancellationToken) is not INamedTypeSymbol
             {
                 TypeKind: TypeKind.Class, DeclaredAccessibility: Accessibility.Public, IsAbstract: false, IsGenericType: false,
                 ContainingType: null, DeclaringSyntaxReferences.Length: 1,
-            } symbol) return false;
+            } symbol) return null;
         List<string> attributes = [.. Attributes(type)];
+        List<(AttributeSyntax Attribute, SemanticModel Model)> routes = [.. RouteAttributes(type).Select(attribute => (attribute, model))];
         bool framework = false;
         for (INamedTypeSymbol? inherited = symbol.BaseType; inherited is { SpecialType: not SpecialType.System_Object }; inherited = inherited.BaseType)
         {
@@ -118,15 +119,24 @@ internal static class HttpEndpoints
                 break;
             }
             if (inherited.DeclaringSyntaxReferences.IsEmpty || inherited.GetMembers().OfType<IMethodSymbol>()
-                .Any(method => method is { MethodKind: MethodKind.Ordinary, DeclaredAccessibility: Accessibility.Public, IsStatic: false })) return false;
-            string[] declared = [.. inherited.DeclaringSyntaxReferences.Select(part => part.GetSyntax(cancellationToken))
-                .OfType<TypeDeclarationSyntax>().SelectMany(Attributes)];
-            if (declared.Contains("Route")) return false;
-            attributes.AddRange(declared);
+                .Any(method => method is { MethodKind: MethodKind.Ordinary, DeclaredAccessibility: Accessibility.Public, IsStatic: false })) return null;
+            TypeDeclarationSyntax[] parts = [.. inherited.DeclaringSyntaxReferences.Select(part => part.GetSyntax(cancellationToken)).OfType<TypeDeclarationSyntax>()];
+            attributes.AddRange(parts.SelectMany(Attributes));
+            if (routes.Count == 0)
+                routes.AddRange(parts.SelectMany(part => RouteAttributes(part).Select(attribute => (attribute, ModelOf(part.SyntaxTree, model.Compilation)))));
         }
-        if (attributes.Contains("NonController")) return false;
-        return framework || attributes.Contains("Controller") || symbol.Name.EndsWith("Controller", StringComparison.OrdinalIgnoreCase);
+        if (attributes.Contains("NonController")) return null;
+        return framework || attributes.Contains("Controller") || symbol.Name.EndsWith("Controller", StringComparison.OrdinalIgnoreCase) ? routes : null;
     }
+
+    private static IEnumerable<AttributeSyntax> RouteAttributes(TypeDeclarationSyntax type) =>
+        type.AttributeLists.SelectMany(list => list.Attributes).Where(attribute => HttpSyntax.AttributeName(attribute) == "Route");
+
+    /// <summary>A base may be declared in a referenced project, whose own compilation binds its constants.</summary>
+    private static SemanticModel ModelOf(SyntaxTree tree, Compilation compilation) => compilation.ContainsSyntaxTree(tree)
+        ? compilation.GetSemanticModel(tree)
+        : compilation.References.OfType<CompilationReference>().Select(reference => reference.Compilation)
+            .First(referenced => referenced.ContainsSyntaxTree(tree)).GetSemanticModel(tree);
 
     private static IEnumerable<string> Attributes(TypeDeclarationSyntax type) =>
         type.AttributeLists.SelectMany(list => list.Attributes).Select(HttpSyntax.AttributeName);
@@ -169,12 +179,11 @@ internal static class HttpEndpoints
     /// Class-level route prefixes, rooted like an action template, or null when one is computed and hides every
     /// action's path.
     /// </summary>
-    private static List<string>? ClassPrefixes(SyntaxList<AttributeListSyntax> lists, SemanticModel model, CancellationToken cancellationToken)
+    private static List<string>? ClassPrefixes(List<(AttributeSyntax Attribute, SemanticModel Model)> routes, CancellationToken cancellationToken)
     {
         List<string> prefixes = [];
-        foreach (AttributeSyntax attribute in lists.SelectMany(list => list.Attributes))
+        foreach ((AttributeSyntax attribute, SemanticModel model) in routes)
         {
-            if (HttpSyntax.AttributeName(attribute) != "Route") continue;
             if (HttpSyntax.Constant(model, HttpSyntax.Argument(attribute), cancellationToken) is not string text) return null;
             prefixes.Add(HttpRoutes.Join("", text));
         }

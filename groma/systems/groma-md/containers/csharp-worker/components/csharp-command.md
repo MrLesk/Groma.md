@@ -18,4 +18,4 @@ groma:
 description: Reads a C# scan request and writes the worker result
 ---
 
-Reads the scan request and checks its project paths. Writes the worker result in the scanner data format.
+Reads a scan or outline request as JSON on standard input and checks the repository paths it names. Writes the result in the scanner data format.

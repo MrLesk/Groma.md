@@ -20,7 +20,7 @@ public sealed class CoverageTests
             Assert.Contains(result.Files, file => file.File == "App/Consumer.cs");
             Assert.DoesNotContain(result.Files, file => file.File.StartsWith("../", StringComparison.Ordinal));
             Assert.DoesNotContain(result.Operations!, operation => operation.File.StartsWith("../", StringComparison.Ordinal));
-            Assert.Contains(result.Invocations!, call => call.Member == "Value" && call.Unresolved && call.Targets.Count == 0);
+            Assert.DoesNotContain(result.Invocations!, call => call.Member == "Value");
             File.WriteAllText(external, "public class Invalid {");
             await Assert.ThrowsAsync<InvalidDataException>(() => fixture.ScanAsync());
         }
@@ -28,15 +28,17 @@ public sealed class CoverageTests
     }
 
     [Fact]
-    public async Task LinkedFilesCannotHaveSeveralCompilationOwners()
+    public async Task ALinkedFileKeepsEveryProjectAndIsAnalyzedOnce()
     {
         using ScannerFixture fixture = new();
-        fixture.Write("Shared.cs", "namespace Shared; public class Linked { }");
+        fixture.Write("Shared.cs", "namespace Shared; public static class Linked { public static int Twice(int value) { int doubled = value * 2; return doubled + 1; } }");
         foreach (string project in new[] { "App/App.csproj", "Core/Core.csproj" })
         {
             string source = File.ReadAllText(Path.Combine(fixture.Root, project));
             fixture.Write(project, source.Replace("</Project>", "<ItemGroup><Compile Include=\"../Shared.cs\" /></ItemGroup></Project>", StringComparison.Ordinal));
         }
-        await Assert.ThrowsAsync<InvalidDataException>(() => fixture.ScanAsync());
+        ScanObservation scan = await fixture.ScanAsync();
+        Assert.Equal(["project:App/App.csproj", "project:Core/Core.csproj"], Assert.Single(scan.Files, file => file.File == "Shared.cs").Roots);
+        Assert.Single(scan.Operations!, operation => operation.File == "Shared.cs" && operation.Name.EndsWith("Twice(int)", StringComparison.Ordinal));
     }
 }

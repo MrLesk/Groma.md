@@ -37,6 +37,6 @@
   "dependencies": {
     "@groma/scanner": "workspace:*"
   },
-  "description": "C# project evidence through Roslyn and MSBuild.",
+  "description": "C# project evidence through Roslyn.",
   "private": false
 }

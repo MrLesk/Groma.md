@@ -41,4 +41,16 @@ public sealed class SourceUnitTests
         Assert.Contains(scan.Files, source => source.File == "Core/Partial.Declaration.cs");
         Assert.Contains(scan.Files, source => source.File == "Core/Partial.Implementation.cs");
     }
+
+    [Fact]
+    public async Task ANestedTypeIsAMemberAndTheUnitIsNamedAfterItsClass()
+    {
+        using ScannerFixture fixture = new();
+        fixture.Write("App/View.cs", "namespace Fixture; public partial class View { struct Point { } public void Show() => Hide(); }");
+        fixture.Write("App/View.Designer.cs", "namespace Fixture; public partial class View { void Hide() { } }");
+        ScanObservation scan = await fixture.ScanAsync();
+        ScanSourceUnit unit = Assert.Single(scan.SourceUnits!, unit => unit.Files.Contains("App/View.cs"));
+        Assert.Equal(["App/View.Designer.cs", "App/View.cs"], unit.Files);
+        Assert.Equal("App/View.cs", unit.Primary);
+    }
 }

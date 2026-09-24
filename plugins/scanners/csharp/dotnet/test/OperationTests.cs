@@ -29,11 +29,10 @@ public sealed class OperationTests
         Assert.DoesNotContain(scan.Operations!, operation => operation.File == "Core/Partial.Declaration.cs" && operation.Name.EndsWith("Step()", StringComparison.Ordinal));
 
         ScanInvocation[] dispatch = scan.Invocations!.Where(call => operations[call.Source].Name.StartsWith("App.Calls.Dispatch(", StringComparison.Ordinal)).OrderBy(call => call.Line).ToArray();
-        Assert.Equal(6, dispatch.Length);
-        Assert.True(dispatch[0].Unresolved); Assert.Empty(dispatch[0].Targets); // interface
-        Assert.True(dispatch[1].Unresolved); Assert.Single(dispatch[1].Targets); // virtual declaration is only a candidate
-        Assert.False(dispatch[2].Unresolved); Assert.Single(dispatch[2].Targets); // sealed receiver
-        Assert.All(dispatch.Skip(3), call => { Assert.True(call.Unresolved); Assert.Empty(call.Targets); });
+        // Interface, delegate and external calls reach no repository operation, so they are not emitted.
+        Assert.Equal(2, dispatch.Length);
+        Assert.True(dispatch[0].Unresolved); Assert.Single(dispatch[0].Targets); // virtual declaration is only a candidate
+        Assert.False(dispatch[1].Unresolved); Assert.Single(dispatch[1].Targets); // sealed receiver
         ScanInvocation baseCall = Assert.Single(scan.Invocations!, call => operations[call.Source].Name == "Fixture.Runner.CallBase()");
         Assert.False(baseCall.Unresolved);
         Assert.Equal("Fixture.BaseRunner.Run()", operations[Assert.Single(baseCall.Targets)].Name);
@@ -43,7 +42,7 @@ public sealed class OperationTests
         Assert.False(boot.Unresolved);
         Assert.NotEqual(topLevel.Id, Assert.Single(boot.Targets));
         Assert.Contains(scan.Operations!, operation => operation.Name == "App.Calls.Value.get");
-        Assert.All(scan.Invocations!.Where(call => call.Targets.Count == 0), call => Assert.True(call.Unresolved));
+        Assert.All(scan.Invocations!, call => Assert.NotEmpty(call.Targets));
     }
 
     [Fact]
@@ -53,21 +52,30 @@ public sealed class OperationTests
         ScanObservation scan = await fixture.ScanAsync();
         Dictionary<string, ScanOperation> operations = scan.Operations!.ToDictionary(operation => operation.Id);
         ScanInvocation[] nested = scan.Invocations!.Where(call => operations[call.Source].Name == "App.Calls.Nested()").ToArray();
-        Assert.Equal(2, nested.Length); // local invocation and unknown delegate invocation, not their bodies
-        Assert.Contains(nested, call => !call.Unresolved && call.Member == "Local");
-        Assert.Contains(nested, call => call.Unresolved && call.Targets.Count == 0);
+        // The local invocation, not the calls in its body; the unknown delegate reaches no repository operation.
+        ScanInvocation local = Assert.Single(nested);
+        Assert.True(!local.Unresolved && local.Member == "Local");
         int expressionLine = File.ReadAllLines(Path.Combine(fixture.Root, "App/Calls.cs")).Select((line, index) => (line, index))
             .Single(item => item.line.Contains("Expression<Func<int>> expression", StringComparison.Ordinal)).index + 1;
         Assert.DoesNotContain(scan.Invocations!, call => operations[call.Source].File == "App/Calls.cs" && call.Line == expressionLine);
     }
 
     [Fact]
-    public async Task SolutionAndProjectEvidenceAreDeterministicAndUseTheSamePhysicalFileScope()
+    public async Task SolutionEvidenceIsDeterministic()
     {
         using ScannerFixture fixture = new();
         ScanObservation first = await fixture.ScanAsync(fixture.Solution);
         ScanObservation second = await fixture.ScanAsync(fixture.Solution);
         Assert.Equal(first.ToCanonicalJson(), second.ToCanonicalJson());
-        Assert.DoesNotContain(first.Files, file => file.File.Contains("/obj/", StringComparison.Ordinal) || file.File.Contains("/bin/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ALambdaPassedToACallThatFailsToBindIsAnOperation()
+    {
+        using ScannerFixture fixture = new();
+        fixture.Write("App/Lambdas.cs", "using System.Linq; namespace Fixture; public static class Lambdas { public static void Use() { var ids = Missing.Items.Select(item => item.Id); } }");
+        ScanObservation scan = await fixture.ScanAsync();
+        // Roslyn's error recovery tries candidates differently from run to run, so the rule never consults it.
+        Assert.Single(scan.Operations!, operation => operation.File == "App/Lambdas.cs" && operation.Name == "lambda expression");
     }
 }

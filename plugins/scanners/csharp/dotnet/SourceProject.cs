@@ -1,96 +1,103 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using System.Text.RegularExpressions;
-using System.Xml.Linq;
 
 namespace Groma.CSharpScanner;
 
-/// <summary>Loads declared source and local project references without MSBuild or package restore.</summary>
+/// <summary>
+/// Builds one Roslyn solution from the project graph without MSBuild or package restore: each project's declared
+/// language context, its compile sources and every project it reaches through its references.
+/// </summary>
 internal static class SourceProject
 {
-    public static Solution Load(AdhocWorkspace workspace, ScanRequest request, string[] expected)
+    private static readonly string[] ImplicitNamespaces =
+        ["System", "System.Collections.Generic", "System.IO", "System.Linq", "System.Net.Http", "System.Threading", "System.Threading.Tasks"];
+
+    public static async Task<Solution> LoadAsync(AdhocWorkspace workspace, ProjectGraph graph, ScanRequest request, CancellationToken cancellationToken)
     {
-        Dictionary<string, (ProjectId Id, XElement Xml)> projects = new(StringComparer.Ordinal);
-        void Add(string file)
-        {
-            file = Path.GetFullPath(file);
-            if (projects.ContainsKey(file)) return;
-            SourcePath.RequireInside(request.RepositoryRoot, file);
-            XElement xml = XDocument.Load(file).Root ?? throw new InvalidDataException("Project XML has no root.");
-            projects.Add(file, (ProjectId.CreateNewId(), xml));
-            if (projects.Count > request.MaxProjects) throw new InvalidDataException("Project limit exceeded.");
-            foreach (string reference in Items(xml, "ProjectReference", "Include"))
-                Add(Path.Combine(Path.GetDirectoryName(file)!, reference.Replace('\\', Path.DirectorySeparatorChar)));
-        }
-        foreach (string file in expected) Add(file);
         Solution solution = workspace.CurrentSolution;
         // Runtime reference assemblies are supplied by the scanner, not the project's SDK.
         MetadataReference[] references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? "")
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(file => MetadataReference.CreateFromFile(file)).ToArray();
-        foreach (var (file, project) in projects)
+        Dictionary<string, ProjectId> ids = graph.Projects.ToDictionary(project => project.File.Path, _ => ProjectId.CreateNewId(), StringComparer.Ordinal);
+        foreach (ProjectNode project in graph.Projects)
         {
-            string name = Property(project.Xml, "AssemblyName") ?? Path.GetFileNameWithoutExtension(file);
-            LanguageVersion version = LanguageVersion.Latest;
-            if (Property(project.Xml, "LangVersion") is string declared && !LanguageVersionFacts.TryParse(declared, out version))
-                throw new InvalidDataException($"Unsupported C# language version: {declared}");
-            string[] constants = (Property(project.Xml, "DefineConstants") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries);
-            if (request.Configuration == "Debug") constants = [.. constants, "DEBUG", "TRACE"];
-            solution = solution.AddProject(ProjectInfo.Create(project.Id, VersionStamp.Create(), name, name, LanguageNames.CSharp,
-                filePath: file, parseOptions: new CSharpParseOptions(version, preprocessorSymbols: constants),
-                compilationOptions: new CSharpCompilationOptions(OutputType(project.Xml) is "Exe" or "WinExe"
-                    ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary), metadataReferences: references));
+            ProjectId id = ids[project.File.Path];
+            solution = solution.AddProject(ProjectInfo.Create(id, VersionStamp.Create(), project.Name, project.Name, LanguageNames.CSharp,
+                filePath: project.File.Path,
+                parseOptions: new CSharpParseOptions(Version(project.File, graph.Root), preprocessorSymbols: Symbols(project.File, request)),
+                compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: project.File.IsTrue("AllowUnsafeBlocks")),
+                metadataReferences: references));
+            foreach (string source in project.Sources)
+                solution = solution.AddDocument(DocumentId.CreateNewId(id), Path.GetFileName(source), SourceText.From(await File.ReadAllTextAsync(source, cancellationToken)), filePath: source);
+            if (GlobalUsings(project.File) is string usings)
+                solution = solution.AddDocument(DocumentId.CreateNewId(id), "GlobalUsings", SourceText.From(usings));
         }
-        foreach (var (file, project) in projects)
+        foreach (ProjectNode project in graph.Projects)
         {
-            foreach (string source in Sources(file, project.Xml))
-                solution = solution.AddDocument(DocumentId.CreateNewId(project.Id), Path.GetFileName(source), SourceText.From(File.ReadAllText(source)), filePath: source);
-            if (Property(project.Xml, "ImplicitUsings") is "enable" or "true")
-                solution = solution.AddDocument(DocumentId.CreateNewId(project.Id), "ImplicitUsings",
-                    SourceText.From("global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Net.Http; global using System.Threading; global using System.Threading.Tasks;"));
-            foreach (string reference in Items(project.Xml, "ProjectReference", "Include"))
-            {
-                string target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, reference.Replace('\\', Path.DirectorySeparatorChar)));
-                solution = solution.AddProjectReference(project.Id, new ProjectReference(projects[target].Id));
-            }
+            ProjectId id = ids[project.File.Path];
+            foreach (string reference in project.References)
+                solution = solution.AddProjectReference(id, new ProjectReference(ids[reference]));
+            if (await IsExecutableAsync(project.File, solution.GetProject(id)!, cancellationToken))
+                solution = solution.WithProjectCompilationOptions(id, solution.GetProject(id)!.CompilationOptions!.WithOutputKind(OutputKind.ConsoleApplication));
         }
         return solution;
     }
 
-    private static string? Property(XElement xml, string name) => xml.Descendants(name)
-        .LastOrDefault(item => item.Attribute("Condition") is null && item.Parent?.Attribute("Condition") is null)?.Value.Trim();
-
-    // Web and Worker SDK props default to Exe; an explicit project property takes precedence.
-    private static string OutputType(XElement xml) => Property(xml, "OutputType")
-        ?? (((string?)xml.Attribute("Sdk"))?.Split('/')[0] is "Microsoft.NET.Sdk.Web" or "Microsoft.NET.Sdk.Worker" ? "Exe" : "Library");
-
-    private static IEnumerable<string> Items(XElement xml, string name, string attribute) => xml.Descendants(name)
-        .Where(item => item.Attribute("Condition") is null && item.Parent?.Attribute("Condition") is null)
-        .SelectMany(item => ((string?)item.Attribute(attribute) ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries));
-
-    private static IEnumerable<string> Sources(string project, XElement xml)
+    /// <summary>
+    /// An explicit OutputType wins, the Web and Worker SDKs default to Exe, and otherwise top-level statements make an
+    /// executable, because C# accepts them in no other kind of project.
+    /// </summary>
+    private static async Task<bool> IsExecutableAsync(ProjectFile file, Project project, CancellationToken cancellationToken)
     {
-        string directory = Path.GetDirectoryName(project)!;
-        HashSet<string> files = new(StringComparer.Ordinal);
-        if (Property(xml, "EnableDefaultCompileItems") != "false" && Property(xml, "EnableDefaultItems") != "false")
-            foreach (string file in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
-                if (SourcePath.IsPhysicalSource(directory, file)) files.Add(file);
-        foreach (string include in Items(xml, "Compile", "Include"))
+        if (file.Property("OutputType") is string declared)
+            return declared.Equals("Exe", StringComparison.OrdinalIgnoreCase) || declared.Equals("WinExe", StringComparison.OrdinalIgnoreCase);
+        if (file.Sdks.Any(sdk => sdk.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase) || sdk.Equals("Microsoft.NET.Sdk.Worker", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        foreach (Document document in project.Documents)
+            if (await document.GetSyntaxRootAsync(cancellationToken) is CompilationUnitSyntax unit && unit.Members.OfType<GlobalStatementSyntax>().Any()) return true;
+        return false;
+    }
+
+    private static LanguageVersion Version(ProjectFile file, string root)
+    {
+        if (file.Property("LangVersion") is not string declared) return LanguageVersion.Latest;
+        return LanguageVersionFacts.TryParse(declared, out LanguageVersion version)
+            ? version : throw new InvalidDataException($"Unsupported C# language version '{declared}' in {SourcePath.Relative(root, file.Path)}.");
+    }
+
+    /// <summary>Declared constants, plus DEBUG and TRACE, which the SDK defines for the Debug configuration.</summary>
+    private static string[] Symbols(ProjectFile file, ScanRequest request)
+    {
+        IEnumerable<string> declared = (file.Property("DefineConstants") ?? "")
+            .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(SyntaxFacts.IsValidIdentifier);
+        return [.. declared.Concat(request.Configuration == "Debug" ? ["DEBUG", "TRACE"] : []).Distinct(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// The global usings the SDK generates: the implicit namespaces when ImplicitUsings is enabled, then each Using item
+    /// in order, which may add a namespace, a static type or an alias, or remove one.
+    /// </summary>
+    private static string? GlobalUsings(ProjectFile file)
+    {
+        List<(string Name, string? Alias, bool Static)> usings = file.Property("ImplicitUsings") is string implicitUsings
+            && (implicitUsings.Equals("enable", StringComparison.OrdinalIgnoreCase) || implicitUsings.Equals("true", StringComparison.OrdinalIgnoreCase))
+            ? [.. ImplicitNamespaces.Select(name => (name, (string?)null, false))] : [];
+        foreach (ProjectItem item in file.Items.Where(item => item.Type == "Using"))
         {
-            string pattern = include.Replace('\\', '/');
-            if (!pattern.Contains('*') && !pattern.Contains('?')) files.Add(Path.GetFullPath(Path.Combine(directory, pattern)));
-            else foreach (string file in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
-                if (Matches(pattern, SourcePath.Relative(directory, file))) files.Add(file);
+            foreach (string name in Names(item.Include))
+            {
+                usings.RemoveAll(existing => existing.Name == name);
+                usings.Add((name, item.Value("Alias"), item.Value("Static")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true));
+            }
+            foreach (string name in Names(item.Remove)) usings.RemoveAll(existing => existing.Name == name);
         }
-        foreach (string remove in Items(xml, "Compile", "Remove"))
-            files.RemoveWhere(file => Matches(remove.Replace('\\', '/'), SourcePath.Relative(directory, file)));
-        return files.Order(StringComparer.Ordinal);
+        return usings.Count == 0 ? null : string.Join('\n', usings.Select(item =>
+            item.Alias is not null ? $"global using {item.Alias} = global::{item.Name};"
+            : item.Static ? $"global using static global::{item.Name};" : $"global using global::{item.Name};"));
     }
 
-    private static bool Matches(string pattern, string file)
-    {
-        string expression = Regex.Escape(pattern).Replace(@"\*\*/", "(?:.*/)?").Replace(@"\*\*", ".*").Replace(@"\*", "[^/]*").Replace(@"\?", "[^/]");
-        return Regex.IsMatch(file, "^" + expression + "$", RegexOptions.CultureInvariant);
-    }
+    private static string[] Names(string? value) => (value ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

@@ -30,7 +30,7 @@ public sealed class ScannerTests
         using FixtureSolution fixture = FixtureSolution.Create();
         RoslynScanner scanner = new();
 
-        ScanObservation first = await scanner.ScanAsync(new ScanRequest(fixture.SolutionPath, fixture.Directory));
+        ScanObservation first = await scanner.ScanAsync(new ScanRequest(fixture.Directory, [fixture.SolutionPath], ScannerFixture.Inventory(fixture.Directory)));
 
         ScanFile[] partialFiles = first.Files
             .Where(file => file.Symbols.Any(symbol => symbol.Id == "global::Fixture.Shared"))

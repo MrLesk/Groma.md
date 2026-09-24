@@ -31,39 +31,61 @@ only: scanner evidence, OKF records and C4 boundaries are unchanged.
 
 ## Source inputs
 
-The scanner discovers tracked and unignored SDK-style `.csproj`, `.sln` and
-`.slnx` files. Solutions are selected before their projects; local project
-references are loaded once. Set `settings.input` on the existing C# scanner
-entry to select one project or solution relative to the repository root.
+The scanner reads the tracked, unignored and not excluded `.csproj`, `.sln` and
+`.slnx` files and every project they reference, and loads each project once,
+however many solutions list it. Set `settings.input` on the existing C# scanner
+entry to select one project or solution, with the projects it references,
+relative to the repository root. To explain a file without an owner, the scanner
+lists every C# file it does not exclude: a project may compile any repository
+file, so this never leaves out a file a scan reads.
 
-An in-memory Roslyn workspace reads project XML and authored C# files.
-Unconditional language options, compile includes/removes, implicit usings and
-local project references supply context. The scanner's runtime supplies base
-.NET declarations. It does not run MSBuild, evaluate imported or conditional
-build settings, restore packages, or execute source generators. Standard .NET,
-Web and Worker SDK headers are accepted; this is not general framework analysis.
+An in-memory Roslyn workspace reads project XML and authored C# files. The
+nearest `Directory.Build.props`, the project file, and the files either imports
+by a path the scanner can expand supply their unconditional properties and items
+in document order: the language version, `DefineConstants`, `ImplicitUsings`
+and `Using` items, `AllowUnsafeBlocks`, `OutputType`, and `Compile` includes and
+removes. A value may use `$(Name)` for a property read before it. In a property
+value an unset property is empty, as in MSBuild, while an item or import path
+that names one stays unknown. Conditions, targets, property functions and SDK
+files are not evaluated. The scanner's runtime supplies base .NET declarations.
+It does not run MSBuild, restore packages, or execute source generators.
+
+Every SDK-style project is read, whatever its SDK: .NET, Web, Worker, Razor,
+Blazor WebAssembly, Aspire AppHost or an explicit `Sdk` import. Projects in
+other languages are skipped. A C# project that is not SDK-style is skipped with
+a `CSHARP_UNSUPPORTED_PROJECT` warning. Project references follow the SDK: they
+are transitive.
+
+The scanner excludes build output (`bin` and `obj`, in any letter case), test
+code (folders named `test` or `tests` in either initial case, folders whose
+names end in `Tests`, and `*.Test` folders) and generated files
+(`*.Designer.cs`, `*.g.cs`, `*.g.i.cs` and `*.generated.cs`). Like files
+excluded in `scanners.json`, excluded files are never read, so a declaration
+that only an excluded file provides is reported as missing where code uses it.
 
 For executable projects, Roslyn's resolved entry point supplies an execution fact
 with its source file, project declaration, assembly name and the project's own
-compiled source files. Referenced projects remain separate source units. Explicit
-`OutputType` takes precedence; the supported Web and Worker SDKs default to `Exe`.
-Core applies the [shared container-placement rule](../evidence.md#execution-entries-and-container-placement).
+compiled source files. Referenced projects remain separate source units. An
+explicit `OutputType`, in any case, takes precedence; the Web and Worker SDKs
+default to `Exe`; otherwise top-level statements, which C# accepts only in an
+executable, make the project one. Core applies the
+[shared container-placement rule](../evidence.md#execution-entries-and-container-placement).
 Solutions and library projects alone do not imply containers.
 
-Generated `bin` and `obj` files are excluded. A physical source file cannot
-belong to several selected project contexts. Project references must stay
-inside the repository. Mixed-language graphs and legacy projects are unsupported.
-Invalid syntax fails a scan. Missing external types produce diagnostics while
+A source file that several projects compile belongs to each of them. It is
+analyzed once, in the context of the first project by path. Invalid syntax fails
+a scan. Missing external types produce warnings located by file and line, while
 local declarations and supported operations remain available.
 
 ## Evidence
 
 Partial class declarations in separate authored files are proposed as one source
 unit when Roslyn identifies the same class in the same project. Each file must
-contain only that type, and every declaration must qualify. Same-name classes
-in other namespaces or projects are independent. Files containing additional
-types remain separate source evidence. This does not associate Razor, XAML, or
-generated source.
+declare only that type, apart from the types nested in it, and every declaration
+must qualify. The primary is the file named after the class, else the file with
+the shortest name. Same-name classes in other namespaces or projects are
+independent. Files containing additional types remain separate source evidence.
+This does not associate Razor, XAML, or generated source.
 
 Core creates one component with all member Code references, attaches newly
 discovered unowned partial files, and retains curated ownership on repeat scans.
@@ -72,10 +94,13 @@ The existing C# source watcher includes new partial files. No project restore,
 build, or source-generator execution is needed.
 
 Roslyn resolves local overloads, generic methods, extensions, partial
-implementations and direct calls. Calls with type errors, virtual dispatch,
-interfaces and delegates retain uncertainty. Implicit calls, initializers,
-generated operations, receiver/delegate value flow, dependency injection and
-network protocols are not resolved.
+implementations and direct calls. Virtual dispatch and interface calls retain
+uncertainty. Calls with type errors, and calls that reach no repository
+operation, such as calls into packages, the framework or delegates, are not
+reported. A lambda is an operation unless a call that binds converts it to an
+expression tree. Implicit calls, initializers, generated operations,
+receiver/delegate value flow, dependency injection and network protocols are
+not resolved.
 
 Solutions and projects supply source roots and file membership. They are not
 C4 components or proof of business collaborations. Core owns curated membership
@@ -83,10 +108,10 @@ and relationship selection; ordinary Markdown readers see the existing OKF
 records and Code links. The scanner adds no map level or architecture metadata.
 
 Settings also accept `configuration` (default `Debug`), `maxProjects` (128),
-`maxFiles` (20000) and `timeoutSeconds` (120). Configuration selects the source
-DEBUG/TRACE symbols; it does not execute a build configuration. Limits fail
-rather than publish truncated evidence. Failed scanners retain their saved
-evidence while other scanners can update the map.
+`maxFiles` (20000) and `timeoutSeconds` (120), which apply to the whole scan.
+Configuration selects the source DEBUG/TRACE symbols; it does not execute a
+build configuration. Limits fail rather than publish truncated evidence. Failed
+scanners retain their saved evidence while other scanners can update the map.
 
 Run `dotnet test plugins/scanners/csharp/dotnet/test/Groma.CSharpScanner.Tests.csproj`
 for Roslyn tests. Fixtures are scanned without restore. The packaged test
@@ -104,7 +129,8 @@ project, restoring packages or building.
   in the file or inside its namespaces are types. Enums and delegates have no
   members.
 - A type's members are the methods, interface method signatures, constructors,
-  finalizers and operators declared in its body, each overload separately.
+  finalizers and operators declared in its body, including the methods of its
+  C# 14 extension blocks, each overload separately.
   Constructors are named after the type and finalizers `~Type`; operators are
   named like `operator +` or `implicit operator int`.
 
@@ -181,11 +207,13 @@ Endpoints:
 - a controller is a public, top-level, non-generic, non-abstract class declared
   in one place, named `*Controller`, marked `[Controller]` or deriving from
   `ControllerBase` or `Controller`, and not `[NonController]`, counting the
-  attributes of its bases. A controller also serves the public methods and
-  `[Route]` prefixes of its bases, so one with a base between it and
-  `ControllerBase` that declares a public method or a `[Route]`, or that the
-  source does not declare, reports nothing. An action is a public, non-static,
-  non-generic method with a body and without `[NonAction]`.
+  attributes of its bases. Its class prefixes are the `[Route]` attributes of
+  the most derived class that declares any, as ASP.NET Core reads them, even
+  when that base is declared in a referenced project. A controller also serves
+  the public methods of its bases, so one with a base between it and
+  `ControllerBase` that declares a public method, or that the source does not
+  declare, reports nothing. An action is a public, non-static, non-generic
+  method with a body and without `[NonAction]`.
 - minimal APIs: `MapGet`, `MapPost`, `MapPut`, `MapDelete`, `MapPatch`, and
   `MapMethods` with literal methods, on a `MapGroup` chain or on the
   application: the result of `Build()` or `WebApplication.Create()`, or any
@@ -194,10 +222,12 @@ Endpoints:
 
 Requests:
 
-- `HttpClient` calls, recognized by the receiver's own type: the `GetAsync`,
-  `GetStringAsync`, `GetFromJsonAsync`, `PostAsync`, `PostAsJsonAsync`,
-  `PutAsync`, `PatchAsync` and `DeleteAsync` families, and `SendAsync` with a
-  `new HttpRequestMessage(HttpMethod.Get, url)`.
+- `HttpClient` calls, recognized by the receiver's own type or as the client
+  `IHttpClientFactory.CreateClient` returns, directly or held by a local: the
+  `GetAsync`, `GetStringAsync`, `GetFromJsonAsync`, `PostAsync`,
+  `PostAsJsonAsync`, `PutAsync`, `PatchAsync` and `DeleteAsync` families, and
+  `SendAsync` with a `new HttpRequestMessage(HttpMethod.Get, url)` written in
+  the call or held by a local the file never assigns again.
 - declarative client interfaces such as Refit: `[Get]`, `[Post]`, `[Put]`,
   `[Delete]`, `[Patch]`, `[Head]` and `[Options]` on an interface method. Such
   a method has no body, so its request declares the operation itself.

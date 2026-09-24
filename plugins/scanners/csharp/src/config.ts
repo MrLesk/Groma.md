@@ -1,7 +1,6 @@
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
-import { projectFiles } from '../../projects.ts'
 
 export interface CSharpConfig {
   input?: string
@@ -47,13 +46,4 @@ export async function validateInput(root: string, selected: string): Promise<str
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('C# scan input must stay inside the repository')
   if (!/\.(?:csproj|slnx?)$/i.test(full) || !(await stat(full)).isFile()) throw new Error('C# input must be an existing .csproj, .sln, or .slnx file')
   return full
-}
-
-/** Solutions are loaded first; their returned project roots cover later project candidates. */
-export async function csharpInputs(root: string, settings: ScannerSettings): Promise<string[]> {
-  const config = parseCSharpSettings(settings)
-  if (config.input) return [await validateInput(root, config.input)]
-  const files = await projectFiles(root, file => /\.(?:csproj|slnx?)$/i.test(file))
-  return [...files.filter(file => /\.slnx?$/i.test(file)), ...files.filter(file => /\.csproj$/i.test(file))]
-    .map(file => path.resolve(root, file))
 }

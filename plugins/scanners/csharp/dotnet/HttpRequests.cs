@@ -53,26 +53,33 @@ internal static class HttpRequests
         ExpressionSyntax url = call.ArgumentList.Arguments[0].Expression;
         if (sends)
         {
-            // Only a request message written here states its own method and URL.
-            if (url is not ObjectCreationExpressionSyntax { ArgumentList: not null } message
-                || HttpSyntax.TypeName(message.Type) != "HttpRequestMessage"
-                || message.ArgumentList.Arguments.Count < 2) return;
-            method = Method(model, message.ArgumentList.Arguments[0].Expression, cancellationToken);
-            url = message.ArgumentList.Arguments[1].Expression;
+            // The message states its own method and URL: written here, or held by a local this file never reassigns.
+            ExpressionSyntax message = HttpSyntax.SingleValue(model, url, cancellationToken) ?? url;
+            if (message is not BaseObjectCreationExpressionSyntax { ArgumentList.Arguments.Count: >= 2 } creation
+                || model.GetTypeInfo(creation, cancellationToken).Type?.Name != "HttpRequestMessage") return;
+            method = Method(model, creation.ArgumentList!.Arguments[0].Expression, cancellationToken);
+            url = creation.ArgumentList.Arguments[1].Expression;
         }
         if (OperationEvidence.Caller(call, callers) is not string operation) return;
         (bool configured, ScanHttpSegment[] path) = HttpRoutes.Request(HttpSyntax.Url(model, url, cancellationToken));
         requests.Add(new ScanHttpRequest(operation, path, method, configured ? true : null));
     }
 
-    /// <summary>An HttpClient, or a type derived from one. An unresolved receiver is not a recognized client.</summary>
-    private static bool IsHttpClient(SemanticModel model, ExpressionSyntax receiver, CancellationToken cancellationToken)
+    /// <summary>
+    /// An HttpClient, a type derived from one, or the client IHttpClientFactory.CreateClient returns, which a local may
+    /// hold. The factory comes from a package the scan never restores, so it is recognized by its declared type name.
+    /// Any other unresolved receiver is not a recognized client.
+    /// </summary>
+    private static bool IsHttpClient(SemanticModel model, ExpressionSyntax receiver, CancellationToken cancellationToken, int depth = 0)
     {
         for (ITypeSymbol? type = model.GetTypeInfo(receiver, cancellationToken).Type; type is not null; type = type.BaseType)
         {
             if (type.Name == "HttpClient" && type.ContainingNamespace?.ToDisplayString() == "System.Net.Http") return true;
         }
-        return false;
+        if (receiver is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "CreateClient" } create }
+            && model.GetTypeInfo(create.Expression, cancellationToken).Type?.Name == "IHttpClientFactory") return true;
+        return depth < 2 && HttpSyntax.SingleValue(model, receiver, cancellationToken) is ExpressionSyntax value
+            && IsHttpClient(model, value, cancellationToken, depth + 1);
     }
 
     /// <summary>The method an HttpRequestMessage states, such as HttpMethod.Post or a literal.</summary>

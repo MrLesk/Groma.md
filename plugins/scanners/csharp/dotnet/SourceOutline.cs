@@ -42,7 +42,7 @@ public static class SourceOutline
     }
 
     /// <summary>Type and delegate declarations; namespaces are transparent and nested types are not listed.</summary>
-    private static IEnumerable<MemberDeclarationSyntax> TopLevel(SyntaxList<MemberDeclarationSyntax> members)
+    internal static IEnumerable<MemberDeclarationSyntax> TopLevel(SyntaxList<MemberDeclarationSyntax> members)
     {
         foreach (MemberDeclarationSyntax member in members)
         {
@@ -64,13 +64,21 @@ public static class SourceOutline
     private static CodeSymbol[] Members(TypeDeclarationSyntax type, SourceReference reference)
     {
         string defaultVisibility = type is InterfaceDeclarationSyntax ? "public" : "private";
-        return type.Members.OfType<BaseMethodDeclarationSyntax>().Select(member =>
+        return Methods(type).Select(member =>
         {
             (string name, SyntaxToken token) = MemberName(member);
             bool entry = reference.Symbols.Contains($"{type.Identifier.ValueText}.{name}");
             return new CodeSymbol(name, Line(token), Visibility(member.Modifiers, defaultVisibility), entry);
         }).ToArray();
     }
+
+    /// <summary>Methods declared in the body, including those of C# 14 extension blocks, in source order.</summary>
+    private static IEnumerable<BaseMethodDeclarationSyntax> Methods(TypeDeclarationSyntax type) => type.Members.SelectMany(member => member switch
+    {
+        BaseMethodDeclarationSyntax method => [method],
+        ExtensionBlockDeclarationSyntax extension => extension.Members.OfType<BaseMethodDeclarationSyntax>(),
+        _ => [],
+    });
 
     private static (string Name, SyntaxToken Token) MemberName(BaseMethodDeclarationSyntax member) => member switch
     {

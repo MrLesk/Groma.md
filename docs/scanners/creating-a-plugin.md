@@ -217,7 +217,7 @@ scanner makes:
 | --- | --- |
 | Rust | A `.rs` file under a target root module's directory that no crate root declares |
 | Go | A file its build constraints exclude, such as `_windows.go` or a `//go:build` tag the scan does not select |
-| C# | A file an MSBuild item glob excludes from the project |
+| C# | A C# file no scanned project compiles |
 | Angular, Vue | A template or stylesheet no component declares |
 | React | Any source the TypeScript scanner reads, while the repository has a React project, including files no React package compiles |
 

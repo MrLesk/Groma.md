@@ -15,7 +15,7 @@ packaged('C# HTTP facts reach core, which derives a row for the paths it can com
     const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
     expect(await git.exited).toBe(0)
     const scanner: ScannerPlugin = (await import(path.join(artifact!, 'dist/index.js'))).default
-    // The contract validates the facts while parsing, and combining remaps their operation ids.
+    // The contract validates the facts while parsing.
     const scan = (await scanner.scan(root))!
     const operations = new Map(scan.operations!.map(operation => [operation.id, operation.file]))
     expect(scan.httpEndpoints!.every(endpoint => operations.has(endpoint.operation))).toBe(true)
@@ -25,6 +25,7 @@ packaged('C# HTTP facts reach core, which derives a row for the paths it can com
     const rows = httpRelationships([scan], owners).map(row => [row.source, row.target, row.description, row.technology])
     // Core compares literals case-insensitively, so lowercase client URLs reach the [controller] routes.
     expect(rows.sort()).toEqual([
+      ['FactoryClient.cs', 'TalksController.cs', 'Calls HTTP endpoints: GET /api/Talks/drafts, POST /api/Talks/publish', 'csharp'],
       ['TalkClient.cs', 'Program.cs', 'Calls HTTP endpoint: HEAD /ping', 'csharp'],
       ['TalkClient.cs', 'TalksController.cs',
         'Calls HTTP endpoints: GET /api/Talks, GET /api/Talks/:id, GET /api/Talks/Feed, GET /api/Talks/latest, POST /api/Talks', 'csharp'],

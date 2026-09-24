@@ -75,7 +75,7 @@ The official producers currently recognize these source forms:
 
 | Producer | Execution evidence | Source membership |
 | --- | --- | --- |
-| C# | Roslyn entry in an executable project, including supported Web/Worker defaults | That project's compiled sources; no referenced projects |
+| C# | Roslyn entry in an executable project: an explicit OutputType, the Web and Worker SDK defaults, or top-level statements | That project's own compiled sources; no referenced projects |
 | Go | `main` in package `main` | That package and the module packages it imports, directly or indirectly |
 | Rust | Cargo binary targets | That binary crate's modules; no library or dependency crates |
 | Java | `public static void main(String[])`, including varargs | That project's compiler source set |

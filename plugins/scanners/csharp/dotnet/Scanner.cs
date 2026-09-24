@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -8,84 +9,93 @@ public sealed class RoslynScanner
 {
     public async Task<ScanObservation> ScanAsync(ScanRequest request, CancellationToken cancellationToken = default)
     {
-        request = request with { Input = Path.GetFullPath(request.Input), RepositoryRoot = Path.GetFullPath(request.RepositoryRoot) };
-        request.Validate();
-        string[] expected = ProjectInput.ExpectedProjects(request);
+        ProjectGraph graph = ProjectGraph.Load(request);
         using AdhocWorkspace workspace = new();
-        bool isProject = request.Input.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase);
-        Solution solution = SourceProject.Load(workspace, request, expected);
-        Project[] projects = ProjectInput.ValidateLoaded(solution, request, expected);
-        Dictionary<ProjectId, string> rootIds = projects.ToDictionary(project => project.Id,
-            project => $"project:{SourcePath.Relative(request.RepositoryRoot, project.FilePath!)}");
+        Solution solution = await SourceProject.LoadAsync(workspace, graph, request, cancellationToken);
+        Dictionary<string, Project> compiled = solution.Projects.ToDictionary(project => project.FilePath!, StringComparer.Ordinal);
+        Dictionary<string, string> rootIds = graph.Projects.ToDictionary(project => project.File.Path,
+            project => $"project:{SourcePath.Relative(graph.Root, project.File.Path)}", StringComparer.Ordinal);
         List<ScanFile> files = [];
         List<ScanSourceUnit> sourceUnits = [];
         List<ScanEntryPoint> entryPoints = [];
-        List<ScanDiagnostic> diagnostics = [];
-        OperationEvidence evidence = new(request.RepositoryRoot);
-        HttpEvidence http = new(request.RepositoryRoot,
-            await HttpEndpoints.Conventions(projects.SelectMany(project => project.Documents), cancellationToken));
+        List<ScanDiagnostic> diagnostics = [.. graph.Skipped];
+        OperationEvidence evidence = new(graph.Root);
+        HttpEvidence http = new(graph.Root, await HttpEndpoints.Conventions(solution.Projects.SelectMany(project => project.Documents), cancellationToken));
 
-        foreach (Project project in projects)
+        foreach (ProjectNode node in graph.Projects)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Compilation compilation = await project.GetCompilationAsync(cancellationToken)
-                ?? throw new InvalidDataException($"Roslyn could not compile '{project.Name}'.");
-            CheckCompilation(compilation, project, request.RepositoryRoot, diagnostics, cancellationToken);
-            sourceUnits.AddRange(PartialSourceUnits.Extract(compilation, request.RepositoryRoot, cancellationToken));
-            string? entryFile = compilation.GetEntryPoint(cancellationToken)?.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath;
-            if (SourcePath.IsPhysicalSource(request.RepositoryRoot, entryFile))
-                entryPoints.Add(new ScanEntryPoint(SourcePath.Relative(request.RepositoryRoot, entryFile!),
-                    SourcePath.Relative(request.RepositoryRoot, project.FilePath!), project.Name,
-                    project.Documents.Where(document => SourcePath.IsPhysicalSource(request.RepositoryRoot, document.FilePath))
-                        .Select(document => SourcePath.Relative(request.RepositoryRoot, document.FilePath!)).Order(StringComparer.Ordinal).ToArray()));
-            foreach (Document document in project.Documents.OrderBy(document => document.FilePath, StringComparer.Ordinal))
+            Compilation compilation = await compiled[node.File.Path].GetCompilationAsync(cancellationToken)
+                ?? throw new InvalidDataException($"Roslyn could not compile '{node.Name}'.");
+            CheckCompilation(compilation, node, graph, diagnostics, cancellationToken);
+            sourceUnits.AddRange(PartialSourceUnits.Extract(compilation, graph, node, cancellationToken));
+            if (EntryPoint(compilation, node, graph, cancellationToken) is ScanEntryPoint entry) entryPoints.Add(entry);
+            foreach (Document document in compiled[node.File.Path].Documents
+                .Where(document => document.FilePath is not null && graph.Analyzes(node, document.FilePath))
+                .OrderBy(document => document.FilePath, StringComparer.Ordinal))
             {
-                if (!SourcePath.IsPhysicalSource(request.RepositoryRoot, document.FilePath)) continue;
-                string file = SourcePath.Relative(request.RepositoryRoot, document.FilePath!);
-                SyntaxTree tree = await document.GetSyntaxTreeAsync(cancellationToken)
-                    ?? throw new InvalidDataException($"Roslyn could not parse '{file}'.");
+                string file = SourcePath.Relative(graph.Root, document.FilePath!);
+                SyntaxTree tree = await document.GetSyntaxTreeAsync(cancellationToken) ?? throw new InvalidDataException($"Roslyn could not parse '{file}'.");
                 SemanticModel model = compilation.GetSemanticModel(tree);
                 SyntaxNode root = await tree.GetRootAsync(cancellationToken);
-                files.Add(new ScanFile(file, [rootIds[project.Id]], DeclaredSymbols(root, model, cancellationToken)));
+                files.Add(new ScanFile(file, [.. graph.CompilingProjects[document.FilePath!].Select(project => rootIds[project])], DeclaredSymbols(root, model, cancellationToken)));
                 http.Extract(root, model, file, evidence.Extract(root, model, file, cancellationToken), cancellationToken);
             }
-            foreach (ProjectReference reference in project.ProjectReferences)
-            {
-                if (!rootIds.ContainsKey(reference.ProjectId))
-                    throw new InvalidDataException("A source project reference was not loaded; no observation will be published.");
-            }
         }
-        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_CONTEXT", $"Declared C# source; configuration {request.Configuration}; {projects.Length} projects. External packages, MSBuild imports and source generators are not executed."));
-        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_OPERATION_SCOPE", "Explicit calls and constructions in implemented methods, accessors, local functions, lambdas and top-level statements. Implicit language calls, initializers, generated operations, receiver/delegate value flow, DI and protocol wiring are not resolved. Direct calls are evidence, not automatically architecture relationships."));
-        string inputFile = SourcePath.Relative(request.RepositoryRoot, request.Input);
-        string? solutionId = isProject ? null : $"solution:{inputFile}";
-        List<ScanRoot> roots = projects.Select(project => new ScanRoot(rootIds[project.Id], "project", project.Name,
-            SourcePath.Relative(request.RepositoryRoot, project.FilePath!), solutionId)).ToList();
-        if (solutionId is not null)
-            roots.Add(new ScanRoot(solutionId, "solution", Path.GetFileNameWithoutExtension(request.Input), inputFile));
+        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_CONTEXT", $"Declared C# source; configuration {request.Configuration}; {graph.Projects.Count} projects. External packages, MSBuild targets and conditions, and source generators are not evaluated."));
+        diagnostics.Add(new ScanDiagnostic("info", "CSHARP_OPERATION_SCOPE", "Explicit calls and constructions in implemented methods, accessors, local functions, lambdas and top-level statements. Implicit language calls, initializers, generated operations, receiver/delegate value flow, DI and protocol wiring are not resolved."));
         ScanOperation[] operations = [.. evidence.Operations, .. http.Operations];
         var (served, sent) = http.Facts(operations.Select(operation => operation.Id).ToHashSet(StringComparer.Ordinal));
         return ScanObservation.Create(
             new ScannerIdentity("csharp", "c#/.NET", "roslyn", typeof(CSharpCompilation).Assembly.GetName().Version!.ToString()),
-            roots, files, diagnostics, operations, evidence.Invocations, sourceUnits, served, sent, entryPoints);
+            Roots(graph, rootIds), files, diagnostics, operations, evidence.Invocations, sourceUnits, served, sent, entryPoints);
     }
 
-    private static void CheckCompilation(Compilation compilation, Project project, string root, List<ScanDiagnostic> diagnostics, CancellationToken token)
+    /// <summary>Each project under the first input solution that lists it, and those solutions.</summary>
+    private static List<ScanRoot> Roots(ProjectGraph graph, Dictionary<string, string> rootIds)
     {
-        Diagnostic[] errors = compilation.GetDiagnostics(token)
-            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-            .OrderBy(diagnostic => diagnostic.Location.SourceTree?.FilePath, StringComparer.Ordinal)
-            .ThenBy(diagnostic => diagnostic.Location.SourceSpan.Start)
-            .ThenBy(diagnostic => diagnostic.Id, StringComparer.Ordinal).ToArray();
+        string SolutionId(string solution) => $"solution:{SourcePath.Relative(graph.Root, solution)}";
+        List<ScanRoot> roots = [.. graph.Projects.Select(project => new ScanRoot(rootIds[project.File.Path], "project", project.Name,
+            SourcePath.Relative(graph.Root, project.File.Path), graph.Solutions.TryGetValue(project.File.Path, out string? solution) ? SolutionId(solution) : null))];
+        roots.AddRange(graph.Projects.Select(project => graph.Solutions.GetValueOrDefault(project.File.Path)).OfType<string>().Distinct(StringComparer.Ordinal)
+            .Select(solution => new ScanRoot(SolutionId(solution), "solution", Path.GetFileNameWithoutExtension(solution), SourcePath.Relative(graph.Root, solution))));
+        return roots;
+    }
+
+    /// <summary>The compiler's entry point when it is a scanned repository source, with the scanned files this project compiles.</summary>
+    private static ScanEntryPoint? EntryPoint(Compilation compilation, ProjectNode node, ProjectGraph graph, CancellationToken cancellationToken)
+    {
+        string? entry = compilation.GetEntryPoint(cancellationToken)?.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath;
+        bool Scanned(string? file) => file is not null && graph.CompilingProjects.ContainsKey(file);
+        if (!Scanned(entry)) return null;
+        return new ScanEntryPoint(SourcePath.Relative(graph.Root, entry!), SourcePath.Relative(graph.Root, node.File.Path), node.Name,
+            [.. node.Sources.Where(Scanned).Select(file => SourcePath.Relative(graph.Root, file)).Order(StringComparer.Ordinal)]);
+    }
+
+    /// <summary>
+    /// Invalid syntax fails the scan. Compiler errors in files this project analyzes, and errors without a source file,
+    /// such as a missing entry point, become warnings located by file and line; another project reports its own files.
+    /// </summary>
+    private static void CheckCompilation(Compilation compilation, ProjectNode node, ProjectGraph graph, List<ScanDiagnostic> diagnostics, CancellationToken token)
+    {
         foreach (SyntaxTree tree in compilation.SyntaxTrees)
             if (tree.GetDiagnostics(token).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
-                throw new InvalidDataException($"Invalid C# syntax in '{tree.FilePath}'.");
-        diagnostics.AddRange(errors.Select(error => new ScanDiagnostic("warning", error.Id, NormalizeMessage(error.ToString(), root))));
+                throw new InvalidDataException($"Invalid C# syntax in '{SourcePath.Relative(graph.Root, tree.FilePath)}'.");
+        foreach (Diagnostic error in compilation.GetDiagnostics(token).Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
+        {
+            string message = NormalizeMessage(error.GetMessage(CultureInfo.InvariantCulture), graph.Root);
+            string? path = error.Location.IsInSource ? error.Location.SourceTree?.FilePath : null;
+            if (string.IsNullOrEmpty(path))
+                diagnostics.Add(new ScanDiagnostic("warning", error.Id, message, SourcePath.Relative(graph.Root, node.File.Path)));
+            else if (graph.Analyzes(node, path))
+                diagnostics.Add(new ScanDiagnostic("warning", error.Id, message, SourcePath.Relative(graph.Root, path), error.Location.GetLineSpan().StartLinePosition.Line + 1));
+        }
     }
 
+    /// <summary>Named types a file declares; a C# 14 extension block extends another type and names none.</summary>
     private static ScanSymbol[] DeclaredSymbols(SyntaxNode root, SemanticModel model, CancellationToken token) =>
         root.DescendantNodes().OfType<MemberDeclarationSyntax>()
-            .Where(declaration => declaration is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax)
+            .Where(declaration => declaration is (BaseTypeDeclarationSyntax and not ExtensionBlockDeclarationSyntax) or DelegateDeclarationSyntax)
             .Select(declaration =>
             {
                 INamedTypeSymbol symbol = model.GetDeclaredSymbol(declaration, token) as INamedTypeSymbol
@@ -102,7 +112,7 @@ public sealed class RoslynScanner
         StructDeclarationSyntax => "struct",
         EnumDeclarationSyntax => "enum",
         DelegateDeclarationSyntax => "delegate",
-        _ => throw new InvalidDataException("Unsupported type declaration."),
+        _ => throw new InvalidDataException($"Unsupported type declaration: {declaration.Kind()}."),
     };
 
     private static string NormalizeMessage(string message, string root)
