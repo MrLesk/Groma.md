@@ -1,11 +1,11 @@
 ---
 id: TASK-481
 title: Move map changes smoothly between world updates
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-22 05:47'
-updated_date: '2026-09-22 20:29'
+updated_date: '2026-09-24 16:22'
 labels: []
 dependencies: []
 references:
@@ -26,20 +26,32 @@ When the world changes (a save, a timelapse step, another revision), the sheet i
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A world update blends the displayed sheet into the new one over a short transition instead of repainting it in place
-- [ ] #2 Elements only in the new sheet grow from their centre and elements only in the old sheet shrink away; shared elements and routes keep their identity
-- [ ] #3 A hand-positioned camera stays where it is during the blend; an untouched camera follows the changing sheet on the same clock
-- [ ] #4 Reduced motion and very large maps apply the update at once
-- [ ] #5 Focused tests cover the blend and the motion state; bun run check passes
+- [x] #1 A world update blends the displayed sheet into the new one over a short transition instead of repainting it in place
+- [x] #2 Elements only in the new sheet grow from their centre and elements only in the old sheet shrink away; shared elements and routes keep their identity
+- [x] #3 A hand-positioned camera stays where it is during the blend; an untouched camera follows the changing sheet on the same clock
+- [x] #4 Reduced motion and very large maps apply the update at once
+- [x] #5 Focused tests cover the blend and the motion state; bun run check passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Add iso/morph.ts with a pure tweenSheet(from, to, amount): islands and zones match by key, slabs and buildings by representationId, routes by id. Shared items interpolate their cells, new items grow from their centre, departed items shrink away, and routes draw on or retract.
+
+2. Let createMapMotion in iso/presentation.ts own the displayed sheet: retarget starts a 700 ms blend from what is shown, an update during a blend takes the observed interval (at least 160 ms), and reduced motion, an unchanged sheet or more than 500 buildings plus slabs apply at once.
+
+3. In render.ts present the motion's sheet, retarget before painting, and let an untouched camera follow the blend on the same clock while a hand-positioned camera stays; move the viewport measurement to chrome/shell.ts measureFrame to keep render.ts under 500 lines.
+
+4. Cover the blend and motion state in test-bun/web-sheet-morph.test.ts, describe world updates in the web viewer guide, run bun run check, and watch the timelapse in the browser.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
@@ -51,6 +63,8 @@ Motion: createMapMotion(initial) in presentation.ts now owns the displayed sheet
 render.ts: projectedScene presents mapMotion.sheet; applyWorld calls mapAnimator.retarget before painting and, when a blend runs, camera.frame(fitted, 0) instead of camera.move(fitted) so the camera follows the growing sheet on the same clock from where it is; repaintScene skips camera framing during a blend when the viewer positioned the camera (touched). The viewport measurement moved to shell.ts measureFrame to keep render.ts under 500 lines.
 
 Verified: bun run check passed (696 tests); test-bun/web-sheet-morph.test.ts covers the blend ends, gliding, growing and shrinking, route drawing and corner matching, a real placement from nothing (finite geometry), the motion timing, the fast-update clamp, reduced motion and the unchanged shortcut. Watched in the browser through the two Slidev decks' timelapse (300 ms and 700 ms per commit) and filmed frame by frame with the video rig.
+
+Finalized on 2026-09-24 after the code landed in aefa3c8d. Re-verified on main b30b74f2 in a clean worktree: bun test test-bun/web-embedding.test.ts test-bun/web-sheet-morph.test.ts, 11 pass, 0 fail. The plan was recorded at finalization from the notes above, which describe the final approach.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -61,4 +75,22 @@ created: 2026-09-22 20:29
 ---
 TASK-484 coordination (touch pinch): I change only the gesture sentence under What you can do in docs/viewers/web/index.md. Your paragraphs stay untouched. Please stage only TASK-481 hunks in that file.
 ---
+
+author: @claude
+created: 2026-09-22 21:14
+---
+Committed as aefa3c8d on Alex's request: iso/morph.ts and its test, iso/presentation.ts, measureFrame in chrome/shell.ts, render.ts, the presentation.md curation, the world update paragraph of the web guide, and the task record. Status left for the owner to finalize.
+---
+
+author: @claude
+created: 2026-09-23 20:10
+---
+TASK-498 coordination: I add one sentence about the drag glide under What you can do in docs/viewers/web/index.md; nothing else in the guide.
+---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+World updates now blend the displayed sheet into the new one instead of repainting it in place. iso/morph.ts matches islands, zones, slabs, buildings and routes by identity: shared ones glide, new ones grow from their centre, departed ones shrink away, and routes draw on or retract. createMapMotion owns the displayed sheet and a 700 ms blend that follows faster updates at their own pace; reduced motion, unchanged sheets and maps above 500 buildings plus slabs apply at once. An untouched camera follows the blend on the same clock, a hand-positioned one stays. Verified with test-bun/web-sheet-morph.test.ts (blend ends, gliding, growing, shrinking, route drawing, timing, fast-update clamp, reduced motion, unchanged shortcut), bun run check, and the Slidev timelapse decks filmed frame by frame.
+<!-- SECTION:FINAL_SUMMARY:END -->
