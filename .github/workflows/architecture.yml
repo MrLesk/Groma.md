@@ -10,7 +10,7 @@ permissions:
   pages: read
 
 env:
-  GROMA_THEME: blueprint
+  GROMA_THEME: auto
 
 concurrency:
   group: pages
