@@ -26,10 +26,10 @@ establish a runtime workflow.
 
 | Command | Targets |
 | --- | --- |
-| `groma add relation <source> <target> --description <prose> --technology <text>` | two endpoints; writes one current authored row per ordered pair |
-| `groma draft relation <source> <target> --description <prose> --technology <text>` | two endpoints; plans a link, even between existing components |
+| `groma add relation <source> <target> --description <text> --technology <text>` | two endpoints; writes one current authored row per ordered pair |
+| `groma draft relation <source> <target> --description <text> --technology <text>` | two endpoints; plans a link, even between existing components |
 | `groma accept relation <source> <target>` | the endpoints of a draft relationship; scans never accept it |
-| `groma edit relation <source> <target> [--description <prose>] [--technology <text>]` | the endpoints of an existing relationship; its lifecycle stays |
+| `groma edit relation <source> <target> [--description <text>] [--technology <text>]` | the endpoints of an existing relationship; its lifecycle stays |
 | `groma remove relation <source> <target>` | the endpoints of a draft relationship that no flow uses |
 | `groma add flow <title> --overview <prose> --steps <markdown-table>` | the title of a new flow; its ID is the title in kebab case |
 | `groma edit <flow-id> [--title <text>] [--overview <prose>] [--steps <markdown-table>]` | a flow ID |
@@ -41,8 +41,17 @@ there. When either endpoint is an actor or external system, endpoints may be
 element IDs. Current relationships cannot be removed, including after explicit
 acceptance.
 
-For a relationship, `--description` states what the source does with the
-target, and `--technology` states how they interact.
+## Relationship descriptions
+
+`--description` is a short verb phrase for what the source does with the
+target, usually two to five words: `Authorizes payments`, not `Sends the card,
+amount, and currency to authorize a payment`. Start with the verb: the terminal
+map prints only the first word on a route, two at the Components level. Name
+one purpose, without lists. Leave out what the map already shows: the
+endpoints, where they live, and the mechanism, which `--technology` names. Put
+further detail in the source element's overview or a flow step's Action.
+Viewers list every description of the relationships they combine into one
+pair, so each must stay short.
 
 ## Flow steps
 
