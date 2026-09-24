@@ -9,7 +9,7 @@ import { islandsSvg, sheetSvg, slabsSvg } from './paint-ground.ts'
 import { routesSvg } from './paint-routes.ts'
 import { createGrid } from './grid.ts'
 import { DEFAULT_PROJECTION } from './project.ts'
-import { facadeDetailsVisible, weightAt } from './scale.ts'
+import { facadeDetailsVisible, surfacePatternsVisible, weightAt } from './scale.ts'
 import { HOVERABLE, mapDefs } from './style.ts'
 import { patch, svg } from './svg.ts'
 import { surfaceLabelStep } from './text.ts'
@@ -217,6 +217,7 @@ export function createMap(host: HTMLElement): IsoMap {
     camera.style.setProperty('--weight', String(weightAt(view.zoomRatio)))
     camera.style.setProperty('--camera-scale', String(current.k))
     camera.toggleAttribute('data-facades-hidden', !facadeDetailsVisible(current.k))
+    camera.toggleAttribute('data-surface-patterns-hidden', !surfacePatternsVisible(current.k))
     repainted = false
     // The cached layer keeps a transform at rest: removing it and setting it again on the next pan makes Safari redraw the whole map.
     camera.style.transform = 'translate(0px, 0px) scale(1)'

@@ -3,7 +3,7 @@ import { layerCss } from '../layers/paint.ts'
 import { glowCss } from './glow.ts'
 import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
 import type { Plane, ProjectionView } from './project.ts'
-import { FACADE_MARK, SIDE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
+import { FACADE_MARK, SIDE, SURFACE_TILE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
 import type { Level } from './scale.ts'
 import { mark, node, type SvgNode } from './svg.ts'
 
@@ -57,13 +57,13 @@ export function facadePattern(
  */
 export function mapDefs(view: ProjectionView = DEFAULT_PROJECTION): SvgNode[] {
   return [
-    ...tile('dots', 'ground', 8, [dot], view),
+    ...tile('dots', 'ground', SURFACE_TILE, [dot], view),
     ...tile('dots-left', 'left', 8, [dot], view), ...tile('dots-right', 'right', 8, [dot], view),
-    ...tile('cross', 'ground', 8, [cross], view),
+    ...tile('cross', 'ground', SURFACE_TILE, [cross], view),
     ...tile('cross-left', 'left', 8, [cross], view), ...tile('cross-right', 'right', 8, [cross], view),
     ...tile('lines-left', 'left', 6, [line], view), ...tile('lines-right', 'right', 6, [line], view),
     ...tile('grain', 'ground', 12, [mark('circle', { cx: 6, cy: 6, r: 0.6, fill: 'var(--map-hatch)' })], view),
-    ...tile('hatch-ground', 'ground', 8, [mark('path', { d: 'M0 8L8 0', ...ink })], view),
+    ...tile('hatch-ground', 'ground', SURFACE_TILE, [mark('path', { d: `M0 ${SURFACE_TILE}L${SURFACE_TILE} 0`, ...ink })], view),
   ]
 }
 
@@ -85,7 +85,7 @@ function surfaceColours(kind: string, depth: number, palette?: Palette): string 
     #map .${kind} .left { fill: ${paintTint(tintAt(depth + SIDE.left), palette)}; }`
 }
 
-/** Supplying a palette resolves theme values and compensates strokes for a fixed SVG camera. */
+/** Supplying a palette resolves theme values and compensates strokes for a fixed SVG camera. Covers render these rules with resvg, which ignores :is(), so selectors stay plain. */
 export function mapDrawingCss(palette?: Palette, zoom = 1): string {
   const paper = palette?.paper ?? 'var(--paper)'
   const ink = palette?.ink ?? 'var(--ink)'
@@ -157,6 +157,9 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
   #map .camera[data-facades-hidden] .building .pattern { display: none; }
+  #map .camera[data-surface-patterns-hidden] .island > .pattern,
+  #map .camera[data-surface-patterns-hidden] .slab > .pattern { display: none; }
+  #map .camera[data-surface-patterns-hidden] .zone > .ground { fill: transparent; }
   #map .label-hit { fill: transparent; stroke: none; pointer-events: all; }
   #map .label-leader {
     stroke: ${line}; ${width}

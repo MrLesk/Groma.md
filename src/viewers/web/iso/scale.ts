@@ -47,3 +47,11 @@ export function weightAt(zoomRatio: number): number {
 export function facadeDetailsVisible(k: number): boolean {
   return k * FACADE_MARK >= 1
 }
+
+/** Island dots and crosses and the group hatching repeat this many world pixels apart; slab grain is coarser. */
+export const SURFACE_TILE = 8
+
+/** A repeat shorter than two screen pixels cannot be drawn: it reads as flat grey or moiré and only costs Safari paint time. */
+export function surfacePatternsVisible(k: number): boolean {
+  return k * SURFACE_TILE >= 2
+}

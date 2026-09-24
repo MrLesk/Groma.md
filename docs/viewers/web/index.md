@@ -569,7 +569,9 @@ source evidence keep plain storey lines,
 actor sides and the actors island dots, external sides and the
 external island crosses, container slabs a faint grain, and system
 islands have none; every pattern is laid in the plane it lies on. Facade
-patterns stop below readable size while every floor face remains. Grid lines
+patterns stop below readable size while every floor face remains. Surface
+patterns, the island dots and crosses, slab grain and group hatching, stop once
+the dots, crosses and hatching repeat closer than two screen pixels. Grid lines
 thin as their rows close up, so the grid keeps one weight at every zoom, and
 rows closer than six pixels leave: minor rows first, then the whole grid.
 Sibling groups are flat hatched zones around their members. Their names use
