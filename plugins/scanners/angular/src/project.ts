@@ -35,7 +35,7 @@ export async function angularSourceFiles(root: string): Promise<string[]> {
 }
 
 /**
- * Settings the bundled TypeScript 5.9 cannot read: an extended config a fresh checkout lacks (an uninstalled
+ * Settings the bundled TypeScript cannot read: an extended config a fresh checkout lacks (an uninstalled
  * package or a generated file), or an option or value from a newer TypeScript. The rest of the config still applies.
  */
 const unreadable = new Set([5083, 6053, 5023, 6046])

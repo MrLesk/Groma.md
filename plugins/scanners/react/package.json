@@ -34,8 +34,8 @@
     "typescript": "6.0.3"
   },
   "devDependencies": {
-    "@types/react": "19.2.17",
-    "react": "19.2.7"
+    "@types/react": "19.3.0",
+    "react": "19.3.0"
   },
   "description": "Complementary React framework evidence; a dependency declaration does not verify runtime use."
 }

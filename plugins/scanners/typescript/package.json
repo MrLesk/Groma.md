@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@groma/scanner": "workspace:*",
-    "typescript": "7.1.0-dev.20260905.1"
+    "typescript": "7.1.0-dev.20260924.1"
   },
   "description": "TypeScript source and call evidence using the native TypeScript SDK.",
   "groma": {

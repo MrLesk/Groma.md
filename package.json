@@ -53,29 +53,27 @@
     "check": "biome lint && bun scripts/lint-web-scrollbars.ts && bun run typecheck && bun run test"
   },
   "dependencies": {
-    "@clack/core": "1.4.3",
-    "@clack/prompts": "1.7.0",
-    "@comark/html": "0.6.2",
+    "@clack/core": "1.5.1",
+    "@clack/prompts": "1.8.1",
+    "@comark/html": "0.7.0",
     "@groma/scanner": "workspace:*",
     "@groma/work-source": "workspace:*",
     "@groma/work-source-backlog": "workspace:*",
-    "@opentui/core": "0.5.10",
+    "@opentui/core": "0.5.12",
     "@parcel/watcher": "2.6.0",
     "@resvg/resvg-wasm": "2.6.2",
-    "comark": "0.6.2",
+    "comark": "0.7.0",
     "commander": "15.0.0",
     "diff": "9.0.0",
     "fuse.js": "7.5.0",
-    "ignore": "7.0.9",
-    "web-worker": "1.5.0",
-    "webcola": "3.4.0"
+    "ignore": "7.0.10"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
-    "@types/bun": "1.4.1",
-    "@types/node": "26.4.1",
-    "tsx": "4.23.13",
-    "typescript": "7.1.0-dev.20260905.1"
+    "@biomejs/biome": "2.5.14",
+    "@types/bun": "1.4.2",
+    "@types/node": "26.6.2",
+    "tsx": "4.23.15",
+    "typescript": "7.1.0-dev.20260924.1"
   },
   "patchedDependencies": {
     "@parcel/watcher@2.6.0": "patches/@parcel%2Fwatcher@2.6.0.patch"

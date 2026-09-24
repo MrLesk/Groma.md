@@ -31,14 +31,16 @@ Application code is never executed.
 
 ## Compiler tooling
 
-The package pins `@angular/compiler` to 21.2.17 and its own TypeScript to
-5.9.3. Angular 21.2 supports TypeScript 5.9; see the
-[official compatibility table](https://angular.dev/reference/versions). A config
+The package bundles `@angular/compiler` and its own TypeScript 6.0. Angular
+supports that TypeScript, see the
+[official compatibility table](https://angular.dev/reference/versions), and it
+is the last release with the classic compiler API this scanner uses. The package
+manifest pins the exact versions. A config
 setting this TypeScript cannot read, such as an option from a newer TypeScript
 or an extended config the checkout lacks, produces an `angular-unreadable-config`
 warning; the rest of the config applies.
-The TypeScript scanner uses its own 7.1 SDK. The package build resolves every
-compiler TypeScript import to the scanner's 5.9.3 installation before bundling,
+The TypeScript scanner uses the native TypeScript 7 SDK. The package build resolves every
+compiler TypeScript import to the scanner's own installation before bundling,
 so workspace dependency hoisting cannot substitute Groma's compiler.
 
 Angular's template parser and selector matcher read template syntax. TypeScript

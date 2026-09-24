@@ -244,7 +244,7 @@ export function createClackInitUi(): InitCommandUi {
     note: (message, title) => note(message, title, accent),
     outro: message => output.write(`${styleText('gray', S_BAR)}\n${accent(S_BAR_END)}  ${message}\n\n`),
     projectName: async current => selected(await textPrompt('Project name', accent, current)),
-    selectScanners: async candidates => selected(await multiselect({
+    selectScanners: async candidates => selected<string[]>(await multiselect({
       message: 'Install selected scanner packages',
       options: candidates.map(item => ({ value: item.id, label: item.installSource! })),
       initialValues: candidates.map(item => item.id),

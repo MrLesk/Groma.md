@@ -6,7 +6,7 @@ import ts from 'typescript'
 import type { ScanDiagnostic, ScanSourceUnit } from '@groma/scanner'
 import { hasDependency } from '../../projects.ts'
 
-// Hoisted tooling declarations see the host SDK; the bundled runtime uses pinned TS 5.9.3.
+// Hoisted tooling declarations see the host SDK; the bundled runtime uses the package's pinned TypeScript.
 export const vueTypeScript = ts as unknown as Parameters<typeof createVueLanguagePlugin>[0]
 
 export function relative(root: string, file: string): string {

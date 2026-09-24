@@ -99,9 +99,8 @@ async function analyzeProject(
       moduleResolution: ModuleResolutionKind.Bundler, module: ModuleKind.Preserve,
     }
     // Repository packages resolve to their source without node_modules; an identical key in the config's own paths wins.
-    const program = await api.createProgram(project.files, {
-      compilerOptions: { ...options, paths: { ...workspacePaths, ...options.paths }, noEmit: true },
-    })
+    const program = await api.createProgram(project.files,
+      { ...options, paths: { ...workspacePaths, ...options.paths }, noEmit: true })
     const sources = await Promise.all(paths.map(file => program.getSourceFile(path.join(repositoryRoot, file))))
     const selectedProgramSources = sources.filter((source): source is SourceFile => source !== undefined)
     const checker = program.getProject().checker

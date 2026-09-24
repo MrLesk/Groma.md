@@ -20,8 +20,8 @@ groma scanner check
 groma scan
 ```
 
-The private prototype package bundles TypeScript 6.0.3 and its standard-library
-declarations. the TypeScript scanner's 7.1 SDK is unchanged. No consumer build
+The private prototype package bundles TypeScript 6.0 and its standard-library
+declarations. The TypeScript scanner keeps its native TypeScript 7 SDK. No consumer build
 or installation script is required. Public naming and publication are separate
 release decisions.
 
@@ -44,9 +44,9 @@ The scanner does not run application code or require successful type checking.
 [React documents callback props](https://react.dev/learn/responding-to-events).
 [TypeScript owns JSX parsing and checking](https://www.typescriptlang.org/docs/handbook/jsx.html),
 project membership, imported component identities, and source symbols.
-The adapter uses the maintained JavaScript compiler API pinned to 6.0.3;
-[TypeScript 6.0](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html)
-retains the established compiler API. The plugin does not recreate language
+The adapter uses the classic compiler API of its bundled
+[TypeScript 6.0](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html),
+the last release that retains it. The plugin does not recreate language
 name or type resolution.
 
 A component, and a handler the JSX attribute names, must resolve to a source

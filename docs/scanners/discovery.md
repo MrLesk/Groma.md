@@ -118,7 +118,7 @@ inventory, recommendations, and coverage limits for the installation workflow.
 
 Angular is complementary to the TypeScript scanner even when both inspect the
 same files. Angular's compiler compatibility and its own compatible TypeScript
-tooling are separate from the TypeScript scanner's 7.1 SDK. Discovery proposes both scanners when applicable; it does not replace
+tooling are separate from the TypeScript scanner's native TypeScript 7 SDK. Discovery proposes both scanners when applicable; it does not replace
 TypeScript to avoid shared file coverage.
 
 Vue and React add complementary framework evidence when TypeScript is also selected.

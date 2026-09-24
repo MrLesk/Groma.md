@@ -226,8 +226,8 @@ test.concurrent('Angular scans an Nx application through its solution config wit
       configurations: { production: { fileReplacements: [{ replace: `${shop}/env.ts`, with: `${shop}/env.prod.ts` }] } },
     } } }),
     'apps/shop/tsconfig.json': JSON.stringify({ files: [], references: [{ path: './tsconfig.app.json' }] }),
-    // A TypeScript 6 option the scanner's compiler does not know.
-    'apps/shop/tsconfig.app.json': JSON.stringify({ extends: '../../tsconfig.base.json', compilerOptions: { stableTypeOrdering: true }, include: ['src/**/*.ts'] }),
+    // A TypeScript 7 option the scanner's compiler does not know.
+    'apps/shop/tsconfig.app.json': JSON.stringify({ extends: '../../tsconfig.base.json', compilerOptions: { singleThreaded: true }, include: ['src/**/*.ts'] }),
     [`${shop}/main.ts`]: "import { Shop } from './shop'\nimport { env } from './env'\nexport const app = [Shop, env]\n",
     [`${shop}/polyfills.ts`]: 'export {}\n',
     [`${shop}/env.ts`]: 'export const env = {}\n',

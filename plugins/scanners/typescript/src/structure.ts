@@ -15,7 +15,7 @@ export async function readCodeStructure(
   const filenames = references.map(reference => path.join(repositoryRoot, reference.file))
   const api = new API({ cwd: repositoryRoot })
   try {
-    const snapshot = await api.updateSnapshot({ openFiles: filenames })
+    const snapshot = await api.createSnapshot({ openFiles: filenames })
     const files: CodeFile[] = []
     for (const [index, filename] of filenames.entries()) {
       const project = await snapshot.getDefaultProjectForFile(filename)

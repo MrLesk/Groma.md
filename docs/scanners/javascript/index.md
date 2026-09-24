@@ -17,7 +17,7 @@ groma scanner add /absolute/path/to/groma/plugins/scanners/javascript/dist/packa
 groma scan
 ```
 
-The package bundles the TypeScript 6.0.3 compiler, whose parser reads
+The package bundles the TypeScript 6.0 compiler, whose parser reads
 JavaScript, including JSX in `.js` and `.jsx` files, and includes its license
 notices. Every file is parsed on its own, so no project configuration, module
 resolution or other file changes what a file reports. The compiler's declaration

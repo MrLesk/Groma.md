@@ -18,10 +18,11 @@ groma scanner add /absolute/path/to/groma/plugins/scanners/vue/dist/package
 groma scan
 ```
 
-The package bundles Vue language-core 3.3.11, Volar TypeScript 2.4.28,
-Vue compiler-dom 3.5.42 and its own TypeScript 5.9.3. Compiler-sfc 3.5.42
+The package bundles Vue language-core, Volar TypeScript, Vue compiler-dom and
+its own TypeScript 6.0, the last release with the classic compiler API these
+tools use; the package manifest pins the exact versions. Compiler-sfc
 provides build-time declarations only. The build
-pins compiler imports to that TypeScript installation. The separate TypeScript scanner uses its own 7.1 SDK. Compiler libraries and Vue helper declarations
+pins compiler imports to that TypeScript installation. The separate TypeScript scanner uses the native TypeScript 7 SDK. Compiler libraries and Vue helper declarations
 ship in the package; no consumer build or installation script is required.
 
 [Vue language tools](https://github.com/vuejs/language-tools) supply project
