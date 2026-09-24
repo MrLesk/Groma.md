@@ -75,7 +75,7 @@ write architecture. Missing packages do not prevent available scanners from
 running. Partial scans keep Code and relationships from absent scanners, including
 relationships that need several scanners. An active scanner failure keeps that scanner's
 saved result while successful scanners update theirs. Each failed scanner shows
-its own error. Setup reports readiness problems and continues to the scan. Package changes and shared exclusions update
+its own error. Setup reports readiness problems and continues to the scan. Package changes and exclusion lists update
 subscriptions without restarting. Architecture and Backlog updates have separate
 subscriptions.
 

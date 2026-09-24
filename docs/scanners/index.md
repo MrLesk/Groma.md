@@ -46,8 +46,9 @@ Source watching belongs to one shared source runtime per watch session. The
 first relevant change collects an initial observation from every enabled scanner.
 Each scanner declares `watch.include` and `watch.exclude` patterns for source
 and configuration changes, including newly created files. The shared runtime
-matches paths against those declarations and groups nearby
-changes and runs only matching scanners; overlapping subscriptions run together.
+matches paths against those declarations, outside each scanner's configured
+exclusions, groups nearby changes and runs only matching scanners; overlapping
+subscriptions run together.
 Changes received during analysis are queued, and scanner runs never overlap.
 
 The session retains each scanner's latest successful observation in memory.
@@ -133,13 +134,16 @@ on retained entries. See the [plugin contract](creating-a-plugin.md#scanner-sett
 
 ## Excluding source evidence
 
-Add an optional shared `exclude` array to `scanners.json` inside the selected
-`groma/` or `.groma/` directory. Keep any existing `scanners` entries:
+`scanners.json` inside the selected `groma/` or `.groma/` directory holds two
+kinds of exclusion list: a global `exclude` array for every scanner, and an
+`exclude` array on a scanner entry for that scanner alone:
 
 ```json
 {
-  "scanners": [],
-  "exclude": ["/scripts/", "**/*.generated.ts", "!src/keep.generated.ts"]
+  "scanners": [
+    { "id": "typescript", "source": "./plugins/typescript", "exclude": ["**/*.test.ts", "!/test/"] }
+  ],
+  "exclude": ["/scripts/", "/test/", "**/*.generated.ts", "!src/keep.generated.ts"]
 }
 ```
 
@@ -152,19 +156,27 @@ cannot restore a file inside an excluded parent directory. `*`, `?`, character
 ranges such as `[0-9]`, comments starting with `#`, and backslash escapes follow
 the same Git ignore rules. In JSON, write a backslash as `\\`.
 
-The list selects new evidence from every enabled scanner, including files
-tracked by Git. Omitting `exclude` or using `[]` adds no exclusions. Each
-scanner keeps its own language coverage and default exclusions; `!` does not
-restore files omitted by those defaults. When a scanner lists source files and
-all of them are excluded, Groma skips its readiness check and scan. This keeps
+The global list selects new evidence from every enabled scanner, including
+files tracked by Git. A scanner's own list applies after it and to that scanner
+alone, so it can add patterns, or restore with `!` a file the global list
+excludes, as `!/test/` does for the TypeScript scanner above. A global `!`
+pattern cannot restore a file a scanner's own list excludes; edit that scanner's
+list instead. Adding a scanner with `groma scanner add`, setup, init or the web
+writes the default exclusions its package declares into its entry, where they
+are edited like any other pattern; updating a scanner keeps the entry's list.
+Omitting `exclude` or using `[]` adds no exclusions. Each scanner keeps its own
+language coverage and built-in rules; `!` does not restore files omitted by
+those rules. When a scanner lists source files and all of them are excluded for
+it, Groma skips its readiness check and scan. This keeps
 excluded test projects from blocking a scan on incomplete fixture inputs.
 When included sources remain, compiler analysis can still read excluded files
 as context. A failed scanner keeps its saved evidence while successful scanners
 publish their results.
 
-Run `groma scan` after editing the list. Restart an active viewer or
-`groma scan --watch` to load the new configuration; excluded source paths no
-longer trigger its scans. Scanner add, remove, and setup preserve the list.
+Run `groma scan` after editing a list. Active viewers reload the configuration
+on their own; restart `groma scan --watch` to load it. Excluded source paths no
+longer trigger scans. Scanner add, update, remove and setup keep the existing
+lists.
 
 Exclusions do not delete or hide components already stored on the map, and
 do not change their ownership or authored Markdown. New excluded files do not

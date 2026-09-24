@@ -59,7 +59,7 @@ test.concurrent('fully excluded Vue sources skip readiness and scanning until th
   } finally { await Promise.all([root, artifact].map(directory => rm(directory, { recursive: true, force: true }))) }
 })
 
-test.concurrent('shared exclusions prevent readiness and scan hooks from running against excluded inputs', async () => {
+test.concurrent('global and scanner exclusions keep readiness and scan hooks off excluded inputs', async () => {
   const root = await repository()
   try {
     await write(root, 'hidden/source.fixture', 'source')
@@ -81,6 +81,11 @@ test.concurrent('shared exclusions prevent readiness and scan hooks from running
     expect((await checkScannerReadiness(root)).map(item => item.project)).toEqual(['blocked'])
     expect((await (await loadScannerRegistry(root)).collectObservations(root)).failures.map(failure => failure.scanner))
       .toEqual(['fixture'])
+
+    // The scanner's own list keeps its hooks off the input as well.
+    await writeScannerConfig(root, { scanners: [{ ...scanners[0]!, exclude: ['/hidden/'] }] })
+    expect((await checkScannerReadiness(root)).map(item => item.project)).toEqual(['ready'])
+    expect((await (await loadScannerRegistry(root)).collectObservations(root)).failures).toEqual([])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -116,10 +121,10 @@ function observation(language: string): ScanObservation {
   })
 }
 
-async function plugin(root: string, id: string, scan = observation(id)): Promise<string> {
+async function plugin(root: string, id: string, scan = observation(id), exclude?: string[]): Promise<string> {
   const source = `./plugins/${id}`
   await write(root, `${source}/package.json`, JSON.stringify({
-    name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js' } },
+    name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js', ...(exclude && { exclude }) } },
   }))
   await write(root, `${source}/index.js`, `export default {
     id: ${JSON.stringify(id)}, watch: { include: ['**/*.html'], exclude: [] },
@@ -159,6 +164,26 @@ test.concurrent('every scanner filters complete evidence without narrowing invoc
     expect(model.relationships).toEqual([])
     await configure(root, ['**'])
     expect((await (await loadScannerRegistry(root)).collectObservations(root)).observations).toEqual([])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a scanner list, written from its install defaults, follows the global list for that scanner alone', async () => {
+  const root = await repository()
+  try {
+    for (const file of observation('fixture').files) await write(root, file.file, 'export const value = 1\n')
+    await addScanner(root, await plugin(root, 'first'))
+    await addScanner(root, await plugin(root, 'second', undefined, ['/src/other.ts']))
+    const config = await readScannerConfig(root)
+    expect(config.scanners.find(scanner => scanner.id === 'second')?.exclude).toEqual(['/src/other.ts'])
+    await writeScannerConfig(root, { exclude: ['/scripts/'], scanners: config.scanners.map(scanner =>
+      scanner.id === 'first' ? { ...scanner, exclude: ['!/scripts/'] } : scanner) })
+    const registry = await loadScannerRegistry(root)
+    const files = Object.fromEntries((await registry.collectObservations(root)).observations
+      .map(scan => [scan.scanner.id, scan.files.map(file => file.file).sort()]))
+    expect(files.first).toEqual(['scripts/hidden.ts', 'src/kept.ts', 'src/other.ts', 'src/view.html'])
+    expect(files.second).toEqual(['src/kept.ts', 'src/view.html'])
+    // Only the first scanner still reads the folder, so a change there still triggers it.
+    expect(registry.watchesFile('scripts/page.html')).toBeTrue()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

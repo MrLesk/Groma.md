@@ -24,7 +24,7 @@ test.concurrent('npm updates resolve omitted and bare sources, pin compatible re
     const pkg = path.join(root, 'package')
     await mkdir(pkg)
     for (const version of ['1.0.0', '1.1.0', '2.0.0']) {
-      const manifest = { name, version, groma: { scanner: { id: 'sample', entry: './index.js', discovery: {
+      const manifest = { name, version, groma: { scanner: { id: 'sample', entry: './index.js', exclude: ['**/*.snap'], discovery: {
         technologies: ['sample'], rules: [], compatibility: { groma: version === '2.0.0' ? '^9.0.0' : packageJson.version },
       } } } }
       await writeFile(path.join(pkg, 'package.json'), JSON.stringify(manifest))
@@ -37,7 +37,8 @@ test.concurrent('npm updates resolve omitted and bare sources, pin compatible re
     const options = { registry: server.url.href, cacheRoot: path.join(root, 'cache') }
     const config = { exclude: ['generated/**'], scanners: [
       { id: 'other', source: './other' },
-      { id: 'sample', source: `${name}@1.0.0`, settings: { include: ['src/**'] } },
+      // An update keeps the entry's own exclusions rather than the package's current defaults.
+      { id: 'sample', source: `${name}@1.0.0`, settings: { include: ['src/**'] }, exclude: ['**/*.gen.ts'] },
     ] }
     for (const source of [undefined, name]) {
       await writeScannerConfig(root, config)

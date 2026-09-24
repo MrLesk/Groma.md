@@ -1,11 +1,8 @@
-import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-
-import ignore from 'ignore'
 
 import type { ScannerPlugin, ScannerSettings, ScanObservation } from '@groma/scanner'
 
-import { readScannerConfig } from './modules/config.ts'
+import { exclusion, exclusionPatterns, readScannerConfig, stringArray, type ScannerConfig } from './modules/config.ts'
 import { configuredScannerModules } from './modules/inventory.ts'
 import type {
   FoundScannerModule,
@@ -27,7 +24,7 @@ export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
   collectObservations(repositoryRoot: string, changedFiles?: readonly string[], onScan?: (event: ScanEvent) => void): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
-  /** In scanner id order, the scanners that would analyze this file now and those whose listing failed; the caller excludes configured patterns first. */
+  /** In scanner id order, the scanners whose listing selects this file, before their exclusions, and those whose listing failed. */
   readersOfFile(repositoryRoot: string, file: string): Promise<FileReaders>
 }
 
@@ -49,9 +46,14 @@ export interface ScanBatch {
   failures: ScannerFailure[]
 }
 
-function stringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(item => typeof item === 'string')
+/** A configured scanner as the host runs it: its plugin with this project's settings and exclusions for it. */
+export interface ConfiguredPlugin {
+  plugin: ScannerPlugin
+  settings?: ScannerSettings
+  /** Whether a repository-relative path is excluded for this scanner: the global list, then the scanner's own. */
+  excluded: (file: string) => boolean
 }
+
 
 function scannerPlugin(value: unknown, expectedId: string): ScannerPlugin {
   if (value === null || typeof value !== 'object') {
@@ -74,11 +76,18 @@ export async function importScanner(entry: string, id: string): Promise<ScannerP
   return scannerPlugin(exported.default, id)
 }
 
-/** Skip analysis only when a nonempty source listing is fully outside the configured scope. */
-export async function scannerSourcesExcluded(
-  scanner: ScannerPlugin, root: string, excluded: (file: string) => boolean, settings?: ScannerSettings,
-): Promise<boolean> {
-  const files = await scanner.listSourceFiles?.(root, settings)
+/** A found scanner ready to run in this project, for scans and readiness checks alike. */
+export async function configuredPlugin(module: FoundScannerModule, config: ScannerConfig): Promise<ConfiguredPlugin> {
+  return {
+    plugin: await importScanner(module.entry, module.id),
+    ...(module.settings === undefined ? {} : { settings: module.settings }),
+    excluded: exclusion(exclusionPatterns(config, module.id)),
+  }
+}
+
+/** Skip analysis only when a nonempty source listing is fully outside the scanner's exclusions. */
+export async function scannerSourcesExcluded({ plugin, settings, excluded }: ConfiguredPlugin, root: string): Promise<boolean> {
+  const files = await plugin.listSourceFiles?.(root, settings)
   return files !== undefined && files.length > 0 && files.every(excluded)
 }
 
@@ -130,75 +139,72 @@ export async function loadScannerRegistry(
   options: ScannerResolutionOptions = {},
 ): Promise<ScannerRegistry> {
   const config = await readScannerConfig(repositoryRoot)
-  const matcher = ignore({ ignorecase: false }).add(config.exclude ?? [])
-  const excluded = (file: string) => matcher.ignores(file.split(path.sep).join('/'))
+  const globallyExcluded = exclusion(config.exclude ?? [])
   const modules = await configuredScannerModules(repositoryRoot, options)
   const found = modules.filter((module): module is FoundScannerModule => module.status === 'found')
   const proposal = found.some(module => module.discovery?.compatibility)
     ? await discoverScanners(repositoryRoot, options) : undefined
   const blocked = new Set(proposal?.recommendations.filter(item => item.status === 'incompatible').map(item => item.id))
-  const scanners = await Promise.all(found.filter(module => !blocked.has(module.id)).map(async module => {
-    try {
-      const scanner = await importScanner(module.entry, module.id)
-      const { listSourceFiles } = scanner
-      return { ...scanner, scan: (root: string, _settings?: ScannerSettings, excluded?: (file: string) => boolean) => scanner.scan(root, module.settings, excluded),
-        ...(listSourceFiles === undefined ? {} : { listSourceFiles: (root: string) => listSourceFiles.call(scanner, root, module.settings) }) }
-    } catch (error) {
+  const scanners = await Promise.all(found.filter(module => !blocked.has(module.id)).map(module =>
+    configuredPlugin(module, config).catch((error: unknown): ConfiguredPlugin => ({
       // Failed imports have no source subscription. Retry/settings reload the registry.
-      return { id: module.id, watch: { include: [], exclude: [] }, async scan() { throw error } }
-    }
-  }))
-  const registry = createScannerRegistry(scanners, excluded)
+      plugin: { id: module.id, watch: { include: [], exclude: [] }, async scan() { throw error } },
+      excluded: () => false,
+    }))))
+  const registry = createScannerRegistry(scanners)
   const discovery = compileWatchPatterns({ include: [
     ...officialScannerCatalog.flatMap(scanner => scanner.rules.flatMap(rule => rule.files)),
     ...found.flatMap(module => module.discovery?.rules.flatMap(rule => rule.files) ?? []),
   ], exclude: [] })
-  return { ...registry, watchesFile: file => registry.watchesFile(file) || (!excluded(file) && discovery(file)) }
+  return { ...registry, watchesFile: file => registry.watchesFile(file) || (!globallyExcluded(file) && discovery(file)) }
 }
 
 function firstLine(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).split('\n')[0]!
 }
 
-/** One source session retains complete evidence between selective rescans. */
-export function createScannerRegistry(
-  scanners: readonly ScannerPlugin[],
-  excluded: (file: string) => boolean,
-): ScannerRegistry {
-  const observations = new Map<ScannerPlugin, ScanObservation>()
+/**
+ * One source session retains complete evidence between selective rescans. Each scanner reads, watches and
+ * reports within its own exclusions.
+ */
+export function createScannerRegistry(scanners: readonly ConfiguredPlugin[]): ScannerRegistry {
+  const observations = new Map<ConfiguredPlugin, ScanObservation>()
   const pending = new Set(scanners)
-  const subscriptions = scanners.map(scanner => ({ scanner, matches: compileWatchPatterns(scanner.watch) }))
+  const watches = new Map(scanners.map(scanner => {
+    const watched = compileWatchPatterns(scanner.plugin.watch)
+    return [scanner, (file: string) => !scanner.excluded(file) && watched(file)] as const
+  }))
   return {
-    scannerIds: scanners.map(scanner => scanner.id),
+    scannerIds: scanners.map(({ plugin }) => plugin.id),
     async readersOfFile(root, file) {
       const answer: FileReaders = { readers: [], failures: [] }
-      const byId = [...scanners].sort((left, right) => (left.id < right.id ? -1 : 1))
-      const listings = await Promise.allSettled(byId.map(async scanner => await scanner.listSourceFiles?.(root)))
+      const byId = [...scanners].sort((left, right) => (left.plugin.id < right.plugin.id ? -1 : 1))
+      const listings = await Promise.allSettled(byId.map(async ({ plugin, settings }) => await plugin.listSourceFiles?.(root, settings)))
       for (const [index, listing] of listings.entries()) {
-        const scanner = byId[index]!.id
+        const scanner = byId[index]!.plugin.id
         if (listing.status === 'rejected') answer.failures.push({ scanner, message: firstLine(listing.reason) })
         else if (listing.value?.includes(file)) answer.readers.push(scanner)
       }
       return answer
     },
     watchesFile(relativePath) {
-      return !excluded(relativePath) && subscriptions.some(subscription => subscription.matches(relativePath))
+      return [...watches.values()].some(matches => matches(relativePath))
     },
     async collectObservations(root, changedFiles, onScan) {
-      const files = changedFiles?.filter(file => !excluded(file))
-      for (const { scanner, matches } of subscriptions) {
-        if (!files || files.some(matches)) pending.add(scanner)
+      for (const [scanner, matches] of watches) {
+        if (!changedFiles || changedFiles.some(matches)) pending.add(scanner)
       }
       const selected = [...pending]
       // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
       const results = await Promise.allSettled(selected.map(async scanner => {
+        const { plugin, settings, excluded } = scanner
         let result: ScanObservation | undefined
-        if (!await scannerSourcesExcluded(scanner, root, excluded)) {
+        if (!await scannerSourcesExcluded(scanner, root)) {
           try {
-            onScan?.({ scanner: scanner.id, type: 'start' })
-            result = await scanner.scan(root, undefined, excluded)
+            onScan?.({ scanner: plugin.id, type: 'start' })
+            result = await plugin.scan(root, settings, excluded)
           } finally {
-            onScan?.({ scanner: scanner.id, type: 'end' })
+            onScan?.({ scanner: plugin.id, type: 'end' })
           }
         }
         const observation = result && excludeEvidence(result, excluded)
@@ -211,7 +217,7 @@ export function createScannerRegistry(
         if (result.status !== 'rejected') continue
         const scanner = selected[index]!
         observations.delete(scanner)
-        failures.push(new ScannerFailure(scanner.id, result.reason))
+        failures.push(new ScannerFailure(scanner.plugin.id, result.reason))
       }
       return {
         observations: scanners.map(scanner => observations.get(scanner)).filter(observation => observation !== undefined),

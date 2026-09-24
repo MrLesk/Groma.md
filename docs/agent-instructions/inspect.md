@@ -37,9 +37,10 @@ mistyped name from a coverage gap:
 | Reason | Meaning |
 | --- | --- |
 | `unknown target: <target>; not a repository file` | Neither a stored ID nor a tracked, unignored repository file: usually a typo. |
-| `no owner: <file>; excluded by scanners.json pattern <pattern>` | That configured pattern hides the file from every scanner. |
+| `no owner: <file>; excluded by scanners.json pattern <pattern>` | That global pattern hides the file from every scanner, and no scanner's own list restores it. |
+| `no owner: <file>; excluded for <scanner> by scanners.json pattern <pattern>` | That scanner selects the file, but that pattern in its exclusions, the global list followed by its own, hides it from that scanner. |
 | `no owner: <file>; no enabled scanner reads it` | No enabled scanner selects the file for analysis, so no scan can own it. |
-| `no owner: <file>; read by <scanners> and waiting for a scan, so run groma scan` | Those scanners select the file, and no scan has given it an owner since it appeared or was detached. |
+| `no owner: <file>; read by <scanners> and waiting for a scan, so run groma scan` | Those scanners select the file, their exclusions keep it, and no scan has given it an owner since it appeared or was detached. |
 | `no owner: <file>; <scanner> could not list its sources: <error>` | That scanner's listing failed, so it may or may not read the file; its error's first line follows. When other scanners read the file, it follows the waiting-for-a-scan reason. |
 
 On a terminal, `groma view` without a target and `groma web` scan and open

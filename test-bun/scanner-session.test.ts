@@ -27,13 +27,18 @@ function scanner(id: string) {
   return { plugin, calls: () => calls, fail: (value: boolean) => { failure = value }, unsupported: () => { supported = false } }
 }
 
+/** Plugins as the host runs them, sharing one exclusion predicate and no settings. */
+function configured(excluded: (file: string) => boolean, ...plugins: ScannerPlugin[]) {
+  return plugins.map(plugin => ({ plugin, excluded }))
+}
+
 function revision(observations: ScanObservation[], id: string) {
   return observations.find(observation => observation.scanner.id === id)?.files[0]?.symbols[0]?.name
 }
 
 test.concurrent('a source session runs matching subscriptions and keeps unaffected evidence', async () => {
   const first = scanner('first'), second = scanner('second')
-  const registry = createScannerRegistry([first.plugin, second.plugin], file => file.startsWith('excluded/'))
+  const registry = createScannerRegistry(configured(file => file.startsWith('excluded/'), first.plugin, second.plugin))
   const baseline = (await registry.collectObservations('.')).observations
   const changed = (await registry.collectObservations('.', ['new.first'])).observations
   expect([first.calls(), second.calls()]).toEqual([2, 1])
@@ -48,7 +53,7 @@ test.concurrent('a source session runs matching subscriptions and keeps unaffect
 
 test.concurrent('a failed scanner leaves healthy evidence available and recovers on a later scan', async () => {
   const first = scanner('first'), second = scanner('second')
-  const registry = createScannerRegistry([first.plugin, second.plugin], () => false)
+  const registry = createScannerRegistry(configured(() => false, first.plugin, second.plugin))
   await registry.collectObservations('.')
   second.fail(true)
   const failed = await registry.collectObservations('.', ['shared.config'])
@@ -67,7 +72,7 @@ test.concurrent('a failed scanner leaves healthy evidence available and recovers
 
 test.concurrent('a scanner that stops supporting a project removes its previous observation', async () => {
   const first = scanner('first'), second = scanner('second')
-  const registry = createScannerRegistry([first.plugin, second.plugin], () => false)
+  const registry = createScannerRegistry(configured(() => false, first.plugin, second.plugin))
   await registry.collectObservations('.')
   first.unsupported()
   const result = await registry.collectObservations('.', ['shared.config'])
@@ -87,7 +92,7 @@ test.concurrent('a mixed batch waits for every invocation and emits its start an
     id: 'slow', watch: { include: ['**'], exclude: [] },
     async scan() { started.resolve(); await finish.promise; completed = true; return undefined },
   }
-  const registry = createScannerRegistry([failed.plugin, slow, skipped.plugin], file => file.startsWith('excluded/'))
+  const registry = createScannerRegistry(configured(file => file.startsWith('excluded/'), failed.plugin, slow, skipped.plugin))
   const result = registry.collectObservations('.', undefined, event => events.push(event)).then(batch => {
     expect(completed).toBe(true)
     return batch

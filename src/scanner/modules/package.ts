@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { stringArray } from './config.ts'
 import { isNpmPackageName } from './published.ts'
 
 export interface NpmScannerSource {
@@ -30,6 +31,8 @@ export type ScannerSource = NpmScannerSource | LocalScannerSource | GitScannerSo
 export interface ResolvedScannerPackage {
   discovery?: ScannerDiscoveryMetadata
   entry: string
+  /** Default Git ignore patterns, written into the scanner's configuration when it is added. */
+  exclude?: string[]
   id: string
   name: string
   version: string
@@ -129,8 +132,11 @@ async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPacka
   const manifest = object(JSON.parse(source), 'scanner package.json')
   const groma = object(manifest.groma, 'scanner package.json groma')
   const scanner = object(groma.scanner, 'scanner package.json groma.scanner')
-  if (Object.keys(scanner).some(field => field !== 'id' && field !== 'entry' && field !== 'discovery')) {
-    throw new Error('scanner package.json groma.scanner may contain only id, entry and discovery')
+  if (Object.keys(scanner).some(field => !['id', 'entry', 'discovery', 'exclude'].includes(field))) {
+    throw new Error('scanner package.json groma.scanner may contain only id, entry, discovery and exclude')
+  }
+  if (scanner.exclude !== undefined && !stringArray(scanner.exclude)) {
+    throw new Error('scanner package.json groma.scanner.exclude must be an array of strings')
   }
   if (typeof scanner.id !== 'string' || !scannerId.test(scanner.id)) {
     throw new Error('scanner package.json groma.scanner.id must be lowercase kebab-case')
@@ -149,6 +155,7 @@ async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPacka
     name: manifest.name,
     version: manifest.version,
     ...(scanner.discovery === undefined ? {} : { discovery: parseScannerDiscovery(scanner.discovery) }),
+    ...(scanner.exclude === undefined ? {} : { exclude: scanner.exclude }),
   }
 }
 

@@ -142,7 +142,7 @@ test.concurrent('excluding an execution declaration removes its fact even when s
     roots: [{ id: 'root', kind: 'source', name: 'Source' }],
     files: [{ file: 'entry', roots: ['root'], symbols: [] }],
     entryPoints: [{ file: 'entry', declaration: 'build', name: 'Run', files: ['entry'] }], diagnostics: [] })
-  const registry = createScannerRegistry([{ id: 'fixture', watch: { include: ['**/*'], exclude: [] }, async scan() { return scan } }], file => file === 'build')
+  const registry = createScannerRegistry([{ plugin: { id: 'fixture', watch: { include: ['**/*'], exclude: [] }, async scan() { return scan } }, excluded: file => file === 'build' }])
   const batch = await registry.collectObservations('.')
   expect(batch.observations[0]!.files).toEqual(scan.files)
   expect(batch.observations[0]!.entryPoints).toEqual([])

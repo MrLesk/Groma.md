@@ -64,7 +64,7 @@ test.concurrent('an excluded file names the configured pattern that hides it', a
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('a pattern decides with the whole list, so a later negation restores its file', async () => {
+test.concurrent('a pattern decides with the whole list, so a later negation restores its file, in one scanner\'s own list for that scanner alone', async () => {
   const root = await repository()
   try {
     const config = await readScannerConfig(root)
@@ -72,6 +72,11 @@ test.concurrent('a pattern decides with the whole list, so a later negation rest
     expect(await reason(root, 'src/keep.generated.ts')).toContain('pattern **/*.generated.ts')
     await writeScannerConfig(root, { ...config, exclude: ['**/*.generated.ts', '!src/keep.generated.ts'] })
     expect(await reason(root, 'src/keep.generated.ts')).toContain('read by first, second')
+    await writeScannerConfig(root, { exclude: ['/scripts/'], scanners: config.scanners.map(scanner =>
+      scanner.id === 'first' ? { ...scanner, exclude: ['!/scripts/'] } : scanner) })
+    const answer = await reason(root, 'scripts/hidden.ts')
+    expect(answer).toContain('read by first')
+    expect(answer).toContain('excluded for second')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

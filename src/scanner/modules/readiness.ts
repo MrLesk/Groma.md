@@ -1,8 +1,7 @@
 import { configuredScannerModules, type FoundScannerModule, type ScannerResolutionOptions } from './inventory.ts'
-import ignore from 'ignore'
-import { importScanner, scannerSourcesExcluded } from '../registry.ts'
+import { configuredPlugin, scannerSourcesExcluded } from '../registry.ts'
 import { discoverScanners } from './discovery.ts'
-import { readScannerConfig } from './config.ts'
+import { readScannerConfig, type ScannerConfig } from './config.ts'
 
 export interface ProjectReadiness {
   id: string
@@ -12,15 +11,15 @@ export interface ProjectReadiness {
 }
 
 async function sourceReadiness(
-  root: string, module: FoundScannerModule, excluded: (file: string) => boolean,
+  root: string, module: FoundScannerModule, config: ScannerConfig,
 ): Promise<Pick<ProjectReadiness, 'project' | 'message'>> {
-  const scanner = await importScanner(module.entry, module.id)
-  if (scanner.checkReadiness === undefined) return { project: 'unchecked',
+  const scanner = await configuredPlugin(module, config)
+  if (scanner.plugin.checkReadiness === undefined) return { project: 'unchecked',
     message: 'No readiness check; project compatibility is established during scan.' }
-  if (await scannerSourcesExcluded(scanner, root, excluded, module.settings)) {
+  if (await scannerSourcesExcluded(scanner, root)) {
     return { project: 'ready', message: 'All source files are excluded.' }
   }
-  await scanner.checkReadiness(root, module.settings)
+  await scanner.plugin.checkReadiness(root, scanner.settings)
   return { project: 'ready', message: 'Preparation check passed; compilation is checked during scan.' }
 }
 
@@ -31,7 +30,6 @@ export async function checkScannerReadiness(
 ): Promise<ProjectReadiness[]> {
   const results: ProjectReadiness[] = []
   const config = await readScannerConfig(root)
-  const exclusions = ignore({ ignorecase: false }).add(config.exclude ?? [])
   const modules = await configuredScannerModules(root, options)
   const proposal = modules.some(module => module.status === 'found' && module.discovery?.compatibility)
     ? await discoverScanners(root, options) : undefined
@@ -48,7 +46,7 @@ export async function checkScannerReadiness(
     }
     try {
       results.push({ id: module.id, package: 'found',
-        ...await sourceReadiness(root, module, file => exclusions.ignores(file)) })
+        ...await sourceReadiness(root, module, config) })
     } catch (error) {
       results.push({ id: module.id, package: 'found', project: 'blocked',
         message: error instanceof Error ? error.message : String(error) })

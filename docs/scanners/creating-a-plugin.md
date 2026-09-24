@@ -23,7 +23,7 @@ import { scanPython } from './scan.ts'
 
 const scanner = {
   id: 'python',
-  watch: { include: ['**/*.py', 'pyproject.toml'], exclude: ['**/.venv/**'] },
+  watch: { include: ['**/*.py', 'pyproject.toml'], exclude: [] },
   scan: scanPython,
 } satisfies ScannerPlugin
 
@@ -40,7 +40,8 @@ Declare the module entry in the package manifest:
   "groma": {
     "scanner": {
       "id": "python",
-      "entry": "./src/index.ts"
+      "entry": "./src/index.ts",
+      "exclude": ["**/.venv/", "**/tests/", "**/test_*.py"]
     }
   }
 }
@@ -52,6 +53,13 @@ depend on installation scripts. Bundle executable package imports into the entry
 before distribution, as the authoring example does. Groma loads the bundled
 entry and packaged assets; consumers do not build the plugin.
 
+Optional `exclude` lists the scanner's default exclusions as Git ignore
+patterns: the tests, fixtures, generated code, vendored folders and build output
+most projects of this ecosystem keep out of their architecture. Adding the
+scanner to a project writes them into its entry in `scanners.json`, where people
+extend or override them; an update never rewrites that list. Keep only language
+coverage in code, meaning the files the language's own build compiles.
+
 `id` identifies the scanner inside Groma. `watch.include` and `watch.exclude`
 are required arrays of repository-relative patterns. They subscribe this
 scanner to relevant source and configuration changes, including new files.
@@ -60,12 +68,14 @@ Patterns are anchored at the repository root and use `/` separators, `*`, `**`,
 override includes, and an empty include array never triggers a scan. For example,
 `*.py` selects root files, while `**/*.py` also selects files in subdirectories.
 
-The shared source runtime compiles these patterns once, applies shared project
+The shared source runtime compiles these patterns once, applies each scanner's
 exclusions, watches the filesystem, and schedules matching scanners. Plugins
 supply subscription data and do not create watchers or match changed paths.
 Watch patterns select scan triggers; compiler project rules still determine
 the files analyzed by `scan`. Each `scan` receives the repository root, its optional settings object,
-and a shared exclusion predicate as the optional third argument. A scanner that
+and its exclusion predicate, the project's global list followed by the scanner's
+own, as the optional third argument. The predicate tests repository-relative
+paths with `/` separators. A scanner that
 can filter its source inventory should apply the predicate before parsing;
 Groma also filters returned evidence. The scan returns one complete observation, replacing this scanner's previous observation in the
 session. Unaffected scanners retain their evidence for core's combined view.
@@ -81,7 +91,7 @@ filename similarity, ordinary imports, or folder proximity to propose a unit.
 
 Overlapping declarations remain separate claims for core to review, never a
 request for a transitive merge. Project relocation updates every member path.
-Shared exclusions remove excluded members, and remove a whole unit when its
+A scanner's exclusions remove excluded members, and remove a whole unit when its
 primary is excluded. Scanners must watch their companion file types as well as
 the declaring source.
 
@@ -205,9 +215,11 @@ project tool such as Maven, Gradle, `dotnet`, `go` or `cargo`. Watch patterns ar
 not that selection: they subscribe to changes, so they include configuration and
 test sources a scan never reads.
 
-Report the files whose analysis can give a component its Code, and leave out what
-the scan ignores: test sources, generated output, vendored code and build
-directories.
+Report the files the language's own build compiles, before exclusions. Groma
+applies the scanner's exclusion list to the listing, so it can skip a scanner
+whose sources are all excluded and name the pattern that hides a file. Tests,
+generated output, vendored code and build directories belong in the scanner's
+default `exclude` list rather than in its listing code.
 
 A listing may name a file the analysis then leaves out, because deciding that
 would mean analyzing it or running a build. Each approximation an official
@@ -321,8 +333,6 @@ existing scanner entry beside `id` and `source`:
 Groma validates that `settings` is an object, preserves it during scanner
 management, and passes only that entry's settings as the second argument to
 both `checkReadiness` and `scan`. Omitted settings arrive as `undefined`.
-The optional third `scan` argument tests repository-relative paths against
-Groma's shared exclusions. It is separate from scanner-owned settings.
 Use a default parameter when the scanner has defaults:
 
 ```ts
@@ -499,7 +509,7 @@ same file. Core keeps one owner for that source path.
 
 All paths are repository-relative. Root parents and file memberships must resolve
 inside the observation, and the root hierarchy must have no cycles. Invocation
-endpoints and HTTP facts must identify declared operations. Shared exclusions
+endpoints and HTTP facts must identify declared operations. A scanner's exclusions
 drop HTTP facts whose operation is in an excluded file. Duplicate primary keys
 and malformed JSON are rejected before core reconciliation. Diagnostic
 locations are preserved when ordering and removing duplicate messages.

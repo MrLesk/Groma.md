@@ -58,8 +58,11 @@ record.
 
 Tests, fixtures, build scripts, and other development tooling are not product
 architecture unless the human says so. Exclude them before curating: add Git
-ignore patterns to the `exclude` array in `<groma-root>/scanners.json`, keep its
-existing `scanners` entries, and run `groma scan`.
+ignore patterns to the global `exclude` array in `<groma-root>/scanners.json`,
+or to one scanner entry's own `exclude` array to affect only that scanner, keep
+the existing entries, and run `groma scan`. A scanner's own list starts with the
+defaults its package declares; a `!` pattern there restores a globally excluded
+file for that scanner.
 
 ```json
 "exclude": ["/scripts/", "/test/", "**/*.spec.ts"]

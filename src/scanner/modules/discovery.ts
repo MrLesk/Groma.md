@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
-import ignore from 'ignore'
 import type { ScannerDiscoveryRule } from '@groma/scanner'
 import { compileWatchPatterns } from '../watch-patterns.ts'
 import { discoveryRuleFindings } from './discovery-rules.ts'
@@ -12,7 +11,7 @@ import { repositoryListing } from '../../repository-listing.ts'
 import { officialScannerCatalog, recommendScanners } from './catalog.ts'
 import type { TechnologyFinding, ScannerRecommendation, OfficialScanner } from './catalog.ts'
 import { scannerInventory, configuredScannerModules } from './inventory.ts'
-import { readScannerConfig } from './config.ts'
+import { exclusion, readScannerConfig } from './config.ts'
 import type { ScannerInventoryItem, ScannerResolutionOptions } from './inventory.ts'
 
 export interface ScannerDiscovery {
@@ -106,10 +105,11 @@ export async function discoverScanners(
   const rules = catalog.flatMap(scanner => scanner.rules.map(rule => ({
     rule, matches: compileWatchPatterns({ include: rule.files, exclude: [] }),
   })))
+  // Discovery rules belong to every scanner, installed or not, so the global list alone applies.
   const config = initialized ? await readScannerConfig(repositoryRoot) : undefined
-  const matcher = ignore({ ignorecase: false }).add(config?.exclude ?? [])
+  const excluded = exclusion(config?.exclude ?? [])
   for (const file of await projectDeclarations(repositoryRoot, rules)) {
-    if (matcher.ignores(file)) continue
+    if (excluded(file)) continue
     try {
       findings.push(...await declarationFindings(repositoryRoot, file, rules))
     } catch (error) {

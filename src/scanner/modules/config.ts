@@ -1,10 +1,14 @@
+import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
+import ignore from 'ignore'
 import { GromaFileSystem } from '../../groma-filesystem.ts'
 
 export interface ConfiguredScanner {
   id: string
   source: string
   settings?: ScannerSettings
+  /** Git ignore patterns for this scanner alone, applied after the global list; installing writes its declared defaults. */
+  exclude?: string[]
 }
 
 export interface ScannerConfig {
@@ -13,6 +17,22 @@ export interface ScannerConfig {
 }
 
 const scannerId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/** A JSON value holding a list of strings, such as patterns. */
+export function stringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+}
+
+/** A scanner's exclusions in the order they apply: the global list, then the scanner's own. */
+export function exclusionPatterns(config: ScannerConfig, scanner: string): string[] {
+  return [...config.exclude ?? [], ...config.scanners.find(entry => entry.id === scanner)?.exclude ?? []]
+}
+
+/** Whether a repository file is excluded, where the last matching pattern decides, so a later `!pattern` restores a file. */
+export function exclusion(list: readonly string[]): (file: string) => boolean {
+  const matcher = ignore({ ignorecase: false }).add([...list])
+  return file => matcher.ignores(file.split(path.sep).join('/'))
+}
 
 function configuredScanner(
   value: unknown,
@@ -24,8 +44,11 @@ function configuredScanner(
   }
   const candidate = value as Record<string, unknown>
   const fields = Object.keys(candidate)
-  if (fields.some(field => !['id', 'source', 'settings'].includes(field))) {
-    throw new Error(`${sourceFilename} scanners[${index}] must contain id, source and optional settings`)
+  if (fields.some(field => !['id', 'source', 'settings', 'exclude'].includes(field))) {
+    throw new Error(`${sourceFilename} scanners[${index}] must contain id and source, and optionally settings and exclude`)
+  }
+  if (candidate.exclude !== undefined && !stringArray(candidate.exclude)) {
+    throw new Error(`${sourceFilename} scanners[${index}].exclude must be an array of strings`)
   }
   if (candidate.settings !== undefined && (candidate.settings === null
     || typeof candidate.settings !== 'object' || Array.isArray(candidate.settings))) {
@@ -39,6 +62,7 @@ function configuredScanner(
   }
   return { id: candidate.id, source: candidate.source,
     ...(candidate.settings === undefined ? {} : { settings: candidate.settings as ScannerSettings }),
+    ...(candidate.exclude === undefined ? {} : { exclude: candidate.exclude }),
   }
 }
 
@@ -54,7 +78,7 @@ function parseScannerConfig(
   if (Object.keys(config).some(key => key !== 'scanners' && key !== 'exclude') || !Array.isArray(config.scanners)) {
     throw new Error(`${sourceFilename} must contain a scanners array and optional exclude array`)
   }
-  if (config.exclude !== undefined && (!Array.isArray(config.exclude) || config.exclude.some(pattern => typeof pattern !== 'string'))) {
+  if (config.exclude !== undefined && !stringArray(config.exclude)) {
     throw new Error(`${sourceFilename} exclude must be an array of strings`)
   }
   const scanners = config.scanners.map((scanner, index) => {
