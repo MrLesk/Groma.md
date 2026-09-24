@@ -2,10 +2,25 @@ package main
 
 import (
 	"go/ast"
+	"go/token"
 	"go/types"
 	"net/url"
 	"strings"
 )
+
+// isClient recognizes the net/http client values a request can be sent through.
+func isClient(s *source, expression ast.Expr) bool {
+	value := ast.Unparen(expression)
+	if address, ok := value.(*ast.UnaryExpr); ok && address.Op == token.AND {
+		value = address.X
+	}
+	if literal, ok := value.(*ast.CompositeLit); ok {
+		library, name, ok := s.packageLibrary(literal.Type)
+		return ok && library == netHTTP && name == "Client"
+	}
+	library, name, ok := s.packageLibrary(value)
+	return ok && library == netHTTP && name == "DefaultClient"
+}
 
 // clientCall describes one net/http client call: which argument states the method and the URL.
 type clientCall struct {

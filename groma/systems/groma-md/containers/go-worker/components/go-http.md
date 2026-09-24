@@ -16,7 +16,21 @@ groma:
       file: plugins/scanners/go/worker/routes.go
     - scanner: go
       file: plugins/scanners/go/worker/values.go
+    - scanner: go
+      file: plugins/scanners/go/worker/libraries.go
+    - scanner: go
+      file: plugins/scanners/go/worker/nethttp.go
+    - scanner: go
+      file: plugins/scanners/go/worker/chi.go
+    - scanner: go
+      file: plugins/scanners/go/worker/gin.go
+      symbol: gin
+    - scanner: go
+      file: plugins/scanners/go/worker/echo.go
+      symbol: echo
+    - scanner: go
+      file: plugins/scanners/go/worker/routers.go
 description: Finds Go HTTP clients, routers and endpoints
 ---
 
-Recognizes supported Go HTTP clients, router mounts and endpoints. Returns request and provider evidence from the parsed source.
+Recognizes supported Go HTTP clients, router mounts and endpoints. Each router library is one record in its own file, which the route readers consult for every library-specific rule, so a new library is a new record. Returns request and provider evidence from the parsed source.

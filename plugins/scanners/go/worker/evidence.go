@@ -22,7 +22,7 @@ type source struct {
 	// A file marked "Code generated ... DO NOT EDIT." is repeated by design and nobody reviews it
 	// by hand, so its operations are not compared.
 	generated bool
-	// Local package aliases, which name the frameworks this file uses.
+	// Local package aliases, which name the routing libraries this file uses.
 	imports map[string]string
 }
 
