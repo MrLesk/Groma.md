@@ -109,7 +109,13 @@ GROMA_TEST_SWIFT_PACKAGE=/tmp/groma-scanner-swift bun test test-bun/swift-scanne
 
 CI caches the test package by OS, CPU, toolchain and package inputs. An exact
 match skips Swift setup and compilation; every repository check still runs.
-Changed inputs rebuild the package. Release builds always compile it afresh.
+Changed inputs rebuild the package. The dependency lockfile and
+`plugins/scanners/projects.ts` are not inputs. Windows keeps the SwiftPM build
+of the pinned SwiftSyntax revision in `GROMA_SWIFT_PM_CACHE` (on CI,
+`.groma/swift-syntax-build`). That directory is cached by OS, CPU, toolchain
+and `Package.swift`, so a rebuild relinks the worker. A local Windows build
+reuses `~/.cache/groma/swift-scanner` when the variable is unset. Release
+builds restore the same cache.
 For the same check locally, set `GROMA_TEST_SWIFT_PACKAGE` to the built package
 when invoking `bun run check`. Each test copies it into its own temporary fixture.
 

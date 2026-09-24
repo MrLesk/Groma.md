@@ -71,6 +71,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+      - name: Cache SwiftSyntax build
+        if: runner.os == 'Windows'
+        uses: actions/cache@v6
+        with:
+          path: .groma/swift-syntax-build
+          key: >-
+            swift-syntax-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(
+              '.github/actions/setup-swift/action.yml',
+              'plugins/scanners/swift/Package.swift') }}
       - uses: ./.github/actions/setup-swift
       - uses: oven-sh/setup-bun@v2
         with:
@@ -98,6 +107,8 @@ jobs:
           dotnet restore plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj --locked-mode
         shell: bash
       - name: Build runnable scanner packages
+        env:
+          GROMA_SWIFT_PM_CACHE: ${{ github.workspace }}/.groma/swift-syntax-build
         run: bun scripts/scanner-release.ts stage scanner-packages
         shell: bash
       - name: Check Swift evidence and installed worker

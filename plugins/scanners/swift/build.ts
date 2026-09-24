@@ -17,13 +17,13 @@ export async function buildPackage(destination: string): Promise<void> {
   const host = path.join(target.paths.runtimeResourcePath, 'host')
   const platform = `${process.platform}-${process.arch}`
   const assets = path.join(destination, 'dist', platform)
-  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-swift-build-'))
+  const moduleCache = process.platform === 'win32' ? undefined : await mkdtemp(path.join(os.tmpdir(), 'groma-swift-build-'))
   try {
     await mkdir(assets, { recursive: true })
     const sources = (await readdir(path.join(root, 'worker'))).filter(file => file.endsWith('.swift')).sort()
     const worker = path.join(assets, process.platform === 'win32' ? 'worker.exe' : 'worker')
-    if (process.platform === 'win32') await buildWindowsWorker(temporary, worker)
-    else await execute('swiftc', ['-O', '-module-cache-path', temporary, '-I', host, '-L', host,
+    if (moduleCache === undefined) await buildWindowsWorker(worker)
+    else await execute('swiftc', ['-O', '-module-cache-path', moduleCache, '-I', host, '-L', host,
       ...linkerFlags(host), ...sources.map(file => path.join(root, 'worker', file)), '-o', worker])
     if (process.platform === 'darwin') {
       for (const library of libraries) await copyLibrary(host, assets, library)
@@ -44,7 +44,22 @@ export async function buildPackage(destination: string): Promise<void> {
     await cp(path.join(root, 'THIRD-PARTY-NOTICES.txt'), path.join(destination, 'THIRD-PARTY-NOTICES.txt'))
     await cp(path.join(root, '../../../docs/scanners/swift/index.md'), path.join(destination, 'README.md'))
     await cp(path.join(root, '../../../docs/scanners/swift/validation.md'), path.join(destination, 'validation.md'))
-  } finally { await rm(temporary, { recursive: true, force: true }) }
+  } finally { if (moduleCache !== undefined) await rm(moduleCache, { recursive: true, force: true }) }
+}
+
+/** SwiftPM package whose .build CI caches by toolchain and the SwiftSyntax revision. */
+export function windowsSwiftPackageRoot(): string {
+  const configured = process.env.GROMA_SWIFT_PM_CACHE
+  return configured ? path.resolve(configured) : path.join(os.homedir(), '.cache', 'groma', 'swift-scanner')
+}
+
+/** Copy the manifest and worker into a SwiftPM package without removing its build directory. */
+export async function prepareWindowsSwiftPackage(packageRoot: string): Promise<void> {
+  const worker = path.join(packageRoot, 'worker')
+  await rm(worker, { recursive: true, force: true })
+  await mkdir(packageRoot, { recursive: true })
+  await copyFile(path.join(root, 'Package.swift'), path.join(packageRoot, 'Package.swift'))
+  await cp(path.join(root, 'worker'), worker, { recursive: true })
 }
 
 function linkerFlags(host: string): string[] {
@@ -57,11 +72,11 @@ function linkerFlags(host: string): string[] {
 }
 
 /** Build the pinned parser sources because Windows ships only their runtime DLLs. */
-async function buildWindowsWorker(temporary: string, worker: string): Promise<void> {
-  await copyFile(path.join(root, 'Package.swift'), path.join(temporary, 'Package.swift'))
-  await cp(path.join(root, 'worker'), path.join(temporary, 'worker'), { recursive: true })
-  const args = ['build', '--package-path', temporary, '--configuration', 'release',
-    '--product', 'groma-swift-scanner', '-Xswiftc', '-use-ld=lld-link']
+async function buildWindowsWorker(worker: string): Promise<void> {
+  const packageRoot = windowsSwiftPackageRoot()
+  await prepareWindowsSwiftPackage(packageRoot)
+  const args = ['build', '--package-path', packageRoot, '--configuration', 'release',
+    '--disable-index-store', '--product', 'groma-swift-scanner', '-Xswiftc', '-use-ld=lld-link']
   await execute('swift', args)
   const binaries = (await execute('swift', [...args, '--show-bin-path'])).stdout.trim()
   await copyFile(path.join(binaries, 'groma-swift-scanner.exe'), worker)

@@ -3,7 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
-import { buildPackage } from '../plugins/scanners/swift/build.ts'
+import { buildPackage, prepareWindowsSwiftPackage, windowsSwiftPackageRoot } from '../plugins/scanners/swift/build.ts'
 import manifest from '../plugins/scanners/swift/package.json'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
@@ -29,6 +29,38 @@ async function setup(fixture = 'swift-source') {
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'src/index.js'))).default
   return { temporary, root, artifact, scanner }
 }
+
+test.concurrent('the Windows SwiftPM package keeps an existing build directory', async () => {
+  const packageRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-swift-pm-'))
+  const marker = path.join(packageRoot, '.build', 'marker')
+  const stale = path.join(packageRoot, 'worker', 'stale.swift')
+  const sourceManifest = path.resolve(import.meta.dir, '../plugins/scanners/swift/Package.swift')
+  await mkdir(path.dirname(marker), { recursive: true })
+  await mkdir(path.dirname(stale), { recursive: true })
+  await writeFile(marker, 'keep')
+  await writeFile(stale, 'stale')
+  try {
+    await prepareWindowsSwiftPackage(packageRoot)
+    expect(await readFile(marker, 'utf8')).toBe('keep')
+    expect(await readFile(path.join(packageRoot, 'Package.swift'), 'utf8')).toBe(await readFile(sourceManifest, 'utf8'))
+    expect(await Bun.file(path.join(packageRoot, 'worker', 'main.swift')).exists()).toBe(true)
+    expect(await Bun.file(stale).exists()).toBe(false)
+  } finally {
+    await rm(packageRoot, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('the Windows SwiftPM package uses GROMA_SWIFT_PM_CACHE', () => {
+  const previous = process.env.GROMA_SWIFT_PM_CACHE
+  const configured = path.join(os.tmpdir(), 'groma-swift-cache-root')
+  process.env.GROMA_SWIFT_PM_CACHE = configured
+  try {
+    expect(windowsSwiftPackageRoot()).toBe(path.resolve(configured))
+  } finally {
+    if (previous === undefined) delete process.env.GROMA_SWIFT_PM_CACHE
+    else process.env.GROMA_SWIFT_PM_CACHE = previous
+  }
+})
 
 test.concurrent('Swift package preserves uncertainty, closure ownership and UTF-16 source positions', async () => {
   const { temporary, root, scanner } = await setup()

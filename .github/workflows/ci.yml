@@ -32,10 +32,18 @@ jobs:
             swift-test-package-${{ matrix.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles(
               '.github/actions/setup-swift/action.yml',
               'plugins/scanners/swift/**',
-              'plugins/scanners/projects.ts',
               'packages/scanner/**',
               'docs/scanners/swift/**',
-              'bun.lock', 'LICENSE') }}
+              'LICENSE') }}
+      - name: Cache SwiftSyntax build
+        if: runner.os == 'Windows' && steps.swift-package.outputs.cache-hit != 'true'
+        uses: actions/cache@v6
+        with:
+          path: .groma/swift-syntax-build
+          key: >-
+            swift-syntax-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(
+              '.github/actions/setup-swift/action.yml',
+              'plugins/scanners/swift/Package.swift') }}
       - name: Cache C# test package
         id: csharp-package
         uses: actions/cache@v6
@@ -85,6 +93,8 @@ jobs:
         shell: bash
       - name: Build Swift test package
         if: steps.swift-package.outputs.cache-hit != 'true'
+        env:
+          GROMA_SWIFT_PM_CACHE: ${{ github.workspace }}/.groma/swift-syntax-build
         run: bun plugins/scanners/swift/build.ts scanner-packages/swift
         shell: bash
       - name: Build C# test package

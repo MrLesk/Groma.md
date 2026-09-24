@@ -1,4 +1,5 @@
 .DS_Store
+.groma/swift-syntax-build/
 .idea/
 node_modules/
 /dist/
