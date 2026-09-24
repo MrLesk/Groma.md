@@ -92,7 +92,7 @@ container IDs, architecture parents or ownership choices.
 In OKF, the result remains ordinary typed Markdown concepts and links; the facts
 are not stored as new knowledge concepts or metadata. An ordinary reader can read
 the existing container and component documents and follow their links. In C4,
-the result uses the existing container level. Groma interprets the temporary facts
+the result uses the existing container level. groma.md interprets the temporary facts
 and its application profile decides placement; neither OKF nor C4 mandates this
 automatic inference rule.
 
@@ -404,7 +404,7 @@ re-export. The scanner identifies the actual provider. Core sees that caller
 and provider have the same owner and produces no cross-component relationship
 for that invocation.
 
-The motivating Groma source is:
+The motivating groma.md source is:
 
 - [`src/scanner.ts`](../../src/scanner.ts) invokes `reconcileScanObservations`.
 - [`src/core.ts`](../../src/core.ts) re-exports that operation.
@@ -445,14 +445,14 @@ core selection decision. Likewise, changing the provider's owner creates a
 cross-owner candidate, not automatic proof of architectural importance.
 
 Future automated checks should use a minimal fixture under `test/fixtures/`,
-not load the live Groma architecture. Language-specific examples must satisfy
+not load the live groma.md architecture. Language-specific examples must satisfy
 the same fact semantics: for example, TypeScript resolves module aliases while
 C# resolves language symbols and retains uncertainty about virtual dispatch.
 Neither plugin decides component ownership.
 
 ## Bounded Jelly comparison
 
-**Status:** completed for the alias control and Groma initialization callback.
+**Status:** completed for the alias control and groma.md initialization callback.
 The [recorded comparison](../relationship-inference.md#first-implementation-and-jelly-comparison)
 includes results, limits, and costs. Jelly is not a production dependency.
 
@@ -461,7 +461,7 @@ or callback wiring that the existing TypeScript analysis misses, at a cost
 appropriate for an interactive scan?
 
 First establish the canonical-provider example above as a control. Then inspect
-one Groma callback: the CLI supplies `openViewer` to `runInitCommand`, which
+one groma.md callback: the CLI supplies `openViewer` to `runInitCommand`, which
 invokes it after initialization. The source is
 [`src/cli.ts`](../../src/cli.ts) and
 [`src/init-command.ts`](../../src/init-command.ts). Review the actual binding
@@ -489,7 +489,7 @@ technique with the existing compiler, or retain the limitation. Useful output
 must fit the language-neutral evidence semantics. A tool-specific result must
 not dictate the shared contract.
 
-After human review of the Groma result, freeze the first rule before
+After human review of the groma.md result, freeze the first rule before
 checking Backlog's constructor-injected task handler. Record the result and
 decision in the [inference document](../relationship-inference.md#evaluation-and-recording-decisions)
 before extending the experiment. Do not expand into more frameworks or global

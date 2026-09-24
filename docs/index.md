@@ -1,7 +1,7 @@
-# Groma documentation
+# groma.md documentation
 
-Groma keeps architecture in Git as Markdown you can read and one C4 world you
-can walk. Solid boxes exist. Ghosts are next. Groma writes architecture
+groma.md keeps architecture in Git as Markdown you can read and one C4 world you
+can walk. Solid boxes exist. Ghosts are next. groma.md writes architecture
 records as a strict OKF v0.2 application profile.
 
 `groma init` starts by creating the Git repository when needed, then sets the
@@ -10,7 +10,7 @@ default or the hidden `.groma/` directory when selected. When the Backlog.md
 CLI is available and the project is not yet initialized, the same command
 initializes Backlog.md and writes its AGENTS.md CLI nudge. Existing Git and
 Backlog.md projects stay unchanged. Running it again edits the current project
-name, keeps the chosen root, and refreshes Groma's managed agent instructions.
+name, keeps the chosen root, and refreshes groma.md's managed agent instructions.
 
 Interactive setup can install Backlog.md when it is missing. When the
 architecture has no observed components, it can run the first scan and open
@@ -45,7 +45,7 @@ stay separate: `groma agent-instructions [guide]` always prints plain Markdown.
 
 ## Change and accept
 
-Change the architecture through Groma. New parts are drafted as ghosts at
+Change the architecture through groma.md. New parts are drafted as ghosts at
 the path they will keep. Explanations stay on the element. `groma draft`,
 `groma edit`, and `groma add relation` author ghosts, meaning, draft tags, scan
 curation, and collaborations. `groma accept <id>` applies a ghost only after
@@ -56,7 +56,7 @@ a scan has matched it.
 
 ## Product principles
 
-- [Groma manifesto](../MANIFESTO.md)
+- [groma.md manifesto](../MANIFESTO.md)
 
 ## Contribute
 

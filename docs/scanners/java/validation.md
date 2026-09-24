@@ -22,7 +22,7 @@ references, failed attribution, missing JDK/Maven, Maven-selected custom source
 roots, repeated deterministic output and Java 25 flexible constructor bodies.
 Every test owns its temporary files and worker. The Maven integration case needs
 prepared plugin dependencies and is selected by `GROMA_TEST_MAVEN`; compiler tests
-require the installed JDK. No automated test reads callforpapers or live Groma
+require the installed JDK. No automated test reads callforpapers or live groma.md
 architecture.
 
 ## Acceptance project
@@ -43,7 +43,7 @@ processing was needed. The plugin's offline scan returned 665 Java main-source
 files, 6,794 operations and 17,760 invocation observations. These counts describe
 coverage, not the accuracy of unreviewed runtime relationships.
 
-Compiled Groma was built with `bun scripts/build.ts /tmp/groma-java-acceptance-bin`.
+Compiled groma.md was built with `bun scripts/build.ts /tmp/groma-java-acceptance-bin`.
 The temporary project was initialized, the built Java package added through
 `groma scanner add`, and `groma scan` completed with Java and the TypeScript scanner.
 The Java portion therefore runs through the real compiled module host, without

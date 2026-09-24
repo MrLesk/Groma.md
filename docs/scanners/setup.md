@@ -1,6 +1,6 @@
 # Project scanner settings
 
-Open **Scanners** from the Groma splash screen (`s`), the terminal map
+Open **Scanners** from the groma.md splash screen (`s`), the terminal map
 (`Shift+S`), or **Settings → Plugins** in the web toolbar.
 `groma scanner settings` opens the same terminal
 screen; without a terminal it prints the shared settings snapshot as JSON.
@@ -17,7 +17,7 @@ recommendation has one **Install** button; multiple recommendations also offer
 A warning appears only when scanning needs attention and opens the affected
 plugin in Settings. Potential duplicates belong to the separate Project review.
 
-**Install** selects a published stable release for this Groma version and
+**Install** selects a published stable release for this groma.md version and
 computer, saves its exact version, and scans. **Install recommended scanners**
 performs that flow for all current recommendations. **Install missing scanners**
 restores the exact selections shared by the team and scans. Both actions keep
@@ -48,7 +48,7 @@ Scanners validate project requirements when scanning. A failed scanner shows its
 error and **Retry** after fixing the problem. Download and release-selection
 failures show the affected package, the next step and **Retry installation**.
 Full error output is available inline through Details; the web shows **Needs
-attention** on the row and keeps the full diagnostic in **Error details**. Groma does
+attention** on the row and keeps the full diagnostic in **Error details**. groma.md does
 not install project dependencies or development tools on the user's behalf.
 
 In the terminal, `i` installs recommended scanners, `m` installs missing scanners,
@@ -68,7 +68,7 @@ that scan wait for the current batch to finish.
 The live session watches relevant source declarations through the scanner adapter,
 including with no scanner selected so new projects can appear in settings. Only
 installed project selections without known metadata incompatibilities execute scans.
-An incompatible Groma API version blocks the plugin before its
+An incompatible groma.md API version blocks the plugin before its
 code is loaded, including preparation checks. Settings show the reason; other
 eligible scanners can still run. An empty observation set does not
 write architecture. Missing packages do not prevent available scanners from
@@ -105,7 +105,7 @@ exact package versions. Disable an existing scanner explicitly with
 
 `groma scanner discover` reads declarations and reports project matches and official candidates;
 it does not run plugins or install anything. Detection offers a package name.
-Install resolves a published release for Groma and this computer; the scanner
+Install resolves a published release for groma.md and this computer; the scanner
 then validates source inputs and language support.
 
 `groma scanner list` reports whether each configured package is found or missing without executing it. `groma scanner check` separately loads
@@ -161,5 +161,5 @@ runnable package and select a path relative to the repository.
 
 Scanner selection and readiness are operational configuration, not OKF
 concepts or C4 elements. Ordinary Markdown and OKF readers keep the same
-architecture records and links. Groma's existing scanner module management
+architecture records and links. groma.md's existing scanner module management
 owns package selection; each language plugin owns its source inputs and bundled analysis tools.

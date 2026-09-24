@@ -1,6 +1,6 @@
 # Deriving architecture relationships
 
-Groma should automatically describe collaborations that it can support with
+groma.md should automatically describe collaborations that it can support with
 source evidence. People and coding agents author interactions whose meaning
 cannot be established automatically. A useful result explains responsibilities
 and their interactions; its quality is not determined by its relationship count.
@@ -51,7 +51,7 @@ dependency does not change that ownership.
 Ordinary Markdown and OKF readers should understand the persisted statement
 through its linked endpoints, description, and mechanism. OKF provides the
 portable document structure. C4 provides architecture levels and boundaries.
-Groma's application profile owns inference and selection; neither standard
+groma.md's application profile owns inference and selection; neither standard
 defines an automatic importance test for source dependencies.
 
 A C4 container is a runtime boundary, not merely a package or folder. A source
@@ -109,7 +109,7 @@ The callback rule does not classify ordinary direct calls as architectural work.
 Neither rule infers event-bus, class-receiver, or service-operation meaning.
 Bare callbacks supplied to generic functions also remain evidence. The rule
 covers named capabilities supplied through concrete object arguments, starting
-with Groma's initialization and viewer callbacks. Its coverage is intentionally
+with groma.md's initialization and viewer callbacks. Its coverage is intentionally
 limited; authored relationships still carry domain meaning not established by
 this rule. No score, name keyword, authored-pair match, or import threshold is
 used to select a relationship.
@@ -282,7 +282,7 @@ These findings were recorded on 6 September 2026 from an uncommitted working
 tree. They are investigation evidence, not a reproducible benchmark tied to
 the published main branch, a complete reference, or regression-test targets.
 
-Groma's 99 authored directed pairs overlapped with 66 of 330 automatically
+groma.md's 99 authored directed pairs overlapped with 66 of 330 automatically
 projected source pairs. A temporary local-workspace resolver recovered nine
 additional authored pairs and seven other pairs: 346 candidates, with 75
 authored matches. Matching endpoints does not validate the relationship text.
@@ -330,7 +330,7 @@ Report uncertain emissions explicitly. For counts of included, excluded, and
 uncertain emissions I, X, and U, report both I/(I+X), when defined, and the
 verified fraction I/(I+X+U). Neither number replaces the uncertainty count.
 
-Develop one rule on a small Groma example, review it, then freeze it before
+Develop one rule on a small groma.md example, review it, then freeze it before
 evaluating other components and Backlog. Examples used to revise a rule become
 development data. Do not use component names, path keywords, repository names,
 or authored membership as selection signals.
@@ -346,7 +346,7 @@ peak process memory, and the resulting decision. A failed experiment can reject
 a technique without reversing the accepted product principles. Keep reusable
 conclusions here; do not replace the manual with a conversation transcript.
 
-The complete-startup targets are under one second for Groma and approximately
+The complete-startup targets are under one second for groma.md and approximately
 three to five seconds for an OpenClaw-sized repository, within ordinary
 developer-machine memory. Measure extraction costs separately and include
 them in the complete flow before adopting an analyzer. The clean-repository
@@ -363,7 +363,7 @@ measurements below cover the current callback rule.
   provides examples of following API objects and callbacks.
 - [Method stereotypes](https://www.cs.kent.edu/~jmaletic/papers/ICSM06.pdf)
   investigates lightweight operation roles in C++. Applying those roles to
-  Groma's map selection is a hypothesis, not a result established by that work.
+  groma.md's map selection is a hypothesis, not a result established by that work.
 - [Lattix dependency strength](https://docs.lattix.com/lattix/userGuide/Filtering_and_Configuring_Dependencies_and_Subsystems.html)
   distinguishes ways to count coupling. Counts do not establish architectural
   meaning. [Graph backbone filtering](https://arxiv.org/abs/0904.2389) measures
@@ -377,13 +377,13 @@ The next analyzer experiment is specified in
 
 On 6 September 2026, the four-file alias control resolved the caller directly
 to the provider with both Jelly and the compiler. Both retained the executable
-wrapper's call to that provider. On Groma, both found two implementations for
+wrapper's call to that provider. On groma.md, both found two implementations for
 `actions.openViewer` in `offerFirstScan`: the CLI callback and the separate
 no-op callback supplied by `ensureInitialized`. The compiler keeps their
 argument bindings separate, so the CLI binding supports `init-command` →
 `commands`; the no-op binding remains internal to initialization.
 
-The comparison used a copied, explicitly enumerated 219-file Groma ownership
+The comparison used a copied, explicitly enumerated 219-file groma.md ownership
 snapshot. Its manifest SHA-256 was
 `4c6e92068ed4ed2645ace2037b55d14f69389dccb20b280dca11c22da89077d4`.
 This was an uncommitted source snapshot, not the published main branch. The
@@ -410,7 +410,7 @@ manifest was passed to the compiler. Neither analyzer executed application
 code. No dynamic or approximate interpretation was enabled.
 
 The decision is to keep Jelly as an offline comparison tool and use the existing
-compiler for the first production rule. Jelly is not a Groma dependency. Its
+compiler for the first production rule. Jelly is not a groma.md dependency. Its
 additional edges were not accepted as verified architecture. On this snapshot,
 the supplied-operation rule selected 15 file pairs; this is coverage evidence,
 not a precision score or a target relationship count. Direct service calls and
@@ -425,7 +425,7 @@ Markdown in both repositories. These raw scans contain no authored statements.
 
 | Project | Source files | Elements | Relationships | CLI launch to painted map |
 | --- | ---: | ---: | ---: | ---: |
-| Curated Groma | 220 | 83 | 113: 99 authored, 14 derived | 0.59 s |
+| Curated groma.md | 220 | 83 | 113: 99 authored, 14 derived | 0.59 s |
 | Raw Backlog.md | 212 | 275 | 4 derived | 0.72 s |
 | Raw OpenClaw | 3,164 | 3,200 | 220 derived | 4.59 s |
 
@@ -441,7 +441,7 @@ OpenClaw exposed repeated expansion of identical callback bindings through
 forwarding functions. The resolver now reuses parameter results at the same
 depth, removes identical binding alternatives without losing uncertainty, and
 resolves call sites in bounded batches. Its distinct operation facts match the
-previous implementation on Groma and Backlog. OpenClaw's complete initial scan
+previous implementation on groma.md and Backlog. OpenClaw's complete initial scan
 took 2.70 seconds and its refresh took 2.97 seconds. During complete web startup,
 sampled peak resident memory was 3.50 GiB across the CLI and compiler, with
 3.05 GiB remaining in the CLI after startup. The router still allocates a

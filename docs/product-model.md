@@ -1,20 +1,20 @@
 # Product model
 
-Groma is this repository's architecture, stored as ordinary Markdown and shown
+groma.md is this repository's architecture, stored as ordinary Markdown and shown
 as one C4 world. Solid boxes exist. Ghosts are drafts. A generated picture of
 the same repo is already out of date.
 
-The architecture model owns identity. Source code is evidence. Groma is the
+The architecture model owns identity. Source code is evidence. groma.md is the
 only writer of architecture element and draft files. The project owner
 controls the project title, optional concise description, and long overview in
 `groma/project.md`, directly or through the web map. The
 [architecture Markdown contract](component-markdown.md) defines the strict OKF
-v0.2 Groma profile.
+v0.2 groma.md profile.
 
 ## What you do
 
-People and agents use Groma. They do not edit architecture element or draft
-Markdown by hand. Groma writes those files so paths, identity, and metadata
+People and agents use groma.md. They do not edit architecture element or draft
+Markdown by hand. groma.md writes those files so paths, identity, and metadata
 stay consistent. The root `groma/project.md` is different: standard `title` and
 optional `description` fields are frontmatter, while its normal Markdown body
 is the complete project overview. Bare `groma` opens a terminal launcher for
@@ -43,7 +43,7 @@ task-focused guide, when to read it, and the command that prints it. Every
 human guide and the agent index point readers to both catalogs.
 
 `groma init` is the explicit repository-registration action for coding agents.
-It reconciles one short managed Groma block in each distinct root `AGENTS.md`
+It reconciles one short managed groma.md block in each distinct root `AGENTS.md`
 or `CLAUDE.md` that already exists. If neither exists, it creates only
 `AGENTS.md`. Files that resolve to the same target through a symlink are written
 once, the symlink and surrounding instructions remain unchanged, and repeated
@@ -78,7 +78,7 @@ operation before opening a map.
    and member summary. Unknown targets fail with a clear message, and loading
    fails when several elements share a file. These reads do not scan or change
    architecture.
-   If the Groma directory, index, or project record is missing, `groma web`
+   If the architecture directory, index, or project record is missing, `groma web`
    serves browser setup for the project name and architecture folder. Submitting
    setup initializes the project, scans automatically, and opens the map at the
    same address. Interactive `groma view` offers the terminal initialization
@@ -101,10 +101,10 @@ operation before opening a map.
    site contains the current project profile, architecture map and flows,
    mapped Backlog work with task details and diffs, and architecture-owned
    source inspection. It has no editor and never reads the repository or a
-   running Groma server. Everything in the output directory is public data.
+   running groma.md server. Everything in the output directory is public data.
    Export reads stored architecture without starting a scanner, writes one
    snapshot, and exits. Run it again to publish updated data. Hosting and
-   access control belong to the chosen static host, outside Groma.
+   access control belong to the chosen static host, outside groma.md.
 3. `groma scan`: scan this repo. Core folds structural scan evidence into Markdown
    and counts architecture findings in the command summary, naming `groma lint`
    to read them. Findings are review
@@ -113,7 +113,7 @@ operation before opening a map.
    architecture. Scan is the one plain command without paging, because a second
    page would scan again. The scanner alone creates systems, containers, and
    components; nothing writes them by hand.
-4. Change the architecture through Groma's commands; no viewer edits element
+4. Change the architecture through groma.md's commands; no viewer edits element
    or draft documents.
    - A **new part** is drafted. `groma draft <kind> <name> --parent <id>
      --overview <markdown>` writes a ghost at the path it will keep once
@@ -176,25 +176,25 @@ operation before opening a map.
      given fields into `groma/project.md`. The web map's project pencil posts
      the same input.
 5. `groma accept <id>`: accept that ghost, only if a scan has matched it.
-   Groma may scan first if needed. No match: the command fails and the
+   groma.md may scan first if needed. No match: the command fails and the
    ghost stays a draft. A scan never accepts a ghost on its own. The file
    stays where it is; only its status changes.
 
 An architect who only wants to see the repo uses 1 and 3. A builder adding
-parts from elsewhere asks Groma to draft them, then uses 1 and 5.
+parts from elsewhere asks groma.md to draft them, then uses 1 and 5.
 An expert or agent uses the same commands, including from an empty world.
 
 ## Identity
 
 An architecture ID is a lowercase kebab-case name in Markdown that stays until
-`groma edit <id> --id <new-id>` renames it. Groma does not put architecture IDs
+`groma edit <id> --id <new-id>` renames it. groma.md does not put architecture IDs
 in application source.
 
 Every element has one file, and every ID is unique in the tree. The file moves
 with its element when a move, combine or rename changes the element's parent or
 ID. `groma view <id>` resolves exactly one element.
 
-- A drafted element receives its ID when Groma drafts it. That is the ID it
+- A drafted element receives its ID when groma.md drafts it. That is the ID it
   keeps when accepted, in the same file.
 - A part a draft touches keeps its ID and its file; the tag is the only
   change.
@@ -210,11 +210,11 @@ ID. `groma view <id>` resolves exactly one element.
 
 ## The tree
 
-The architecture is one tree under the Groma directory: `actors/` holds the
+The architecture is one tree under `groma/` (or `.groma/`): `actors/` holds the
 people who use the software, `externals/` the systems outside its boundary,
 `systems/` the software itself with its containers and components, and
-`drafts/` one record per draft. It may be empty. Groma writes it from scans,
-accepted drafts, drafting, and the curation people apply through Groma. The
+`drafts/` one record per draft. It may be empty. groma.md writes it from scans,
+accepted drafts, drafting, and the curation people apply through groma.md. The
 scanner alone creates stable systems, containers, and components.
 
 After the first write of a document, later scans may refresh only nested
@@ -222,7 +222,7 @@ After the first write of a document, later scans may refresh only nested
 or other authored prose.
 
 `groma.technology`, a free-text value with comma-separated parts, is authored
-through Groma. Core reads it and both details panes show it under How it's
+through groma.md. Core reads it and both details panes show it under How it's
 built. Only a system may be external: it lives under `externals/` and has no
 containers.
 
@@ -282,24 +282,24 @@ Parents resolve in the one tree. A drafted component may name a stable
 container as `parent`.
 
 `groma accept <id>` succeeds only when a scan has matched that ID: either
-a scan you already ran, or a scan Groma runs as part of accept. No match:
+a scan you already ran, or a scan groma.md runs as part of accept. No match:
 accept fails and the ghost stays a ghost.
 
-On success, Groma changes the document's `status` to `stable` in the same
+On success, groma.md changes the document's `status` to `stable` in the same
 file and keeps its tag. Implementation still happens in source. Accept does
 not invent evidence or human verification.
 
 ## One world
 
 Core is the only runtime that reads architecture Markdown. It loads every C4
-element document under the Groma directory and every draft record under
+element document under the architecture directory and every draft record under
 `drafts/`, merges them into one world, and composes one shared sheet before any
 viewer sees it. The sheet gives both maps their surfaces, buildings, groups,
 and route paths. Each viewer only projects those fixed cells for its own
 screen. It never reads the architecture files or creates another world layout.
 The package
 requires `groma/index.md` with only the OKF v0.2 declaration and
-`groma/project.md` with the explicit Groma architecture marker.
+`groma/project.md` with the explicit groma.md architecture marker.
 
 Core also counts the lines of each element's `groma.code` files; an unreadable
 file counts 0. In the web map, every source file belongs to one visible floor
@@ -316,11 +316,11 @@ extensions. The
 terminal details pane keeps the aggregate count as `N files · ~M lines`.
 
 A reserved index is not an element. Other typed OKF concepts may coexist in a
-marked package, but only the four exact C4 types enter Groma's architecture
-world. A generic OKF package without the Groma project marker is rejected.
+marked package, but only the four exact C4 types enter groma.md's architecture
+world. A generic OKF package without the groma.md project marker is rejected.
 
 Parents resolve by `id` across the tree. Each source file has one component
-owner in the current Groma profile. Authored code interactions link files;
+owner in the current groma.md profile. Authored code interactions link files;
 core projects them through their current owners and preserves them across
 rescans and regrouping. Actors and external systems remain explicit concepts.
 
@@ -357,7 +357,7 @@ the configured statuses and
 default status plus one `task list --json` summary containing every configured
 task, including terminal history. It reads `task view <id> --json` only for the
 task whose full details a developer opens. The last configured status is
-terminal. Groma never reads or watches Backlog storage directly. Static export reads a current task snapshot. Web and terminal
+terminal. groma.md never reads or watches Backlog storage directly. Static export reads a current task snapshot. Web and terminal
 share live updates from the Backlog work source: `task list --json --watch`
 provides complete replacement lists, and the plugin notifies its host after
 each complete JSON response. Closing the subscription stops the CLI process.
@@ -371,6 +371,6 @@ statuses, showing a filter only while that status has a mapped pin. A filter
 appears when the first matching pin arrives. The configured terminal status starts
 hidden. The configured default status represents future work, starts shown, and uses
 draft treatment on the map; every other configured status starts shown. Draft treatment
-belongs to the work projection and does not change Groma architecture records or
+belongs to the work projection and does not change groma.md architecture records or
 Markdown. Without the CLI, the plugin supplies empty work and every architecture flow
 remains available.

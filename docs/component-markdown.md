@@ -1,18 +1,18 @@
 # Architecture Markdown contract
 
-Groma stores its architecture as an application profile inside an Open
+groma.md stores its architecture as an application profile inside an Open
 Knowledge Format (OKF) v0.2 bundle. The bundle remains ordinary Markdown:
 standard OKF fields describe each concept, the nested `groma` mapping carries
-Groma-only architecture metadata, and the body explains the concept. A supporting Markdown record holds authored
+groma.md-only architecture metadata, and the body explains the concept. A supporting Markdown record holds authored
 relationships.
 
-Groma supports this explicit architecture profile. It does not load an
-unmarked, generic OKF bundle as a Groma project.
+groma.md supports this explicit architecture profile. It does not load an
+unmarked, generic OKF bundle as a groma.md project.
 
 ## Bundle and project profile
 
 The bundle root is the `groma/` or `.groma/` directory selected by
-`groma init`. Groma resolves that choice once and every architecture command
+`groma init`. groma.md resolves that choice once and every architecture command
 uses the same root. In the paths below, `<groma-root>` means that selected
 directory. Its reserved `index.md` contains exactly:
 
@@ -69,7 +69,7 @@ a drafted concept has `status: draft`, and a stable concept may carry the tag
 too when the draft touches it. A draft with no `status: draft` concept left is
 complete, and its record remains.
 
-Groma does not invent `generated`, `verified`, source provenance, or other
+groma.md does not invent `generated`, `verified`, source provenance, or other
 human trust claims.
 
 ## Files and containment
@@ -99,8 +99,8 @@ containers.
 | `C4 Component` | a `C4 Container`, or its internal `C4 System` when the container is unidentified |
 
 A component stored directly under its system has incomplete placement. This is
-a Groma application-profile rule, not another C4 containment level. Its Markdown
-still carries its responsibility and source links. Groma draws these components
+a groma.md application-profile rule, not another C4 containment level. Its Markdown
+still carries its responsibility and source links. groma.md draws these components
 in one **Unidentified container** group within that system. The group is derived
 for display and is never stored as a container or treated as an application
 boundary. Its detail panel explains the missing container.
@@ -116,7 +116,7 @@ Each C4 concept has these standard top-level fields:
 | `description` | no | A concise standard OKF description. |
 | `status` | yes | `draft` for a concept that does not exist yet; `stable` otherwise. |
 
-Groma-only fields live together under `groma`:
+groma.md-only fields live together under `groma`:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -130,10 +130,10 @@ Groma-only fields live together under `groma`:
 There is no `kind` field. The standard `type` carries the C4 type, and the
 body does not repeat `title` as a level-one heading.
 
-Groma owns only the fields above. It tolerates other OKF metadata and unknown
-concept types inside an explicitly marked Groma package, and preserves
+groma.md owns only the fields above. It tolerates other OKF metadata and unknown
+concept types inside an explicitly marked groma.md package, and preserves
 unowned fields during supported edits. It remains strict about its own nested
-fields, C4 containment, and relationships. This preservation makes a Groma
+fields, C4 containment, and relationships. This preservation makes a groma.md
 package usable by OKF tooling; it is not a generic OKF import contract.
 
 A group is a narrative overlay on one hierarchy level. It never becomes a
@@ -146,7 +146,7 @@ execution evidence can move it from its system into an application container.
 This preserves its ID, source ownership and authored meaning, and rebases incoming
 and outgoing Markdown links. An existing container assignment is never replaced.
 
-The architecture model owns IDs. Groma assigns an ID when it drafts a concept
+The architecture model owns IDs. groma.md assigns an ID when it drafts a concept
 or when a scan finds a previously unknown source. A drafted concept keeps its
 ID and its file when accepted. Architecture IDs live in Markdown, not
 application source.
@@ -168,9 +168,9 @@ identity do not enter that hash. Titles use the readable name without the
 hash. An already owned source keeps its stored ID on later scans, including
 when another scanner reports it.
 
-This is a Groma naming rule for existing C4 components, not another C4 boundary
+This is a groma.md naming rule for existing C4 components, not another C4 boundary
 or OKF metadata field. Ordinary Markdown and OKF readers see readable titles,
-filenames, and source references; Groma core owns collision allocation and
+filenames, and source references; groma.md core owns collision allocation and
 the existing `groma.id` identity.
 
 ### Code references
@@ -206,7 +206,7 @@ from distinct stored file interactions and are not written into Code references.
 ## Markdown body
 
 Consecutive prose paragraphs at the start of a C4 concept body form its long
-Groma `overview`. The overview may be empty, which is useful for a concept
+groma.md `overview`. The overview may be empty, which is useful for a concept
 created from scan evidence. A named section ends the leading overview.
 
 These level-two sections are supported:
@@ -214,7 +214,7 @@ These level-two sections are supported:
 - `## Requirements` states constraints the result must satisfy.
 - `## Technology` explains implementation technology in prose.
 
-Other named sections remain authored Markdown. Groma preserves them when it
+Other named sections remain authored Markdown. groma.md preserves them when it
 edits overview or owned metadata.
 
 ## Relationships
@@ -264,7 +264,7 @@ Finding a source dependency does not accept a draft interaction.
 
 Core writes selected current interactions under `## Derived relationships`,
 using the same four columns. The derived Technology cell lists contributing
-scanner IDs, separated by commas. This is Groma application-profile meaning;
+scanner IDs, separated by commas. This is groma.md application-profile meaning;
 ordinary Markdown readers see the source links, interaction and its attribution.
 A scan replaces only rows whose contributing scanners all supplied observations.
 Rows depending on absent scanners, their endpoint Code references, and authored
@@ -284,7 +284,7 @@ the authored description.
 
 ### Ownership and map projection
 
-In Groma's current profile, each source file has one component owner. This is
+In groma.md's current profile, each source file has one component owner. This is
 an application constraint, not a universal OKF or C4 rule. Many other files
 may use it. A scan preserves curated membership and never follows dependencies
 to claim ownership. Source ownership does not establish runtime placement.
@@ -309,7 +309,7 @@ Authored interactions keep their declared direction. This display rule does
 not change the underlying interaction claims.
 
 An ordinary Markdown reader can follow the file and concept links and read
-each authored interaction. Groma interprets ownership, authorship, and
+each authored interaction. groma.md interprets ownership, authorship, and
 the relationship sections to project the map. Source inventory and inferred
 placement are not proof of cohesive C4 responsibilities; curated ownership
 provides those boundaries.
@@ -388,5 +388,5 @@ TypeScript, NestJS, and PostgreSQL.
 
 ```
 
-The live [Groma system](../groma/systems/groma/system.md) and
+The live [groma.md system](../groma/systems/groma/system.md) and
 [MVP draft](../groma/drafts/mvp.md) are a complete package example.

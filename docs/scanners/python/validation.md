@@ -21,7 +21,7 @@ They do not claim an architectural component for each responsibility.
 Both packed-plugin Python-only scans passed. Their second scans created zero
 records and refreshed 28 and 1,551 components respectively. After adding the
 local TypeScript and React packages, both combined scans passed without scanner
-failures. The compiled Groma binary repeated those combined scans with zero
+failures. The compiled groma.md binary repeated those combined scans with zero
 new records, refreshing 130 and 2,824 components respectively. Inspection of the
 saved Code references found no source file assigned to more than one component.
 React inspected 70 and 622 files respectively; these overlap TypeScript files,
@@ -31,14 +31,14 @@ Python returned its `PYTHON_SYNTAX_ONLY` diagnostic. React reported unsupported
 bindings through its existing diagnostics. Python framework routing, dependency
 injection, cross-language HTTP interactions and runtime call targets were not
 inferred. No application servers, databases or full application test suites
-were started. Project source and dependency lockfiles were not changed; Groma
+were started. Project source and dependency lockfiles were not changed; groma.md
 initialization added its own configuration and agent-instruction entries.
 
 ## Reproduce the local package checks
 
 The retained workspace is `/tmp/groma-python-qualification`, containing both
 clones, the tarball, unpacked package, observations and CLI logs. Temporary files
-may be removed by the operating system. From the Groma repository:
+may be removed by the operating system. From the groma.md repository:
 
 ```sh
 bun plugins/scanners/python/build.ts /tmp/groma-python-qualification/package
@@ -81,7 +81,7 @@ CLI development runs used `bun /path/to/groma3/src/cli.ts`. After `bun run build
 | Artifact | SHA-256 |
 | --- | --- |
 | Packed Python candidate | `445fcbef4d07a0edb2184aafccaf40604b11b37749b688330f43607b45b3b10a` |
-| Locally compiled Groma | `9ebee468f37f4124e444c715e5efa8d1551d28b378edbb3174fadc6100494272` |
+| Locally compiled groma.md | `9ebee468f37f4124e444c715e5efa8d1551d28b378edbb3174fadc6100494272` |
 
 ## Repository and release checks
 

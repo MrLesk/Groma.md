@@ -25,7 +25,7 @@
     <source media="(prefers-color-scheme: light)" type="image/avif" srcset=".github/assets/web-light.avif">
     <source media="(prefers-color-scheme: light)" type="image/webp" srcset=".github/assets/web-light.webp">
     <source media="(prefers-color-scheme: light)" type="image/gif" srcset=".github/assets/web-light.gif">
-    <img src=".github/assets/web-light.gif" alt="Groma's browser map stepping through project setup, then opening the hierarchy and selecting Scan lifecycle" width="100%">
+    <img src=".github/assets/web-light.gif" alt="groma.md's browser map stepping through project setup, then opening the hierarchy and selecting Scan lifecycle" width="100%">
   </picture>
 </p>
 
@@ -33,15 +33,15 @@
   <a href="https://mrlesk.github.io/Groma.md/architecture/blueprint/?theme=auto"><img src=".github/assets/explore-live-map.svg" alt="Explore the live map" width="232" height="48"></a>
 </p>
 
-Groma scans your code into a first [C4](https://c4model.com) architecture map. Your coding agent curates it into the architecture you would explain to a new teammate, and the map stays open while you and your agents work. Save a file and the map updates. Work on a [Backlog.md](https://github.com/MrLesk/Backlog.md) task and it appears pinned to the components it touches. Everything is plain Markdown in your repository, so architecture changes are reviewed in the same pull request as the code.
+groma.md scans your code into a first [C4](https://c4model.com) architecture map. Your coding agent curates it into the architecture you would explain to a new teammate, and the map stays open while you and your agents work. Save a file and the map updates. Work on a [Backlog.md](https://github.com/MrLesk/Backlog.md) task and it appears pinned to the components it touches. Everything is plain Markdown in your repository, so architecture changes are reviewed in the same pull request as the code.
 
-Free, MIT-licensed, and local. No account or backend, and Groma itself calls no AI service: curation uses the coding agent you already work with.
+Free, MIT-licensed, and local. No account or backend, and groma.md itself calls no AI service: curation uses the coding agent you already work with.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/workflow-dark.png">
     <source media="(prefers-color-scheme: light)" srcset=".github/assets/workflow-light.png">
-    <img src=".github/assets/workflow-light.png" alt="Groma scans your repository with a deterministic scan into a first map, a starting point. Your coding agent curates it: it names, merges and connects components into your architecture, stored as C4 Markdown in Git. The map stays live as your code changes, and later scans keep your agent's work." width="100%">
+    <img src=".github/assets/workflow-light.png" alt="groma.md scans your repository with a deterministic scan into a first map, a starting point. Your coding agent curates it: it names, merges and connects components into your architecture, stored as C4 Markdown in Git. The map stays live as your code changes, and later scans keep your agent's work." width="100%">
   </picture>
 </p>
 
@@ -55,7 +55,7 @@ Three steps. The scan gives you a first map; your agent turns it into your archi
 npm i -g groma.md backlog.md
 ```
 
-Backlog.md provides the tasks shown on the map; Groma works without it. macOS requires Apple Silicon.
+Backlog.md provides the tasks shown on the map; groma.md works without it. macOS requires Apple Silicon.
 
 ### 2. Scan
 
@@ -71,10 +71,10 @@ On a new project, `groma web` walks you through project setup and scanner select
 Your coding agent turns the first scan into architecture. It reads the code, names responsibilities, merges records that belong together, and adds the relationships the scanner cannot see. Keep the map open while it works: every change it makes appears on the map. Ask your agent:
 
 ```text
-Read the current Groma architecture with `groma agent-instructions` and `groma view --plain`. Compare it with the source code, then annotate the architecture so it reflects the code: combine records that share a responsibility, add missing overviews and relationships, and keep Backlog.md task links current. Use Groma's CLI for architecture changes, then summarize what you changed.
+Read the current groma.md architecture with `groma agent-instructions` and `groma view --plain`. Compare it with the source code, then annotate the architecture so it reflects the code: combine records that share a responsibility, add missing overviews and relationships, and keep Backlog.md task links current. Use groma.md's CLI for architecture changes, then summarize what you changed.
 ```
 
-Setup registers Groma in your `AGENTS.md` or `CLAUDE.md`, so your agent knows where to start. Later scans keep what your agent wrote.
+Setup registers groma.md in your `AGENTS.md` or `CLAUDE.md`, so your agent knows where to start. Later scans keep what your agent wrote.
 
 ## Work with your agent
 
@@ -98,7 +98,7 @@ groma view src/orders.ts    # the owner of this file and its relationships
 
 ## Plain Markdown, C4, OKF
 
-The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) bundle: one Markdown document per element, plus records for relationships, flows, and drafts. C4 gives the structure, OKF keeps it portable, and the documents stay readable without Groma. [Architecture Markdown contract](docs/component-markdown.md)
+The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) bundle: one Markdown document per element, plus records for relationships, flows, and drafts. C4 gives the structure, OKF keeps it portable, and the documents stay readable without groma.md. [Architecture Markdown contract](docs/component-markdown.md)
 
 ## Languages
 
@@ -118,20 +118,20 @@ The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](ht
 | [Swift](docs/scanners/swift/index.md) | ✅ Available |
 | Your favorite language or framework | [Submit an issue with your request](https://github.com/MrLesk/Groma.md/issues) |
 
-More languages arrive as [scanner plugins](docs/scanners/creating-a-plugin.md); add your own with `groma scanner add`. Each scanner's page describes what it reads. See [which relationships Groma detects](docs/relationship-inference.md#current-inference-rule).
+More languages arrive as [scanner plugins](docs/scanners/creating-a-plugin.md); add your own with `groma scanner add`. Each scanner's page describes what it reads. See [which relationships groma.md detects](docs/relationship-inference.md#current-inference-rule).
 
 ## Experimental
 
-Groma is an early prototype. Review the first scan before treating it as your architecture, expect rough edges, and check exports before sharing them, since they include source code. Report problems in [Issues](https://github.com/MrLesk/Groma.md/issues).
+groma.md is an early prototype. Review the first scan before treating it as your architecture, expect rough edges, and check exports before sharing them, since they include source code. Report problems in [Issues](https://github.com/MrLesk/Groma.md/issues).
 
 ## Documentation and contributing
 
 - [Documentation index](docs/index.md)
 - [Product model](docs/product-model.md)
 - [Contributing guide](CONTRIBUTING.md)
-- [Groma manifesto](MANIFESTO.md)
+- [groma.md manifesto](MANIFESTO.md)
 - [What is a groma?](docs/what-is-a-groma.md)
 
 ## License
 
-Groma is free and open source under the [MIT license](LICENSE).
+groma.md is free and open source under the [MIT license](LICENSE).

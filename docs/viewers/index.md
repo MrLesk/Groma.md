@@ -1,6 +1,6 @@
 # Viewers
 
-A viewer shows the one architecture world Groma core already has: observed
+A viewer shows the one architecture world groma.md core already has: observed
 boxes, draft ghosts, and the relationships between them.
 People use a viewer to judge a scan and walk the architecture. Changes and
 ghost acceptance go through `groma draft`, `groma edit` and
@@ -41,7 +41,7 @@ stands each task's pins on the element it touched last. A work refresh projects
 onto the cached map instead of composing another sheet. A failed Backlog read
 leaves the map available. A missing global Backlog.md CLI supplies empty work.
 The Backlog CLI must support `task list --json --watch`. If it rejects the
-required options, Groma reports upgrade guidance in its terminal output:
+required options, groma.md reports upgrade guidance in its terminal output:
 `npm install -g backlog.md`. It does not install updates or read Backlog storage.
 Selection never changes world geometry. The web starts fitted to the whole map;
 the TUI starts on a readable root island. Routes stay on the map. One authored

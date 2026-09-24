@@ -5,7 +5,7 @@
 The selected source is the CompanyMergeDialog flow in `callforpapers`.
 Validation used a separate copy of the Java acceptance source snapshot
 `1cb6783f3379664e3f176e72c5419064ce24dbfd`. The original project and its
-Groma state were not changed. After validation, 3,171 source and dependency
+groma.md state were not changed. After validation, 3,171 source and dependency
 configuration files matched the source copy byte for byte.
 
 The application's unchanged frozen pnpm lock installed Angular core 21.2.19
@@ -36,10 +36,10 @@ was asserted by this adapter.
 
 ## Checks performed
 
-- The built package loaded in compiled Groma alongside Java and embedded
+- The built package loaded in compiled groma.md alongside Java and embedded
   TypeScript 7.1. The selected emitter file retained one owner with separate
   `angular` and `typescript` Code references.
-- In the acceptance copy, existing Groma curation commands combined each
+- In the acceptance copy, existing groma.md curation commands combined each
   selected TypeScript file and its HTML template into one responsibility.
   The merge dialog retained its responsibility description. A repeat compiled
   scan left all 1,394 architecture documents unchanged.
@@ -69,7 +69,7 @@ tooling test was skipped, and lint, type checking, and the Node suite passed.
 
 ## Release gates
 
-The executed environment is macOS arm64 with Bun 1.4.1 and compiled Groma.
+The executed environment is macOS arm64 with Bun 1.4.1 and compiled groma.md.
 The package build and local consumer are technically qualified here.
 Public package naming, publication, and actual Windows/Linux consumer runs
 remain separate release gates.

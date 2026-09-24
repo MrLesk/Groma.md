@@ -17,7 +17,7 @@ to see which scanners are installed.
 Architecture findings are review questions about implementations, not map
 collaborations. They do not become C4 elements, containment, or relationship
 rows. An ordinary Markdown reader of the architecture tree never sees them.
-Groma interprets scanner facts after a scan and shows copies next to the
+groma.md interprets scanner facts after a scan and shows copies next to the
 operations they concern: under Code in How it's built, and in the scan listing.
 Exact copies list the other operations by name and file:line; similar copies add
 that they are not identical. Token bags stay off the listing. What it does does not dump findings.
@@ -113,5 +113,5 @@ Test files already excluded by the TypeScript scanner are not compared.
 
 A finding is supporting knowledge about existing components. OKF readers
 understand the architecture without it. C4 still owns actors, systems,
-containers, components, and relationships. Groma owns the comparison and the
+containers, components, and relationships. groma.md owns the comparison and the
 viewer presentation.

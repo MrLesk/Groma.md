@@ -2,8 +2,8 @@
 
 Official scanners and the author contract remain in this repository. The shared
 release workflow stages runnable packages, publishes them to npm, and then
-builds Groma with the exact published discovery metadata. The package manifests
-own names, versions, detection rules and Groma API requirements. Changed packages require new
+builds groma.md with the exact published discovery metadata. The package manifests
+own names, versions, detection rules and groma.md API requirements. Changed packages require new
 versions; npm versions cannot be replaced. The workflow reuses exact versions
 already published and publishes only missing versions. Bump every package whose
 contents changed before starting a release.
@@ -15,7 +15,7 @@ first, then the scanner packages publish concurrently. C# publishes its platform
 runtime packages before its adapter. Each concurrent group
 finishes all started work before reporting any failures or advancing.
 
-Groma builds then run in parallel across the five platforms, after scanner
+groma.md builds then run in parallel across the five platforms, after scanner
 publication makes their exact metadata available from npm. Release downloads and
 platform npm packages publish in parallel after those builds. The main npm
 wrapper waits for every platform package; the version update on main waits for
@@ -23,15 +23,15 @@ both the wrapper and release downloads.
 
 Prepare a draft GitHub release and review its version, target commit and changelog
 with the maintainer before publishing it. Publishing the GitHub release starts
-the shared workflow for both scanner packages and the main Groma CLI.
-To release changed scanners without a new Groma version, run the same workflow
+the shared workflow for both scanner packages and the main groma.md CLI.
+To release changed scanners without a new groma.md version, run the same workflow
 manually with `publish_scanners` enabled. Leave it disabled for a build-only run.
 
 The author contract is `@groma/scanner`. Official packages use
 `@groma/scanner-<id>`; the main CLI remains `groma.md`. Scanner manifests declare
-their minimum Groma API version in `groma.scanner.discovery.compatibility.groma`,
-currently `>=0.3.0`. Newer stable Groma versions remain eligible. Raise the minimum
-only when a scanner uses an API introduced in a newer Groma version, and verify
+their minimum groma.md API version in `groma.scanner.discovery.compatibility.groma`,
+currently `>=0.3.0`. Newer stable groma.md versions remain eligible. Raise the minimum
+only when a scanner uses an API introduced in a newer groma.md version, and verify
 it against the supported examples before each release. Keep package versions coordinated with `@groma/scanner`
 where it is a runtime dependency.
 
@@ -106,7 +106,7 @@ bun run build
 
 The catalog command reads each exact version back from npm and fails if it is
 not published. It embeds those published detection rules into the build checkout.
-At installation time, Groma resolves a suitable release from npm again; it never
+At installation time, groma.md resolves a suitable release from npm again; it never
 uses a development manifest version as proof of availability. Publishing
 never silently changes an existing project's recorded scanner selection.
 

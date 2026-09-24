@@ -1,6 +1,6 @@
 # Discover project scanners
 
-Run discovery from a Git repository, before or after Groma initialization:
+Run discovery from a Git repository, before or after groma.md initialization:
 
 ```sh
 groma scanner discover
@@ -53,10 +53,10 @@ every finding.
 
 Dependency and generated directories are excluded by path segment:
 `node_modules`, `vendor`, `target`, `dist`, `build`, `obj`, `.gradle`,
-`.angular`, `coverage`, and `generated`. Git metadata and Groma architecture
+`.angular`, `coverage`, and `generated`. Git metadata and groma.md architecture
 directories are also excluded. A project deliberately placed under one of
 these names is outside this discovery scope. In an initialized project, discovery
-also honors the shared `exclude` patterns in Groma's `scanners.json`.
+also honors the shared `exclude` patterns in groma.md's `scanners.json`.
 
 Discovery does not evaluate Maven/MSBuild properties, inherited settings,
 profiles, Gradle scripts, or Cargo workspace inheritance. Literal XML tags
@@ -78,22 +78,22 @@ name, version, and description use the standard manifest fields.
 
 The official selection in
 [`src/scanner/modules/official-catalog.ts`](../../src/scanner/modules/official-catalog.ts)
-imports those manifests. The existing Groma build embeds their data; it does
+imports those manifests. The existing groma.md build embeds their data; it does
 not execute the optional plugins or contact a registry for discovery. Updating
-an existing plugin's metadata and rebuilding Groma updates its recommendations.
+an existing plugin's metadata and rebuilding groma.md updates its recommendations.
 Adding an official plugin requires adding its manifest to the selection.
 There is no separately maintained technology detector or compatibility table.
 
 Every detected official technology offers Install. Detection neither contacts npm
 nor claims that a development manifest is a published release. Installation reads
 published package metadata, chooses the newest stable release satisfying the
-Groma API requirement and this computer's OS/CPU, then records the exact version.
+groma.md API requirement and this computer's OS/CPU, then records the exact version.
 Missing language versions, prereleases, version ranges, Go minimum directives and
 .NET framework names do not disable installation. The scanner validates its
 actual projects when it runs.
 
 Third-party authors use the same [metadata contract](creating-a-plugin.md#discovery-metadata).
-Users can add an unlisted package by name. Groma does not search for third-party
+Users can add an unlisted package by name. groma.md does not search for third-party
 packages remotely; installed third-party metadata participates in project matching.
 Settings suppress equivalent official recommendations when a selected plugin
 covers those technologies. A plugin without discovery metadata remains runnable
@@ -103,8 +103,8 @@ The discovery result distinguishes:
 
 - `configured`: keep the project's existing selection, even when its package is missing.
 - `installable`: offer the recommended package; resolve its published version during installation.
-- `incompatible`: an installed plugin requires a different Groma API version.
-  Its code is not loaded; update Groma or explicitly change the plugin version.
+- `incompatible`: an installed plugin requires a different groma.md API version.
+  Its code is not loaded; update groma.md or explicitly change the plugin version.
 
 Dependency findings retain declared and installed versions as diagnostic evidence.
 They do not decide whether a language or framework can be scanned. Compiler and
@@ -126,5 +126,5 @@ Their dependency declarations do not prove complete framework runtime analysis.
 
 Discovery and scanner selection are operational configuration. They do not
 create OKF concepts, C4 elements, or architecture boundaries. Ordinary Markdown
-and OKF readers keep the same architecture records and links; Groma's scanner
+and OKF readers keep the same architecture records and links; groma.md's scanner
 module management owns interpretation of this discovery result.

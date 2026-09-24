@@ -1,11 +1,11 @@
-# Groma agent guides
+# groma.md agent guides
 
 Help a developer new to this project understand who uses it, what its main
 parts do, and how they work together. Read the project's documentation and
 source before curating. A scan supplies evidence and initial placement; it
 does not settle the architecture.
 
-Groma stores this repository's architecture as Markdown in the selected
+groma.md stores this repository's architecture as Markdown in the selected
 `groma/` or `.groma/` directory, written `<groma-root>` in these guides. Change
 that architecture only through the `groma` CLI.
 
@@ -29,7 +29,7 @@ another provider. If the evidence does not establish a boundary, report that
 uncertainty rather than inventing an application or relationship.
 
 These definitions follow the [C4 model](https://c4model.com/abstractions).
-Groma adds groups and flows: a group names related sibling components while
+groma.md adds groups and flows: a group names related sibling components while
 keeping their separate responsibilities; a flow explains one scenario through
 ordered relationships. Neither adds a C4 containment level.
 
@@ -49,7 +49,7 @@ ordered relationships. Neither adds a C4 containment level.
 
 Open Knowledge Format (OKF) 0.2 provides the portable Markdown representation:
 ordinary readers can understand titles, descriptions, body text, and links.
-Groma interprets its own metadata for containment, source ownership, and map
+groma.md interprets its own metadata for containment, source ownership, and map
 presentation. Use the CLI to maintain that metadata and source references.
 
 ## Curation workflow and expected result
@@ -74,7 +74,7 @@ Before handing back the map:
 - Check that a new reader can identify the users, system purpose, application
   and data boundaries, major responsibilities, and important interactions.
 - Inspect the rendered map and source links. Actors belong to the west and
-  external systems to the east under Groma's layout rules, not a C4 requirement.
+  external systems to the east under groma.md's layout rules, not a C4 requirement.
   Preserve the true relationship direction; report layout defects separately.
 - Follow the structure guide's rescan checks to confirm the curation survives.
   Summarize the changes and any unsupported or uncertain areas. Fewer boxes

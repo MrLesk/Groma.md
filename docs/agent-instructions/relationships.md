@@ -72,7 +72,7 @@ groma add flow 'Submit a request' \
 groma view submit-a-request
 ```
 
-Groma writes `<groma-root>/flows/submit-a-request.md`. Each step stores From,
+groma.md writes `<groma-root>/flows/submit-a-request.md`. Each step stores From,
 To, and Action columns and links each endpoint to its C4 Markdown document.
 Links resolve relative to that flow document, not the shell's working
 directory, and work the same under `groma/` and `.groma/`. Table order is

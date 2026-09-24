@@ -1,12 +1,12 @@
-# Contributing to Groma
+# Contributing to groma.md
 
-Thank you for helping build Groma. This guide takes you from a fresh checkout to a verified change.
+Thank you for helping build groma.md. This guide takes you from a fresh checkout to a verified change.
 
 ## Start with the product
 
-Read the [Groma manifesto](MANIFESTO.md) to understand the product principles, then use the
+Read the [groma.md manifesto](MANIFESTO.md) to understand the product principles, then use the
 [documentation index](docs/index.md) to find the contract or product flow relevant to your change. Architecture Markdown
-is the source of truth for what Groma represents and shows. It follows Groma's strict OKF v0.2 architecture profile;
+is the source of truth for what groma.md represents and shows. It follows groma.md's strict OKF v0.2 architecture profile;
 the [component Markdown contract](docs/component-markdown.md) defines its reserved files, metadata, body, and
 relationships.
 
@@ -17,14 +17,14 @@ not need a pull request.
 
 ## Set up the repository
 
-Groma requires Bun 1.4.1 or newer and Node.js 20.19 or newer. Published macOS binaries are Apple Silicon only; Intel Macs are not a supported architecture.
+groma.md requires Bun 1.4.1 or newer and Node.js 20.19 or newer. Published macOS binaries are Apple Silicon only; Intel Macs are not a supported architecture.
 
 ```sh
 bun install
 bun run check
 ```
 
-Groma is written in TypeScript. Bun runs the CLI and both viewers. Tests under `test/` run on Node through `tsx`
+groma.md is written in TypeScript. Bun runs the CLI and both viewers. Tests under `test/` run on Node through `tsx`
 (`bun run test:node`); tests under `test-bun/` run with `bun test` (`bun run test:viewer`). `bun run check` is the single
 repository check: it runs Biome, typechecks the code, and runs both test suites. Every test loads architecture from
 fixtures under `test/fixtures/`, never from the live `groma/` tree.
@@ -82,11 +82,11 @@ supported runner platforms, and commits the released version to `main` only afte
 `groma.md` manifest is public; the workflow stages its Node wrapper around the compiled binaries so
 the workspace-only development dependencies are not part of the published package.
 
-After every successful Groma release, update the `groma.md@<version>` pin in
+After every successful groma.md release, update the `groma.md@<version>` pin in
 [`groma.md-action/action.yml`](https://github.com/MrLesk/groma.md-action/blob/main/action.yml) and follow the
 [Action release checklist](https://github.com/MrLesk/groma.md-action#releases). This final release step verifies the new
-Groma version in the Action, publishes an approved Action release, and updates its major-version pointer. It is manual;
-Groma's release workflow does not update the Action repository.
+groma.md version in the Action, publishes an approved Action release, and updates its major-version pointer. It is manual;
+groma.md's release workflow does not update the Action repository.
 
 ## Before starting a feature
 
@@ -106,8 +106,8 @@ Before requesting review:
 - Keep Backlog traceability current while working: record each changed repository file and, when architecture is
   affected, each exact element `id` on the task as soon as it changes. Use the `backlog` CLI; do not edit task
   Markdown directly.
-- Update canonical architecture or product documentation when the represented contract changes. Use Groma commands for
-  Groma-owned architecture files instead of editing those files with generic tools.
+- Update canonical architecture or product documentation when the represented contract changes. Use groma.md commands for
+  groma.md-owned architecture files instead of editing those files with generic tools.
 - Do not add unrequested compatibility behavior, fallbacks, recovery paths, speculative abstractions, or unrelated
   cleanup.
 - Test business logic and invariants rather than decorative UI details, exact labels, colors, borders, or architecture

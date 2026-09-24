@@ -2,7 +2,7 @@
 
 When the `backlog` CLI is available and you work on a Backlog task, keep the
 task's changed files and architecture references current. These links let
-Groma place the task on the architecture map. Routine code work needs these
+groma.md place the task on the architecture map. Routine code work needs these
 links, not a full scan and curation cycle.
 
 ## Commands
@@ -11,7 +11,7 @@ links, not a full scan and curation cycle.
 | --- | --- |
 | `backlog task view <task-id> --plain` | a Backlog task ID; shows the current modified-file list and references |
 | `backlog task edit <task-id> --modified-file <path>` | repository-relative paths; the flags replace the complete list |
-| `backlog task edit <task-id> --add-ref <id>` or `--remove-ref <id>` | exact Groma element IDs |
+| `backlog task edit <task-id> --add-ref <id>` or `--remove-ref <id>` | exact groma.md element IDs |
 | `groma view <source-file>` | an exact repository-relative source file; prints its owning component's ID and the file's relationships |
 
 Architecture references must be real element IDs. File paths, titles, group
@@ -50,7 +50,7 @@ completed writes:
   new one. Either way, remove the old reference and add the new one.
 
 Moves report both paths and keep the same ID. Group commands report member
-IDs. Groma does not save these results as ID aliases or operation history.
+IDs. groma.md does not save these results as ID aliases or operation history.
 
 Immediately after a structural command, before any further change, record all
 its created, changed, and removed paths in one Backlog update. Preserve the

@@ -1,6 +1,6 @@
 # C# scanner qualification
 
-Local qualification on 8 September 2026 used macOS arm64, Bun 1.4.1, .NET SDKs 10.0.400 and 9.0.317, Roslyn 5.9.0.0, and a compiled Groma 0.2.0 binary. The consumer binary SHA-256 was `bebd248e71d173b6a3eb780bcd9c946e37071a1148b57c899a4107374a51d5c0`. It was built from the shared working checkout based on `0e1252c92a90ef87b30d4fb5cfa56e768d436fea`, including the uncommitted C# delivery, technology-discovery, and evidence-composition changes for TASK-326. It is a working-tree snapshot, not an immutable Git revision. Linux and Windows consumer qualification belongs to the common release task; this record does not claim those runs passed.
+Local qualification on 8 September 2026 used macOS arm64, Bun 1.4.1, .NET SDKs 10.0.400 and 9.0.317, Roslyn 5.9.0.0, and a compiled groma.md 0.2.0 binary. The consumer binary SHA-256 was `bebd248e71d173b6a3eb780bcd9c946e37071a1148b57c899a4107374a51d5c0`. It was built from the shared working checkout based on `0e1252c92a90ef87b30d4fb5cfa56e768d436fea`, including the uncommitted C# delivery, technology-discovery, and evidence-composition changes for TASK-326. It is a working-tree snapshot, not an immutable Git revision. Linux and Windows consumer qualification belongs to the common release task; this record does not claim those runs passed.
 
 ## Reused research
 
@@ -17,9 +17,9 @@ The source witnesses match the research baseline:
 - `AbstractValidator.cs:271` resolves construction and `When` to `Internal/ConditionBuilder.cs` without unresolved alternatives.
 - `AbstractValidator.cs:349,359` retains `OnRuleAdded` as a known virtual declaration candidate with `unresolved: true`.
 
-The package was relocated into a path containing spaces and loaded by compiled Groma. The independent project-reference fixture produced six files, two project groups, 19 operations, and 24 invocations. Repeated scans preserved the map byte-for-byte. Combining the two partial-operation files through Groma kept their common curated owner after a valid source edit. A deliberate compilation failure preserved the complete previous map.
+The package was relocated into a path containing spaces and loaded by compiled groma.md. The independent project-reference fixture produced six files, two project groups, 19 operations, and 24 invocations. Repeated scans preserved the map byte-for-byte. Combining the two partial-operation files through groma.md kept their common curated owner after a valid source edit. A deliberate compilation failure preserved the complete previous map.
 
-Compiled Groma also scanned the pinned FluentValidation project. The first scan took 2.477 seconds on this machine. The second scan preserved all architecture Markdown. Adding a valid TypeScript probe and a broken C# probe made the combined scan fail before reconciliation; the map remained byte-identical. The probes were removed and tracked application source stayed unchanged. Map interpretation and review are recorded in TASK-326.2.
+Compiled groma.md also scanned the pinned FluentValidation project. The first scan took 2.477 seconds on this machine. The second scan preserved all architecture Markdown. Adding a valid TypeScript probe and a broken C# probe made the combined scan fail before reconciliation; the map remained byte-identical. The probes were removed and tracked application source stayed unchanged. Map interpretation and review are recorded in TASK-326.2.
 
 ## macOS restore regression
 

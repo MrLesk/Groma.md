@@ -27,7 +27,7 @@ The automated terminal procedure requires `tui-test` on `PATH` in the
 shell running it, plus Bun and the installed project dependencies.
 Check availability with `Get-Command tui-test` in PowerShell or
 `command -v tui-test` in Bash. It is a separate validation tool, not
-a dependency required to run Groma.
+a dependency required to run groma.md.
 
 Drive `groma view` with `tui-test`. Read the terminal, send keys, and
 capture a screenshot.

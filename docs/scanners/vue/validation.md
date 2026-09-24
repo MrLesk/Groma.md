@@ -23,7 +23,7 @@ adapter. These counts describe this snapshot, not coverage requirements.
 ## Executed checks
 
 Both the independent fixture and the real project completed the normal
-compiled-Groma discovery, init, exact-package install, readiness, scan and
+compiled-groma.md discovery, init, exact-package install, readiness, scan and
 export journey. The local registry served an actual `npm pack` artifact;
 its download was observed. The package ran alongside the TypeScript scanner 7.1.
 The real project was an isolated clone; the modified source and template were
@@ -60,7 +60,7 @@ the test suite.
 
 ## Release limits
 
-Execution used macOS arm64, Bun 1.4.1 and compiled Groma. Public publication,
+Execution used macOS arm64, Bun 1.4.1 and compiled groma.md. Public publication,
 public package naming, and Windows/Linux execution remain separate release
 gates. No additional-platform or public-availability claim is made.
 The coordinator approved the real map, including the curated CodeMirror

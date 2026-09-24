@@ -42,7 +42,7 @@ body. `groma view` has no `project` target: the project record is
 `--description` is an optional short summary, stored in the standard
 `description` field of Open Knowledge Format (OKF). `--overview` is the fuller
 explanation in the Markdown body. Ordinary Markdown and OKF readers can read
-both; Groma uses them as the concept's summary and responsibility text. Avoid
+both; groma.md uses them as the concept's summary and responsibility text. Avoid
 repeating the same paragraph in both:
 
 ```sh
@@ -55,4 +55,4 @@ groma edit entry --description 'Request coordinator' \
 Every visible element has a responsibility a new reader can understand. Read
 the result with `groma view <id>` and check its name and explanation in the map.
 The short description and overview should complement each other, and the
-record should remain useful as ordinary Markdown outside Groma.
+record should remain useful as ordinary Markdown outside groma.md.

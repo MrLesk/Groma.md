@@ -62,7 +62,7 @@ sha512-Xeq3m2CLnJsHQn0ACT56MrUlnRat8HfzR5umx0w7l6yiZTf4ujzJ6Tbnw2i1Jmp7SvJzzKopC
 ```
 
 A fresh npm installation passed all four Swift integration tests (47 assertions).
-The published Groma 0.3.3 CLI also installed the scanner by its exact npm version
+The published groma.md 0.3.3 CLI also installed the scanner by its exact npm version
 in a disposable project containing the Swift fixture. Readiness passed and two
 scans produced byte-identical architecture Markdown without changing source bytes.
 A second project restored the copied scanner selection through `groma scanner install`
@@ -123,7 +123,7 @@ before and after scanning was
 The hash includes sorted tracked source paths and contents for the language
 extensions measured by the benchmark script.
 
-## Mixed-language Groma flow
+## Mixed-language groma.md flow
 
 With the local Swift and Python packages installed, two complete `groma scan`
 runs took 36.118 and 34.776 seconds. The resulting Code records covered 3,182
@@ -145,7 +145,7 @@ matches a human-curated architecture.
 
 ## Reproduce
 
-Run from the Groma repository on macOS 14 or later. Building the scanner needs
+Run from the groma.md repository on macOS 14 or later. Building the scanner needs
 a Swift toolchain with SwiftParser and SwiftSyntax host libraries; scanning
 the installed package does not.
 
@@ -202,7 +202,7 @@ Name resolution saved `@groma/scanner-swift@0.1.0`. Both scans covered 3,182
 Swift files, reported 2,269 lint candidates, and produced identical Markdown;
 the repeat created no elements. Tracked source bytes were unchanged.
 These Swift-only consumer scans are separate from the mixed-language
-development-checkout measurements above. Groma 0.3.3 accepts the package by
+development-checkout measurements above. groma.md 0.3.3 accepts the package by
 name; automatic Swift recommendations require the updated official catalog.
 
 A second clone with another empty home and cache received only the shared

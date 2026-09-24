@@ -1,6 +1,6 @@
-# The Groma Manifesto
+# The groma.md Manifesto
 
-Groma exists to keep software architecture understandable, current, and useful
+groma.md exists to keep software architecture understandable, current, and useful
 while people and agents change a system. These principles guide product and
 contribution decisions. Detailed product documentation starts at the
 [documentation index](docs/index.md).
@@ -9,7 +9,7 @@ contribution decisions. Detailed product documentation starts at the
 
 Judge product, design, architecture, and implementation decisions with this question:
 
-> If Groma ran against millions of projects across hundreds of programming languages, would this still be the right decision?
+> If groma.md ran against millions of projects across hundreds of programming languages, would this still be the right decision?
 
 Choose principles whose reasoning holds across different projects,
 technologies, and ways of working. Make assumptions explicit, and avoid
@@ -23,19 +23,19 @@ the current approved example; add capabilities when supported use requires them.
 The first scan should produce an architecture a person can recognize well
 enough to navigate, correct, and improve. People and coding agents then
 curate its meaning in Markdown. Scanners may later report new source
-observations, but Groma core must not use them to overwrite that authored
+observations, but groma.md core must not use them to overwrite that authored
 meaning.
 
-## Architecture must outlive Groma
+## Architecture must outlive groma.md
 
-Groma stores architecture information in ordinary Markdown so it remains
-readable, useful, and version-controlled without Groma. Prefer durable, local
+groma.md stores architecture information in ordinary Markdown so it remains
+readable, useful, and version-controlled without groma.md. Prefer durable, local
 documents over data that requires a proprietary service, database, or
 renderer to understand.
 
 ## Store architecture, not diagrams
 
-Groma uses the C4 model to separate architecture into progressively detailed
+groma.md uses the C4 model to separate architecture into progressively detailed
 layers. Diagrams are projections of that layered model. Layout, visual state,
 and the needs of one renderer must not become the source of architectural
 meaning.
@@ -55,7 +55,7 @@ decide that a ghost is built.
 
 ## Core owns runtime interpretation
 
-Scanners return source observations to Groma core. Core reconciles those
+Scanners return source observations to groma.md core. Core reconciles those
 observations and owns architecture Markdown. For viewing, core reads
 observed and planned Markdown and returns one annotated world. A viewer
 plugin projects that world; it never reads architecture files or scanner
@@ -82,12 +82,12 @@ evidence to a scanner, but they do not become architecture merely because
 they exist. A component may keep a small `groma.code` list in frontmatter:
 which scanner found an exact source file and, when useful, which symbol it
 recognized there. This evidence helps explain the component without turning
-the architecture into a source inventory. Groma does not require architecture
+the architecture into a source inventory. groma.md does not require architecture
 metadata in application source.
 
 ## Keep reality, intent, and history distinct
 
-Groma must distinguish the architecture known to exist from a desired
+groma.md must distinguish the architecture known to exist from a desired
 outcome. Git is the history of how those states change. A plan is not proof
 that source exists. `groma accept` applies a ghost only when a scan has
 matched it. Scanners cannot infer that a ghost is built. People and agents

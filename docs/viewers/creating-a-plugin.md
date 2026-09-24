@@ -1,6 +1,6 @@
 # Creating a viewer plugin
 
-A viewer plugin is the adaptation boundary between one surface and Groma. It
+A viewer plugin is the adaptation boundary between one surface and groma.md. It
 projects the world core already computed. It does not own architecture,
 identity, or layout.
 
@@ -101,4 +101,4 @@ has its own start function, `startTerminalViewer` in `src/view-host.ts`
 and `startWebViewer` in `src/viewers/web/server.ts`, wired in
 `src/cli.ts`. `startWebViewer` returns `{ url, close }`; `close` stops the
 watches, closes the event streams and stops the server. Neither plugin is
-Groma core.
+groma.md core.

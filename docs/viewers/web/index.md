@@ -1,7 +1,7 @@
 # Web viewer
 
-The web plugin shows Groma's world in a browser. `groma web` starts it.
-If the Groma directory, index, or project record is missing, the local server
+The web plugin shows groma.md's world in a browser. `groma web` starts it.
+If the architecture directory, index, or project record is missing, the local server
 shows browser setup for the project name and architecture folder. An existing
 folder keeps its location. Continue uses the shared initialization operation,
 then shows one selection row per scanner with detected versions and installation
@@ -33,7 +33,7 @@ queue a new map build, including changes received during the first build. The
 live process starts the same watch as `groma scan --watch` before scanning, so
 source edits during startup are retained. Startup errors appear in the browser
 with the reported issue and the command to run after fixing it.
-The startup header shows the running Groma version during setup, loading, and errors.
+The startup header shows the running groma.md version during setup, loading, and errors.
 
 [`server.ts`](../../../src/viewers/web/server.ts) owns this temporary startup
 state and streams updates through `/startup-events`.
@@ -52,10 +52,10 @@ not create stored OKF knowledge or C4 architecture elements.
 If startup reports an occupied concrete port, an interactive terminal shows
 the runtime error and asks whether to use
 the next available port. Press y to try ports one by one above the requested
-port (4748, 4749, and onward for the default 4747), or n to stop. Groma prints
+port (4748, 4749, and onward for the default 4747), or n to stop. groma.md prints
 the new address after startup. Without an interactive terminal, it exits with
 the runtime error and an instruction to run `groma web --port 0` for an
-available port. If port 0 fails, Groma shows the runtime error and exits
+available port. If port 0 fails, groma.md shows the runtime error and exits
 without suggesting the same command or offering another port.
 
 This page is the browser surface. The shared viewer rules live in
@@ -67,11 +67,11 @@ This page is the browser surface. The shared viewer rules live in
 JavaScript, snapshot, and generation files. The read-only page includes the
 project profile, architecture, flows, and source inspection. Every export
 excludes tasks, task pins, task search results, and editing controls. It does
-not contact Git, Backlog, or a Groma server.
+not contact Git, Backlog, or a groma.md server.
 
 The export is a public disclosure boundary: every project description,
 diff, and source file copied into the output can be read by anyone who can
-access the static host. Groma supplies no public server, authentication, or
+access the static host. groma.md supplies no public server, authentication, or
 access control. Publish the directory only through a static host whose access
 rules match the project.
 
@@ -98,25 +98,25 @@ groma export ./site --from "$BASE_SHA" --revision "$HEAD_SHA"
 ```
 
 The site opens the comparison from the older commit to the newer one, whichever
-order `--from` and `--revision` name, as live Groma does. The header's × opens
+order `--from` and `--revision` name, as live groma.md does. The header's × opens
 the newer commit; the ordinary revision picker offers only the two commits. A
 one-commit export exposes its message,
 body, and ID, with the same no-other-revisions notice. Comparison export requires
-two commits; working-tree comparisons remain available in live Groma.
+two commits; working-tree comparisons remain available in live groma.md.
 
 `web/export.ts` packages the shared history comparison, map layout, source
 contents, and outlines while the snapshot roots are available. It prepares both
 individual views and their one comparison. `web/data.ts` selects those
 bundled views, including shared URLs, through the same read boundary used by the
 live viewer. The export adds no comparison algorithm or separate presentation.
-The caller chooses the commits and static host; Groma does not resolve a PR,
+The caller chooses the commits and static host; groma.md does not resolve a PR,
 infer its merge base, or install a CI workflow.
 
 ### Social previews
 
 Export also writes `cover-light.png`, `cover-dark.png`, and `cover-blueprint.png`
 at 1200×630 pixels. Each cover uses the actual map, one continuous graph-paper
-grid, and a glass footer with the project title and Groma attribution.
+grid, and a glass footer with the project title and groma.md attribution.
 The map's geometry, drawing, themes, and bundled fonts remain the source of truth.
 
 Set the public directory URL when publishing so the initial HTML contains
@@ -131,7 +131,7 @@ view. Auto uses the light cover because a social crawler has no visitor theme
 preference. Static metadata is fixed at export time: changing `?theme=` in a
 published link does not rewrite its HTML. Without `--url`, the export remains
 portable with a relative light-cover link and no canonical Open Graph URL.
-The publishing workflow supplies the URL; Groma does not guess a public host.
+The publishing workflow supplies the URL; groma.md does not guess a public host.
 
 `groma web` emits metadata using the request URL and serves the same PNGs,
 generated on the first image request and refreshed after architecture changes.
@@ -140,10 +140,10 @@ sharing text. An unauthored description stays absent; the overview is not
 converted into a second summary. Covers are derived presentation assets, not
 new OKF records or C4 elements.
 
-Generation runs inside Groma using resvg WebAssembly and bundled DejaVu fonts.
+Generation runs inside groma.md using resvg WebAssembly and bundled DejaVu fonts.
 It needs no browser, installed fonts, or network access. The renderer and fonts
 also travel inside the standalone CLI. The published website serves ordinary
-PNG files and needs no Groma process on its host.
+PNG files and needs no groma.md process on its host.
 
 The `iso` drawing functions produce SVG for both the interactive map and covers.
 The browser mounts it and owns selection and camera movement; shared style rules
@@ -257,14 +257,14 @@ Help explains the map shapes, drafts, relationships, and how source-file counts,
 lines of code, and dependencies determine building sizes relative to the project.
 It also explains Markdown curation and keeps the grouped Map, Search, View, and
 layer shortcuts. A compact two-column popup places the guide beside the shortcuts
-so all Help content fits without scrolling at 1280×720. The information icon opens About Groma with the Groma logo,
+so all Help content fits without scrolling at 1280×720. The information icon opens About groma.md with the groma.md logo,
 a brief product description and repository link, followed by every directly declared
 third-party runtime library and development tool, including its version, license,
 and project link. The dropdown lists Auto,
 Light, Dark and Blueprint. Auto is the default for a browser profile with no
 saved choice and follows that browser's light or dark colour preference. A
 choice is saved for later visits. Blueprint uses a deep navy field, quieter blue drafting lines,
-and Groma green for selection and active flows, with restrained calibration marks
+and groma.md green for selection and active flows, with restrained calibration marks
 and the same architecture and compass. The full footer is absent, and Live work keeps the bottom
 centre. The camera fits architecture into the clear area between
 the floating hierarchy and any open details pane, so the grid continues
@@ -375,7 +375,7 @@ Actor rows use the shared
 actor mark and sit one level below Actors, with their flow rows one level
 deeper. The sidebar uses a shared 16 px nesting step and compact arrow/icon
 spacing throughout the actor groups and software tree. Section and row chevrons
-use the Groma accent color and pointer cursor on hover in both panels. Row arrows have
+use the groma.md accent color and pointer cursor on hover in both panels. Row arrows have
 24 px click targets; child leaf branches lead directly to their icons without
 an empty arrow slot. Both sections share continuous CSS branch lines, ending
 at the last child. Chevrons, entity marks and flow checkmarks are drawn in CSS.
@@ -491,7 +491,7 @@ the map pane at any zoom. One strong outer frame defines the band;
 its compass scales with the sheet and keeps north on the grid's up-right
 axis, so the actors island is due west. A title plate in the band shows the
 project title and up to three lines of the Markdown body overview from
-the selected Groma directory's `project.md`. It fits its width to lines up to 80 characters; longer
+the selected architecture directory's `project.md`. It fits its width to lines up to 80 characters; longer
 content remains in the editor instead of growing the plate. When the sheet is
 narrower than the plate, as on an empty or small map, the frame widens west to
 hold it, with the compass centred between the frame edge and the plate. A compact boxed
@@ -567,7 +567,7 @@ ends on the shape the viewer sees rather than beside it. One grey
 pattern tells each kind apart, on side faces and
 surfaces and never on a roof: each measured component floor carries
 a stable window pattern derived from its largest member's lower-case file extension,
-including extensions Groma has not seen before; components without
+including extensions groma.md has not seen before; components without
 source evidence keep plain storey lines,
 actor sides and the actors island dots, external sides and the
 external island crosses, container slabs a faint grain, and system
@@ -770,7 +770,7 @@ long Markdown scrollable, and Preview renders it through Comark's sanitized HTML
 title plate projects the same parsed Markdown semantics onto the isometric sheet.
 Saving posts the same input as `groma edit project` and updates the standard
 title and optional concise description plus the Markdown body overview in the
-selected Groma directory's `project.md`; the
+selected architecture directory's `project.md`; the
 published world event repaints every open map without a browser reload.
 Backlog work is loaded from one task-list summary and shows mapped tasks as pins.
 Every configured task with a mapped architecture element, including terminal

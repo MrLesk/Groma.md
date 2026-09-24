@@ -5,7 +5,7 @@ and package checks, not a published release or qualification of other platforms.
 
 ## Installed packages
 
-All nine staged packages were copied outside the Groma checkout and scanned
+All nine staged packages were copied outside the groma.md checkout and scanned
 independent fixtures. Each child process had an empty home directory and only
 Git on PATH. The fixture contained no installed project dependencies, restored
 packages or generated build output. The harness rejected JavaScript network

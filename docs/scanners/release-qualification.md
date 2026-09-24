@@ -7,7 +7,7 @@ release smoke checks, and consumer qualification scripts are outside the test su
 ## Executed local qualification
 
 On 9 September 2026 all five private `0.1.0` artifacts passed on macOS arm64
-with compiled Groma SHA-256
+with compiled groma.md SHA-256
 `91d3652d05721cbe0b0bb89525dc3485b30162d779bacc766458a22dd98e2338`.
 The callforpapers run used JDK 25.0.1, Maven 3.9.15, Node 24.13.0 and Bun 1.4.1.
 Its project dependencies remained Angular 21.2.19 and TypeScript 5.9.3; the

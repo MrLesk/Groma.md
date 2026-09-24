@@ -16,7 +16,7 @@ directories keeps one file identity with the existing multiple-context diagnosti
 The packaged scanner reproduced the full-repository result independently.
 
 The published `@groma/scanner-rust@0.1.2` package reproduced the same Codex
-counts after installation from npm. Groma 0.3.3 also passed readiness and scanned
+counts after installation from npm. groma.md 0.3.3 also passed readiness and scanned
 the regression fixture after a fresh npm installation and a second-checkout
 restore. Release run [35470904452](https://github.com/MrLesk/Groma.md/actions/runs/35470904452)
 passed repository checks and the packaged fresh-checkout suite on macOS arm64,
@@ -67,7 +67,7 @@ Git submodule entries are excluded from that file comparison.
 
 Dependencies were prepared with `cargo fetch --locked`. A disposable full
 checkout selected the globset manifest explicitly; the scanner
-and compiled Groma then used the original workspace. The other ripgrep packages
+and compiled groma.md then used the original workspace. The other ripgrep packages
 were not included in the emitted inventory.
 
 | Observation | Result |
@@ -92,7 +92,7 @@ Selected source witnesses were checked against the emitted targets:
 | `Candidate::new`, `crates/globset/src/lib.rs:543` | Host-selected `normalize_path` in `crates/globset/src/pathutil.rs` |
 | `Candidate::new`, `crates/globset/src/lib.rs:544-545` | `file_name` and `file_name_ext` in `crates/globset/src/pathutil.rs` |
 
-Compiled Groma produced one system, one existing manifest scope/container, and
+Compiled groma.md produced one system, one existing manifest scope/container, and
 four source components. The coordinator accepted the rendered map and exact
 Rust source view under the user's delegated acceptance. This is a reviewed
 scan result, not a claim that the file-shaped inventory is curated application
@@ -133,7 +133,7 @@ the lint, outline and HTTP cases, the focused run of
 `test-bun/rust-scanner.test.ts` passed 9 tests and 34 assertions.
 
 The historical smoke run used `npm pack` and extracted that actual artifact before
-loading it into compiled Groma. It verified `scanner check`, a successful
+loading it into compiled groma.md. It verified `scanner check`, a successful
 scan, curated repeat scans, and unchanged Markdown after malformed Rust fails.
 Only macOS arm64 was exercised. Public publication and other platforms remain
 TASK-326.7 release qualification work.
@@ -144,7 +144,7 @@ TASK-326.7 release qualification work.
 | --- | --- |
 | Native macOS arm64 worker | `321f97ab9ca9b606d697a7d8bf9a98992c6b251cd681e1d810f384ba4ca0f5a5` |
 | npm-packed local scanner | `4c945603bd7f4d1e13a9fcc44a1ecbeb2b23ff7dee9cfb7858a3c2a8075b3a54` |
-| Compiled Groma used for smoke | `91d3652d05721cbe0b0bb89525dc3485b30162d779bacc766458a22dd98e2338` |
+| Compiled groma.md used for smoke | `91d3652d05721cbe0b0bb89525dc3485b30162d779bacc766458a22dd98e2338` |
 | Final globset observation | `ce5a79ff5c6d84349f0825348edf54cc2fce7fefc6d5417ae75020e876eeb617` |
 
 The package is private and carries the prototype version `0.1.0`; this is not

@@ -1,6 +1,6 @@
 # Historical investigations
 
-These branches preserve disposable investigations that informed Groma's current
+These branches preserve disposable investigations that informed groma.md's current
 direction. They are evidence, not implementation branches, and must never be merged
 into `main`.
 
@@ -33,7 +33,7 @@ material.
 - Branch: `spike/groma-tui`
 - Commit: `8b786ed5ac8ad1a5bd2414c9b424511c851e985a`
 
-This investigation asked what Groma's architecture navigation becomes in a
+This investigation asked what groma.md's architecture navigation becomes in a
 terminal where cards cannot scale continuously and pointer-driven camera
 controls are inappropriate.
 

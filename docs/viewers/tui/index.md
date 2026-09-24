@@ -1,7 +1,7 @@
 # Terminal viewer
 
 Run `groma view` to scan the repository and inspect its architecture in a
-terminal. If the Groma directory, index, or project record is missing, an
+terminal. If the architecture directory, index, or project record is missing, an
 interactive terminal offers initialization and scanner selection before scanning. Plain inspection
 instead prints one actionable initialization message and exits.
 A successful scan with no components points to `groma scanner setup` for a
@@ -65,8 +65,8 @@ component glyphs, with `▾` and `▸` disclosure and `▌` for the current item
 ## Revision history
 
 `h` gives the hierarchy pane to the current branch commits that changed the
-Groma directory, newest first. Each row shows the subject, short hash, and date.
-Commits without the current Groma project profile remain visible as Unsupported
+architecture directory, newest first. Each row shows the subject, short hash, and date.
+Commits without the current groma.md project profile remain visible as Unsupported
 but cannot be opened. `h` or Escape closes the list.
 
 Enter opens a compatible commit as a read-only world. The header names that
@@ -192,7 +192,7 @@ its highlight; Enter first highlights it, then selects the peer the row names.
 - Backspace returns from a container map to root.
 - Tab changes the focused details pane's tabs. Escape returns focus to the map; a source file or diff first returns to its preceding view.
 - `/` searches architecture; Enter keeps a match and Escape restores the prior view.
-- `h` lists Groma revisions; Enter opens one and Escape returns to Current.
+- `h` lists groma.md revisions; Enter opens one and Escape returns to Current.
 - `t` focuses the hierarchy and `d` focuses details; pressing the focused pane's key again folds it.
 - `w` toggles Work focus, `s` steps a flow, and `x` clears it.
 - `p` shows the project profile read-only in the details pane; `p` or Escape returns to the selection.

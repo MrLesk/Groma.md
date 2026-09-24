@@ -24,7 +24,7 @@ does not claim whole-project type-check success.
 ## Executed checks
 
 The actual npm-packed plugin was served by the local artifact registry and
-installed by compiled Groma through its ordinary `scanner add` and `scanner
+installed by compiled groma.md through its ordinary `scanner add` and `scanner
 install` commands. Both the pinned Backlog project and independent two-file
 fixture completed discovery, readiness, scan, curation, repeated scan, source
 edit, failed scan, restored scan, and map export.
@@ -68,5 +68,5 @@ without required changes. The serial `bun run check` passed: 110 Node tests and
 398 Bun tests passed, with seven existing tooling-dependent skips and no test
 failures. Lint reported six pre-existing complexity warnings.
 
-The executed environment is macOS arm64, Bun 1.4.1, and compiled Groma. Public
+The executed environment is macOS arm64, Bun 1.4.1, and compiled groma.md. Public
 publication and unexecuted platforms are not qualified by this record.

@@ -78,12 +78,12 @@ test('a scan and the agent guide index point to curation while nobody has curate
       'src/cart.ts': 'export const cart = []\n',
     })
     const guide = await run('agent-instructions')
-    assert.ok(guide.startsWith(`${firstScanAgentNote}\n\n# Groma agent guides`))
+    assert.ok(guide.startsWith(`${firstScanAgentNote}\n\n# groma.md agent guides`))
     assert.ok(!(await run('agent-instructions', 'inspect')).includes(firstScanAgentNote))
     assert.ok((await run('scan')).includes(`${firstScanTitle}. ${firstScanHint}`))
 
     await writeTree(root, { 'groma/systems/shop/containers/app/components/cart.md': component('description: Holds what a customer wants to buy\n') })
-    assert.ok((await run('agent-instructions')).startsWith('# Groma agent guides'))
+    assert.ok((await run('agent-instructions')).startsWith('# groma.md agent guides'))
     assert.ok(!(await run('scan')).includes(firstScanTitle))
   } finally {
     await rm(root, { recursive: true, force: true })
