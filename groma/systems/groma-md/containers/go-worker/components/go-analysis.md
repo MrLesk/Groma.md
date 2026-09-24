@@ -16,6 +16,8 @@ groma:
       file: plugins/scanners/go/worker/project.go
     - scanner: go
       file: plugins/scanners/go/worker/tokens.go
+    - scanner: go
+      file: plugins/scanners/go/worker/entries.go
 description: Type-checks Go module source and returns declarations and operations
 ---
 
