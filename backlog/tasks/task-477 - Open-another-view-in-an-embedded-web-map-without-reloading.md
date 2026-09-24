@@ -1,11 +1,11 @@
 ---
 id: TASK-477
 title: Open another view in an embedded web map without reloading
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-21 17:55'
-updated_date: '2026-09-22 20:29'
+updated_date: '2026-09-24 16:22'
 labels: []
 dependencies: []
 references:
@@ -32,20 +32,20 @@ Alex presents Groma with the live web map embedded in an iframe inside his slide
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A page that embeds the web map can post a query string to it, and the map opens that selection, flow step, task, details tab, and HUD state without reloading
-- [ ] #2 The camera animates to the opened view the way it does for the same selection made in the map
-- [ ] #3 An embedded map announces when it can take views, so the embedding page knows when to start
-- [ ] #4 Only the parent window of an embedded map can open views; a map opened directly is unaffected
-- [ ] #5 The web viewer guide documents the message next to the URL parameters
-- [ ] #6 A posted view can also open a component source file at a line, as the file and line URL parameters do
+- [x] #1 A page that embeds the web map can post a query string to it, and the map opens that selection, flow step, task, details tab, and HUD state without reloading
+- [x] #2 The camera animates to the opened view the way it does for the same selection made in the map
+- [x] #3 An embedded map announces when it can take views, so the embedding page knows when to start
+- [x] #4 Only the parent window of an embedded map can open views; a map opened directly is unaffected
+- [x] #5 The web viewer guide documents the message next to the URL parameters
+- [x] #6 A posted view can also open a component source file at a line, as the file and line URL parameters do
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -57,6 +57,10 @@ Alex presents Groma with the live web map embedded in an iframe inside his slide
 4. Cover embedding.ts in test-bun/web-embedding.test.ts with a plain window object, matching the existing pure web tests.
 5. Document the message next to the URL parameters in docs/viewers/web/index.md.
 6. Run bun run check and verify in a browser with an embedding page that posts views.
+
+7. Move the wheel listener into iso/pointer.ts, where bindMapPointer reports wheel steps through a wheel action, so render.ts stays within 500 lines.
+
+8. On Alex's request, let a posted view also open a source file at a line, as the file and line URL parameters do.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -75,6 +79,8 @@ Wheel input re-verified in a browser after the move into pointer.ts: a plain whe
 Scope added on Alex's request to bring the embedded map into his Devoxx deck: a posted view also opens source (file and line), so render.ts is now exactly 500 lines. Documented in the web viewer guide.
 
 After adding file and line to posted views: bun run check passes again (635 pass, 36 skip, 0 fail). Browser check in the Devoxx deck (mrlesk.com/talks/devoxx/in-the-loop): a posted view with file=src/viewers/web/server.ts and line=19 opened the source reader, and the map URL followed it.
+
+Finalized on 2026-09-24 after the code landed in e5269cee. Re-verified on main b30b74f2 in a clean worktree: bun test test-bun/web-embedding.test.ts test-bun/web-sheet-morph.test.ts, 11 pass, 0 fail. render.ts openView on main still opens file and line (source.open(next.file, next.line)); the guide documents gromaView and gromaReady next to the URL parameters.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -91,4 +97,28 @@ created: 2026-09-22 20:29
 ---
 TASK-484 coordination (touch pinch): I change only the pointerdown/move/up/cancel handlers in iso/pointer.ts, below your wheel listener, and the gesture sentence under What you can do in docs/viewers/web/index.md. Your lines stay untouched. TASK-484 uses your host parameter and wheel action, so it commits after TASK-477. Please stage only TASK-477 hunks in those two files.
 ---
+
+author: @claude
+created: 2026-09-22 21:14
+---
+Committed as e5269cee on Alex's request: the task record, embedding.ts and its test, the wheel move in iso/pointer.ts, pageHosts in chrome/shell.ts, render.ts, the render.md curation, and the embedding paragraph of the web guide. The pointer.ts to render.ts derived row in groma/relationships.md now also reflects TASK-484, so it ships with TASK-484. Status left for the owner to finalize.
+---
+
+author: @claude
+created: 2026-09-23 19:03
+---
+TASK-497 coordination: I add one map.dragging(true/false) call to the drag pointermove, pointerup and pointercancel handlers in iso/pointer.ts (and a dragging stub in test-bun/web-map-pointer.test.ts). Your committed wheel and embedding lines stay untouched.
+---
+
+author: @claude
+created: 2026-09-23 20:10
+---
+TASK-498 coordination: I extend the drag handlers in iso/pointer.ts (release speed for a glide), add a glide action in render.ts and one sentence about the glide under What you can do in docs/viewers/web/index.md. Your committed lines stay untouched.
+---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A page that embeds the live web map in an iframe can now open another view without reloading. embedding.ts listens only to the parent window, accepts { gromaView: '<query string>' }, and announces { gromaReady: true }; render.ts openView reads the query exactly as startup does, so selection, flow step, task, details tab, HUD and a source file at a line open with the same camera move as the matching in-map selection. A map opened directly ignores messages. Verified with test-bun/web-embedding.test.ts (announce, open, ignored senders, ignored non-views, direct map), bun run check, and browser checks in the Slidev and Devoxx decks where slide clicks moved the embedded map through container, component, tab, flow step, task and source while the iframe src never changed.
+<!-- SECTION:FINAL_SUMMARY:END -->
