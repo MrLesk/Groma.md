@@ -169,7 +169,7 @@ internal static class HttpRoutes
 
     /// <summary>
     /// Request segments of a URL expression. The path follows a configured base when its text is relative; a host,
-    /// or a base the scanner cannot resolve, becomes a leading unknown segment, which core never matches.
+    /// or a base the scanner cannot resolve, becomes a leading unknown segment.
     /// </summary>
     public static (bool Configured, ScanHttpSegment[] Path) Request(IReadOnlyList<UrlPart> parts)
     {
@@ -237,7 +237,7 @@ internal static class HttpRoutes
         Close();
     }
 
-    /// <summary>Percent-encodes what RFC 3986 path text excludes, so core can compare literals exactly.</summary>
+    /// <summary>Percent-encodes what RFC 3986 path text excludes, so literals compare exactly.</summary>
     private static string Literal(string value) => string.Concat(value.Select(character =>
         char.IsAsciiLetterOrDigit(character) || "-._~!$&'()*+,;=:@%".Contains(character)
             ? character.ToString()

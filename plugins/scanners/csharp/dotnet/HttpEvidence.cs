@@ -4,7 +4,7 @@ namespace Groma.CSharpScanner;
 
 /// <summary>
 /// The HTTP facts of one scan: the endpoints ASP.NET Core serves and the requests the source sends. A fact survives
-/// only when the observation declares its operation, so no fact names an operation core cannot resolve to a file.
+/// only when the observation declares its operation, because the evidence contract rejects a fact that names any other.
 /// </summary>
 internal sealed class HttpEvidence(string repositoryRoot, HttpEndpoints.TokenConventions conventions)
 {
@@ -15,7 +15,7 @@ internal sealed class HttpEvidence(string repositoryRoot, HttpEndpoints.TokenCon
     /// <summary>A declarative client method has no body, so only its request declares it as an operation.</summary>
     public IEnumerable<ScanOperation> Operations => declarations.Values;
 
-    /// <summary>The facts whose operation the observation declares; any other would name an operation core cannot place.</summary>
+    /// <summary>The facts whose operation the observation declares; the evidence contract rejects any other.</summary>
     public (IEnumerable<ScanHttpEndpoint> Endpoints, IEnumerable<ScanHttpRequest> Requests) Facts(IReadOnlySet<string> operations) => (
         endpoints.Where(endpoint => operations.Contains(endpoint.Operation)),
         requests.Where(request => operations.Contains(request.Operation)));

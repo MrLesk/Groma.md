@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Groma.CSharpScanner;
 
 /// <summary>
-/// Binding-normalized tokens of one named operation body, compared by core. Names bound to parameters, locals,
+/// Binding-normalized tokens of one named operation body. Names bound to parameters, locals,
 /// query range variables, labels and local functions become slots numbered in order of appearance, so renamed
 /// copies match. The operation's own name stays text, like a method name, so different recursions stay different.
 /// Member names, argument labels, other identifiers (types included), keywords, literals and operators keep their text.
