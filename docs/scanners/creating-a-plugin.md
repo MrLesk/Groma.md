@@ -221,6 +221,10 @@ whose sources are all excluded and name the pattern that hides a file. Tests,
 generated output, vendored code and build directories belong in the scanner's
 default `exclude` list rather than in its listing code.
 
+Official scanners list tracked and unignored files through one shared Git
+listing. A symlink to another file in that listing is the same physical source,
+so only the file it points to is listed and each source is read once.
+
 A listing may name a file the analysis then leaves out, because deciding that
 would mean analyzing it or running a build. Each approximation an official
 scanner makes:

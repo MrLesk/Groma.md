@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, lstatSync, realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -8,11 +8,20 @@ const execute = promisify(execFile)
 const excluded = new Set(['.git', 'node_modules', 'vendor', 'target', 'dist', 'build', 'obj',
   '.gradle', '.angular', 'coverage', 'generated', 'groma', '.groma'])
 
-/** The tracked and unignored files that match and exist, in any directory. */
+/**
+ * The tracked and unignored files that match and exist, in any directory. A symlink to another of those files
+ * is the same physical source, so only the file it points to is listed.
+ */
 export async function repositoryFiles(root: string, matches: (file: string) => boolean): Promise<string[]> {
   const { stdout } = await execute('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     { maxBuffer: 64 * 1024 * 1024 })
-  return [...new Set(stdout.split('\0').filter(file => file && matches(file) && existsSync(path.join(root, file))))].sort()
+  const files = new Set(stdout.split('\0').filter(file => file && matches(file) && existsSync(path.join(root, file))))
+  const physicalRoot = realpathSync(root)
+  return [...files].filter(file => {
+    const location = path.join(root, file)
+    return !lstatSync(location).isSymbolicLink()
+      || !files.has(path.relative(physicalRoot, realpathSync(location)).split(path.sep).join('/'))
+  }).sort()
 }
 
 /** A repository-relative file inside a repository-relative directory; the empty directory is the repository root. */

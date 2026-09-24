@@ -1,6 +1,4 @@
-import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import path from 'node:path'
+import { repositoryFiles } from '../../projects.ts'
 
 export interface TypeScriptScannerConfig {
   globs: string[]
@@ -73,39 +71,9 @@ function fileMatcher(config: TypeScriptScannerConfig): (file: string) => boolean
   return file => included.some(matches => matches(file)) && !excluded.some(matches => matches(file))
 }
 
-function gitListFiles(repositoryRoot: string): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      'git',
-      ['-C', repositoryRoot, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    )
-    const chunks: Buffer[] = []
-    let stderr = ''
-    child.stdout.on('data', chunk => chunks.push(chunk as Buffer))
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', chunk => {
-      stderr += chunk
-    })
-    child.on('error', reject)
-    child.on('close', code => {
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `git ls-files exited ${code}`))
-        return
-      }
-      resolve(Buffer.concat(chunks).toString('utf8').split('\0').filter(Boolean))
-    })
-  })
-}
-
-export async function listTypeScriptFiles(
+export function listTypeScriptFiles(
   repositoryRoot: string,
   config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
 ): Promise<string[]> {
-  const matches = fileMatcher(config)
-  return (await gitListFiles(repositoryRoot))
-    .map(file => file.split(path.sep).join('/'))
-    .filter(matches)
-    .filter(file => existsSync(path.join(repositoryRoot, file)))
-    .sort()
+  return repositoryFiles(repositoryRoot, fileMatcher(config))
 }

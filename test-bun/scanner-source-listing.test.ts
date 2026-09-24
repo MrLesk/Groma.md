@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
@@ -84,6 +84,22 @@ for (const [scanner, fixture, expected] of listings) {
     } finally { await rm(root, { recursive: true, force: true }) }
   })
 }
+
+// Creating symlinks needs developer mode or administrator rights on Windows.
+test.skipIf(process.platform === 'win32').concurrent('a symlink to another listed source is listed once, through the file it points to', async () => {
+  const root = await repository('swift-source')
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'groma-listing-outside-'))
+  try {
+    await mkdir(path.join(root, 'Sources'))
+    await symlink('../Ledger.swift', path.join(root, 'Sources/Ledger.swift'))
+    await writeFile(path.join(outside, 'Shared.swift'), 'struct Shared {}\n')
+    await symlink(path.join(outside, 'Shared.swift'), path.join(root, 'Shared.swift'))
+    expect(await swift.listSourceFiles?.(root)).toEqual(['Ledger.swift', 'Other.swift', 'Shared.swift'])
+    await writeFile(path.join(root, 'Real.ts'), 'export const real = 1\n')
+    await symlink('../Real.ts', path.join(root, 'Sources/Real.ts'))
+    expect(await typescript.listSourceFiles?.(root)).toEqual(['Real.ts'])
+  } finally { await Promise.all([root, outside].map(directory => rm(directory, { recursive: true, force: true }))) }
+})
 
 test.concurrent('a stylesheet is listed only by a scanner that reads component styles', async () => {
   const [angularRoot, reactRoot] = await Promise.all([repository('angular-output'), repository('react-http')])
