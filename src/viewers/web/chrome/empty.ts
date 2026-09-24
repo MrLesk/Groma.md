@@ -72,6 +72,12 @@ export function emptyState(payload: WebBootPayload): string {
     + '<button class="dismiss" type="button" aria-label="Dismiss message">×</button></div></section>'
 }
 
+/** The full welcome card while it stands over an empty map; the compact notice leaves the camera frame alone. */
+export function welcomeCard(host: HTMLElement): DOMRect | undefined {
+  if (host.hidden || host.classList.contains('has-architecture')) return undefined
+  return host.querySelector('.empty-card')!.getBoundingClientRect()
+}
+
 /** The invitation that stands in for the map while the world has nothing to draw. */
 export function createEmptyState(host: HTMLElement) {
   const title = host.querySelector('.project')!

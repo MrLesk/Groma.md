@@ -1,6 +1,7 @@
 import { ownsDetails, primarySelection } from '../selection.ts'
 import type { Selection } from '../selection.ts'
 import { bindPopover } from '../atoms/popover.ts'
+import { welcomeCard } from './empty.ts'
 import { bindShortcuts, type ShortcutActions } from './shortcuts.ts'
 
 /** Buttons and keys use the same actions; shell events stay outside map orchestration. */
@@ -31,6 +32,7 @@ export function pageHosts() {
     zoomHost: byId('zoom'),
     hierarchyContent: byId('hierarchy-content'),
     hierarchyToggle: byId('hierarchy-toggle') as HTMLButtonElement,
+    emptyHost: byId('empty'),
   }
 }
 
@@ -72,26 +74,33 @@ export function measureFrame(hosts: ReturnType<typeof pageHosts>, hudVisible: bo
     hosts.hierarchyHost.getBoundingClientRect(),
     { left: hosts.detailsDock.offsetLeft, hidden: hosts.detailsHost.inert },
     hudVisible,
+    welcomeCard(hosts.emptyHost),
   )
 }
 
-/** The camera frame is either the whole map or the safe area between visible chrome. */
+/** The camera frame is either the whole map or the safe area between visible chrome, below a welcome card standing over it. */
 export function mapFrame(
   map: Rect,
   header: Rect,
   hierarchy: Rect,
   details: { left: number; hidden: boolean },
   hudVisible: boolean,
+  welcome?: { bottom: number },
 ): MapFrame {
-  if (!hudVisible) return { x: 0, y: 0, width: map.width, height: map.height }
-  const x = hierarchy.right - map.left + 12
-  const y = header.bottom - map.top + 12
-  const right = details.hidden ? map.width : details.left - map.left - 12
+  const safe = hudVisible
+    ? {
+      x: hierarchy.right - map.left + 12,
+      y: header.bottom - map.top + 12,
+      right: details.hidden ? map.width : details.left - map.left - 12,
+      bottom: map.height - 12,
+    }
+    : { x: 0, y: 0, right: map.width, bottom: map.height }
+  const y = welcome === undefined ? safe.y : Math.max(safe.y, welcome.bottom - map.top + 12)
   return {
-    x,
+    x: safe.x,
     y,
-    width: Math.max(right - x, 1),
-    height: Math.max(map.height - y - 12, 1),
+    width: Math.max(safe.right - safe.x, 1),
+    height: Math.max(safe.bottom - y, 1),
   }
 }
 

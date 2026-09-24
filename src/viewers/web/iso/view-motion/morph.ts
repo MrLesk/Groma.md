@@ -127,7 +127,8 @@ export function tweenSheet(from: SheetScene, to: SheetScene, amount: number): Sh
   if (amount <= 0) return from
   if (amount >= 1) return to
   const glide = <T extends { rect: CellRect }>(a: T, b: T): T => ({ ...b, rect: mixRect(a.rect, b.rect, amount) })
-  // The frame around an appearing or vanishing map is the map's own, not a tiny one whose plate rewraps every frame.
+  // An appearing or vanishing map keeps its own frame: its surfaces grow and shrink at their own cells, so a frame
+  // blended from the empty placeholder would leave them outside it and under the plate.
   const frame = from.islands.length === 0 ? to.sheet : to.islands.length === 0 ? from.sheet : mixRect(from.sheet, to.sheet, amount)
   return {
     sheet: frame,

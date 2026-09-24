@@ -96,8 +96,11 @@ function calibrationTicks(frame: CellRect, scale: number, project: Projector): S
   return ticks
 }
 
+/** How far the compass centre sits in from the frame's west and south edges. */
+const compassInset = (scale: number): number => (COMPASS_RADIUS + COMPASS_LETTER + 0.4) * scale
+
 function compassOf(frame: CellRect, scale: number, project: Projector): Compass {
-  const inset = (COMPASS_RADIUS + COMPASS_LETTER + 0.4) * scale
+  const inset = compassInset(scale)
   const at = { gx: frame.gx + inset, gy: frame.gy + frame.d - inset }
   const on = (dx: number, dy: number): Point => project(at.gx + dx, at.gy + dy, 0)
   const radius = COMPASS_RADIUS * scale
@@ -208,13 +211,12 @@ function projectPlate(
     `${block.marker === undefined ? '' : `${block.marker} `}${block.spans.map(span => span.text).join('')}`,
     overviewSize,
   )), 0)
-  const desiredContentWidth = Math.max(
+  const contentWidth = Math.max(
     limitedWidth(profile.title, titleSize),
     overviewWidth,
     limitedWidth(PROJECT_META, metaSize),
   )
-  const width = Math.min(sheet.w, editReservationWidth + horizontalPadding + desiredContentWidth / PLANE)
-  const contentWidth = (width - editReservationWidth - horizontalPadding) * PLANE
+  const width = editReservationWidth + horizontalPadding + contentWidth / PLANE
   const titleLines = wrapPlain(profile.title, contentWidth, titleSize)
   const overviewLines = wrapMarkdown(profile.overviewBlocks, contentWidth, overviewSize)
     .slice(0, MAX_PLATE_OVERVIEW_LINES)
@@ -271,9 +273,11 @@ export function projectBlueprint(sheet: CellRect, profile: ProjectProfile | unde
   const margin = FRAME_MARGIN * scale
   const projectDepth = plate === undefined ? 0 : plate.rect.gy + plate.rect.d - sheet.gy - sheet.d
   const south = plate === undefined ? margin : Math.max(margin, projectDepth + 0.4 * scale)
+  // A plate wider than the sheet widens the frame west, leaving the compass centred between the frame edge and the plate.
+  const west = plate === undefined ? sheet.gx - margin : Math.min(sheet.gx - margin, plate.rect.gx - 2 * compassInset(scale))
   const frame = {
-    gx: sheet.gx - margin, gy: sheet.gy - margin,
-    w: sheet.w + margin * 2, d: sheet.d + margin + south,
+    gx: west, gy: sheet.gy - margin,
+    w: sheet.gx + sheet.w + margin - west, d: sheet.d + margin + south,
   }
   const framePoints = corners(frame, project)
   return {

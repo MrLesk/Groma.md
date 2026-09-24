@@ -163,7 +163,8 @@ An empty world shows a welcome card with the project name and a normal next
 step for a project that has no code yet. **Set up scanners** opens the existing
 Plugins settings dialog in live web delivery; published views omit this action.
 The card sits in the map's clear area beside the visible panels and uses the
-same frame as startup. The web empty-state controller owns its copy and
+same frame as startup. The camera fits the empty sheet and its title plate into
+the space below the card. The web empty-state controller owns its copy and
 visibility; the settings controller owns opening and closing the dialog.
 A world with existing architecture but no components keeps its map and navigation
 beneath a compact, dismissible notice pointing to `groma scanner setup`. The first
@@ -491,7 +492,9 @@ its compass scales with the sheet and keeps north on the grid's up-right
 axis, so the actors island is due west. A title plate in the band shows the
 project title and up to three lines of the Markdown body overview from
 the selected Groma directory's `project.md`. It fits its width to lines up to 80 characters; longer
-content remains in the editor instead of growing the plate. A compact boxed
+content remains in the editor instead of growing the plate. When the sheet is
+narrower than the plate, as on an empty or small map, the frame widens west to
+hold it, with the compass centred between the frame edge and the plate. A compact boxed
 pencil sits inside its lower corner. Small
 unlabeled calibration ticks line its two front edges.
 The compass has a clear inset for its ring and direction letters inside the frame.

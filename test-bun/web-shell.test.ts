@@ -36,6 +36,17 @@ test.concurrent('opening details immediately reserves its final layout width', (
   assert.equal(opened.x + opened.width, details.left - map.left - 12)
 })
 
+test.concurrent('the welcome card over an empty map moves the camera frame below it', () => {
+  const card = { bottom: 400 }
+  for (const hudVisible of [true, false]) {
+    const open = mapFrame(map, header, hierarchy, details, hudVisible)
+    const below = mapFrame(map, header, hierarchy, details, hudVisible, card)
+    assert.equal(below.y, card.bottom - map.top + 12)
+    assert.equal(below.y + below.height, open.y + open.height)
+    assert.deepEqual([below.x, below.width], [open.x, open.width])
+  }
+})
+
 test.concurrent('file inspection widens the reader until an explicit panel choice is made', () => {
   const panel = createDetailsExpansion()
   assert.equal(panel.expanded(false), false)

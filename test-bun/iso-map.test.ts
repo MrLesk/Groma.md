@@ -413,20 +413,38 @@ test.concurrent('the project plate stays outside architecture and inside the fit
 })
 
 
-test.concurrent('the compass and its direction letters fit the frame without touching architecture', async () => {
-  const scene = await fixtureScene(viewerFixtureRoot)
+/** A ground-plane screen point back in grid cells: x is gx and y is gy. */
+function cells(point: Point): Point {
   const unit = project(1, 0, 0)
-  const cells = (point: Point): Point => ({
-    x: (point.x / unit.x + point.y / unit.y) / 2,
-    y: (point.y / unit.y - point.x / unit.x) / 2,
-  })
+  return { x: (point.x / unit.x + point.y / unit.y) / 2, y: (point.y / unit.y - point.x / unit.x) / 2 }
+}
+
+/** The compass ring, star and direction letters, in grid cells. */
+function compassCells(scene: ProjectedScene): Bounds {
   const halfLetter = scene.compass.fontSize / PLANE / 2
   const points = [...scene.compass.ring, ...scene.compass.star].map(cells)
   for (const letter of scene.compass.letters) {
     const at = cells(letter.at)
     points.push({ x: at.x - halfLetter, y: at.y - halfLetter }, { x: at.x + halfLetter, y: at.y + halfLetter })
   }
-  const compass = screenBox(points)
+  return screenBox(points)
+}
+
+test.concurrent('a plate wider than its sheet keeps whole lines and widens the frame beside the compass', () => {
+  const scene = projectScene(sheetScene(worldOf([])), profile('Empty project', 'Architecture for Empty project.'))
+  const plate = scene.projectPlate!
+  assert.deepEqual(plate.title.lines, ['Empty project'])
+  assert.deepEqual(plate.overview.lines.map(line => line.map(run => run.text).join('')), ['Architecture for Empty project.'])
+  const frame = screenBox(scene.frame.map(cells))
+  const body = screenBox(plate.polygon.map(cells))
+  assert.ok(body.x > frame.x && body.x + body.width < frame.x + frame.width)
+  assert.ok(body.y > frame.y && body.y + body.height < frame.y + frame.height)
+  assert.ok(!overlaps(compassCells(scene), body))
+})
+
+test.concurrent('the compass and its direction letters fit the frame without touching architecture', async () => {
+  const scene = await fixtureScene(viewerFixtureRoot)
+  const compass = compassCells(scene)
   const frame = screenBox(scene.frame.map(cells))
   assert.ok(compass.x > frame.x && compass.y > frame.y)
   assert.ok(compass.x + compass.width < frame.x + frame.width)

@@ -64,7 +64,7 @@ const map = createMap(host)
 const highlights = createMapHighlights(map)
 const edit = data.edit
 const projectEditor = edit === undefined ? undefined : createProjectEditor(input => edit({ id: 'project', ...input }))
-const emptyState = createEmptyState(document.getElementById('empty')!)
+const emptyState = createEmptyState(hosts.emptyHost)
 if (data.add !== undefined) createAddControl(document.getElementById('add')!, data.add)
 const shell = createWebShell(document.body, hierarchyContent, hierarchyToggle, detailsHost, map.svg)
 const tip = createTip(host)
@@ -107,9 +107,8 @@ const taskDiff = createTaskDiffControl({
   repaint: paintViewState, select,
 })
 const viewport = (): MapFrame => measureFrame(hosts, hudVisible)
-function fitScene(frame: MapFrame): Camera {
-  return pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
-}
+const fitScene = (frame: MapFrame): Camera => pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
+emptyState.paint(world, project, !revisionControl.live) // Before the first fit; a published view hides the page's notice.
 let fitted: Camera = fitScene(viewport())
 function zoomRatio(view: Camera): number { return view.k / fitted.k }
 const camera = createCameraAnimator(fitted, applyCamera, to => map.approach(to, zoomRatio(to)))
@@ -442,6 +441,7 @@ function applyWorld(payload: WebPayload, reset = false): void {
   sheet = payload.sheet
   project = payload.project ?? undefined
   currentPins = payload.pins
+  emptyState.paint(world, project, !revisionControl.live) // Before measuring, so the fit leaves the card's new space.
   mapAnimator.retarget(sheet)
   scene = projectedScene()
   fitted = fitScene(viewport())
@@ -490,7 +490,6 @@ function paintWorld(): void {
   authoring.refresh()
   pins.paint(currentPins.filter(pin => map.anchorOf(pin.elementId) !== undefined))
   island.paint(currentPins, work)
-  emptyState.paint(world, project, !revisionControl.live)
   applyCamera()
   paintViewState()
   source.restore()
