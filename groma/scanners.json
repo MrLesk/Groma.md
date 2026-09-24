@@ -79,7 +79,8 @@
       "exclude": [
         "target/",
         "build/",
-        ".gradle/"
+        ".gradle/",
+        "/plugins/scanners/java/java/"
       ]
     },
     {
