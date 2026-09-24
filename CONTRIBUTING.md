@@ -57,7 +57,7 @@ The repository uses Bun workspaces. The directory names describe responsibility:
 
 ## Build and release versions
 
-Build a single-file executable with Bun 1.4.1 bytecode:
+Build a single-file executable with Bun 1.4.2 bytecode:
 
 ```sh
 bun run build

@@ -16,7 +16,7 @@ permissions:
   id-token: write
 
 env:
-  BUN_VERSION: 1.4.1
+  BUN_VERSION: 1.4.2
   NODE_VERSION: 22
 
 jobs:
