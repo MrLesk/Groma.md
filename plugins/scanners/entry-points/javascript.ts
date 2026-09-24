@@ -3,6 +3,7 @@ import path from 'node:path'
 import { createScanObservation, type ScanEntryPoint, type ScanObservation } from '@groma/scanner'
 import { projectFiles } from '../projects.ts'
 import type { EntrySources } from './source.ts'
+import { sourceOf, type BuildOutput } from '../workspace-packages.ts'
 
 export type SourceEntry = Omit<ScanEntryPoint, 'files'>
 
@@ -97,6 +98,12 @@ function entryFiles(entry: string, imports: ReadonlyMap<string, string[]>, packa
   return found
 }
 
+/** A declared entry on the source file it stands for, such as the source a `bin` under a build's `outDir` comes from. */
+function sourced(entry: SourceEntry, root: string, outputs: readonly BuildOutput[] = []): SourceEntry {
+  const file = sourceOf(root, entry.file, outputs)
+  return file === undefined ? entry : { ...entry, file }
+}
+
 /** Shared source facts for JS/TS and framework observers; each contributes only the files it analyzed. */
 export async function withJavaScriptEntries(
   root: string, observation: ScanObservation | undefined, inputs: EntrySources,
@@ -117,7 +124,7 @@ export async function withJavaScriptEntries(
   }
   const inventoryFiles = [...observation.files]
   const visible = new Set(inventoryFiles.map(file => file.file))
-  const entryPoints = entries.flatMap(entry => {
+  const entryPoints = entries.map(entry => sourced(entry, root, inputs.buildOutputs)).flatMap(entry => {
     if (!inputs.imports.has(entry.file)) return []
     const reached = entryFiles(entry.file, inputs.imports, packages)
     for (const unit of observation.sourceUnits ?? []) if (reached.has(unit.primary)) for (const file of unit.files) reached.add(file)

@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises'
 import type { ScanDiagnostic } from '@groma/scanner'
 import type { API, ParsedCommandLine } from 'typescript/unstable/async'
 import { projectFiles } from '../../projects.ts'
+import type { BuildOutput } from '../../workspace-packages.ts'
 
 export interface TypeScriptProject { key: string; config?: ParsedCommandLine; files: string[] }
 
@@ -18,6 +19,15 @@ function outranks(project: TypeScriptProject, previous: TypeScriptProject, file:
   const contains = (candidate: TypeScriptProject) => file.startsWith(`${path.dirname(candidate.key)}${path.sep}`)
   const depth = (candidate: TypeScriptProject) => path.dirname(candidate.key).split(path.sep).length
   return contains(project) === contains(previous) ? depth(project) >= depth(previous) : contains(project)
+}
+
+/** Where each config's build writes its sources: a config that states both `outDir` and `rootDir`. */
+export function buildOutputs(root: string, projects: readonly TypeScriptProject[]): BuildOutput[] {
+  const relative = (file: string) => path.relative(root, path.resolve(file)).split(path.sep).join('/')
+  return projects.flatMap(({ config }) => {
+    const { outDir, rootDir } = config?.options ?? {}
+    return outDir === undefined || rootDir === undefined ? [] : [{ outDir: relative(outDir), rootDir: relative(rootDir) }]
+  })
 }
 
 /** A nested config owns its included files before an enclosing config does. */

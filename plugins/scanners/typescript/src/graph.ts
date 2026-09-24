@@ -11,6 +11,7 @@ import {
 import { displayName, kebabCase } from './naming.ts'
 import { analyzeSourceFiles } from './source-analysis.ts'
 import type { SourceEntry } from '../../entry-points/javascript.ts'
+import type { BuildOutput } from '../../workspace-packages.ts'
 
 export interface ImportGraphNode {
   file: string
@@ -27,6 +28,8 @@ export interface ImportGraph {
   httpEndpoints: ScanHttpEndpoint[]
   httpRequests: ScanHttpRequest[]
   diagnostics: ScanDiagnostic[]
+  /** Where the repository's builds write their sources, which maps a built file back to its source. */
+  buildOutputs: BuildOutput[]
 }
 
 export function fileStem(file: string): string {
@@ -61,7 +64,7 @@ export async function buildImportGraph(
 ): Promise<ImportGraph> {
   const paths = await listTypeScriptFiles(repositoryRoot, config)
   const files = new Set(paths)
-  const { files: analyses, operations, invocations, httpEndpoints, httpRequests, entries, diagnostics } = await analyzeSourceFiles(repositoryRoot, paths)
+  const { files: analyses, operations, invocations, httpEndpoints, httpRequests, entries, diagnostics, buildOutputs } = await analyzeSourceFiles(repositoryRoot, paths)
   const nodes = new Map<string, ImportGraphNode>()
   for (const analysis of analyses) {
     const node = nodes.get(analysis.file) ?? { file: analysis.file, imports: [], importedBy: [], symbols: [] }
@@ -74,5 +77,5 @@ export async function buildImportGraph(
     for (const imported of node.imports) nodes.get(imported)?.importedBy.push(node.file)
   }
   for (const node of nodes.values()) node.importedBy.sort()
-  return { files: [...nodes.values()], operations, invocations, httpEndpoints, httpRequests, entries, diagnostics }
+  return { files: [...nodes.values()], operations, invocations, httpEndpoints, httpRequests, entries, diagnostics, buildOutputs }
 }

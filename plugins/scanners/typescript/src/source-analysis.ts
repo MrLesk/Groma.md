@@ -1,16 +1,17 @@
 import path from 'node:path'
-import { API, ModuleKind, ModuleResolutionKind } from 'typescript/unstable/async'
+import { API, ModuleKind, ModuleResolutionKind, type CompilerOptions } from 'typescript/unstable/async'
 import { SyntaxKind, type SourceFile } from 'typescript/unstable/ast'
 import type { ScanDiagnostic, ScanHttpEndpoint, ScanHttpRequest, ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
 import { usedImportSpecifiers } from './source-usage.ts'
-import { typescriptProjects, type TypeScriptProject } from './projects.ts'
+import { buildOutputs, typescriptProjects, type TypeScriptProject } from './projects.ts'
 import { resolvedImports } from './source-imports.ts'
 import { sourceOperations } from './source-operations.ts'
 import { exportSymbols } from './source-symbols.ts'
 import { nativeChecker, syntax } from './native-checker.ts'
 import { sourceBuildEntries } from '../../entry-points/source.ts'
 import type { SourceEntry } from '../../entry-points/javascript.ts'
+import { packagePaths, type BuildOutput } from '../../workspace-packages.ts'
 
 export interface SourceAnalysis {
   file: string
@@ -27,7 +28,8 @@ type ProjectEvidence = {
   httpRequests: ScanHttpRequest[]
 }
 
-type SourceEvidence = ProjectEvidence & { diagnostics: ScanDiagnostic[] }
+/** Everything the programs state, with the build outputs that map built files back to their source. */
+type SourceEvidence = ProjectEvidence & { diagnostics: ScanDiagnostic[]; buildOutputs: BuildOutput[] }
 
 function unique<Fact>(facts: Fact[]): Fact[] {
   return [...new Map(facts.map(fact => [JSON.stringify(fact), fact])).values()]
@@ -64,10 +66,15 @@ function mergedEvidence(programs: readonly ProjectEvidence[]): ProjectEvidence {
 
 /** Each compiler project resolves its own aliases; only selected repository source becomes evidence. */
 export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]): Promise<SourceEvidence> {
-  if (paths.length === 0) return { ...mergedEvidence([]), diagnostics: [] }
+  if (paths.length === 0) return { ...mergedEvidence([]), diagnostics: [], buildOutputs: [] }
   const api = new API({ cwd: repositoryRoot })
   try {
     const { projects, diagnostics } = await typescriptProjects(api, repositoryRoot, paths)
+    const outputs = buildOutputs(repositoryRoot, projects)
+    const workspacePaths = await packagePaths(repositoryRoot, outputs)
+    // A file's imports come from its own config's program, whose aliases it is written for; a file no config owns
+    // takes them from any program that reaches it.
+    const configured = new Set(projects.flatMap(project => project.config === undefined ? [] : project.files.map(file => path.resolve(file))))
     const programs: ProjectEvidence[] = []
     for (const project of projects) {
       if (!project.config) {
@@ -75,20 +82,25 @@ export async function analyzeSourceFiles(repositoryRoot: string, paths: string[]
         project.files = project.files.filter(file => !analyzed.has(file))
         if (!project.files.length) continue
       }
-      programs.push(await analyzeProject(api, repositoryRoot, paths, project))
+      programs.push(await analyzeProject(api, repositoryRoot, paths, project, workspacePaths, configured))
     }
-    return { ...mergedEvidence(programs), diagnostics }
+    return { ...mergedEvidence(programs), diagnostics, buildOutputs: outputs }
   } finally {
     await api.close()
   }
 }
 
-async function analyzeProject(api: API, repositoryRoot: string, paths: string[], project: TypeScriptProject): Promise<ProjectEvidence> {
+async function analyzeProject(
+  api: API, repositoryRoot: string, paths: string[], project: TypeScriptProject, workspacePaths: Record<string, string[]>,
+  configured: ReadonlySet<string>,
+): Promise<ProjectEvidence> {
+    const options: CompilerOptions = project.config?.options ?? {
+      noLib: true, types: [], allowJs: true,
+      moduleResolution: ModuleResolutionKind.Bundler, module: ModuleKind.Preserve,
+    }
+    // Repository packages resolve to their source without node_modules; an identical key in the config's own paths wins.
     const program = await api.createProgram(project.files, {
-      compilerOptions: { ...(project.config?.options ?? {
-        noLib: true, types: [], allowJs: true,
-        moduleResolution: ModuleResolutionKind.Bundler, module: ModuleKind.Preserve,
-      }), noEmit: true },
+      compilerOptions: { ...options, paths: { ...workspacePaths, ...options.paths }, noEmit: true },
     })
     const sources = await Promise.all(paths.map(file => program.getSourceFile(path.join(repositoryRoot, file))))
     const selectedProgramSources = sources.filter((source): source is SourceFile => source !== undefined)
@@ -96,7 +108,9 @@ async function analyzeProject(api: API, repositoryRoot: string, paths: string[],
     // One adapter per program, so operations and entries share its answers.
     const sharedChecker = nativeChecker(checker)
     const evidence = await sourceOperations(repositoryRoot, selectedProgramSources, checker, sharedChecker)
-    const files = await Promise.all(selectedProgramSources.map(async source => {
+    const owned = new Set(project.files.map(file => path.resolve(file)))
+    const readsImports = ({ fileName }: SourceFile) => owned.has(path.resolve(fileName)) || !configured.has(path.resolve(fileName))
+    const files = await Promise.all(selectedProgramSources.filter(readsImports).map(async source => {
       const file = path.relative(repositoryRoot, source.fileName).split(path.sep).join('/')
       return { file, imports: await resolvedImports(repositoryRoot, source, await usedImportSpecifiers(source, checker), checker),
         symbols: exportSymbols(file, source) }

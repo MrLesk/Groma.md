@@ -4,13 +4,19 @@ import type { Node, SourceFile } from '../http-syntax.ts'
 import { heldAt, importOrigin, literalText, objectEntries, runtimeGlobal, urlContext, urlParts,
   type UrlCompiler } from '../http-values.ts'
 import type { SourceEntry } from './javascript.ts'
+import type { BuildOutput } from '../workspace-packages.ts'
 
 interface EntryCompiler extends UrlCompiler {
   SyntaxKind: UrlCompiler['SyntaxKind'] & { TrueKeyword: number }
   isNewExpression(node: Node): node is Node & { expression: Node; arguments?: readonly Node[] }
 }
 type EntryContext = ReturnType<typeof urlContext<EntryCompiler>>
-export interface EntrySources { imports: Map<string, string[]>; entries: SourceEntry[] }
+export interface EntrySources {
+  imports: Map<string, string[]>
+  entries: SourceEntry[]
+  /** Where builds write their sources, so an entry declared on a built file attaches to its source. */
+  buildOutputs?: BuildOutput[]
+}
 
 const relative = (root: string, file: string) => path.relative(root, path.resolve(root, file)).split(path.sep).join('/')
 
