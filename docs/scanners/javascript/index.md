@@ -238,7 +238,11 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    1. A registrar's entries are its registrations and the references that hand
       it off to other code, such as `registerRoutes(app)`. Serving it with
       `listen`, Node's `createServer(app)` or an imported `serve(app)` registers
-      nothing. The scanner never sees the files that import this one, which run
+      nothing, and neither does a route method called with fewer than two
+      arguments, such as the setting read `app.get('env')`. A `use` that only
+      adds middleware, which takes no place (rule 5), is no entry either, so
+      `if (app.get('env') === 'development') app.use(logger)` leaves the order
+      of the other entries known. The scanner never sees the files that import this one, which run
       after all of it and may add any route, so an export, `export default app`,
       `export const app` or an assignment to `module.exports` or `exports`,
       hands the registrar off at the end of its order; a circular require is the

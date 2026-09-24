@@ -8,7 +8,9 @@ import { talksRouter } from './talks-router.ts'
 export const app = express()
 
 // A function from the application's own module is middleware: alone, under a path, or next to a router.
+// Neither middleware nor a setting read is an entry in the order, even where the scan cannot order it.
 app.use(requestLogger)
+if (app.get('env') === 'development') app.use(requestLogger)
 app.use('/api', requireAuth)
 app.use('/api', talksRouter)
 app.get('/health', () => 'ok')

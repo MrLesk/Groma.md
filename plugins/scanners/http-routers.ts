@@ -4,10 +4,10 @@ import { declarationOf, heldAt, importOrigin, literalText, unassigned, type UrlC
 
 /*
  * The routers of the TypeScript family, read the same way under every compiler: the Express, Fastify,
- * Hono and Koa instances the sources create, the calls that register routes on them, the references
- * that hand them to code the scan does not read, and the order all of those run in. The TypeScript
- * scanner reads them with the native SDK over the program, and the JavaScript scanner with the classic
- * compiler over one file. ./http-routes.ts turns them into endpoints.
+ * Hono and Koa instances the sources create, the calls that register routes on them, and the references
+ * that hand them to code the scan does not read. The TypeScript scanner reads them with the native SDK
+ * over the program, and the JavaScript scanner with the classic compiler over one file. ./http-routes.ts
+ * turns them into endpoints, in the order they run.
  */
 
 export interface Call extends Node { expression: Node; arguments: readonly Node[] }
@@ -235,7 +235,12 @@ async function collectRegistrations(
   const declarations = await inBatches(candidates, ({ call }) => receiverDeclaration(context, call, registrars))
   return candidates.flatMap(({ call, member }, index) => {
     const declaration = declarations[index]
-    return declaration !== undefined && registers(member, registrars.get(declaration)!.framework) ? [{ call, declaration, member }] : []
+    if (declaration === undefined) return []
+    const framework = registrars.get(declaration)!.framework
+    // A route method called with fewer than two arguments, such as Express's setting read `app.get('env')`,
+    // registers nothing.
+    const incomplete = routeMethod(member, framework) !== undefined && call.arguments.length < 2
+    return registers(member, framework) && !incomplete ? [{ call, declaration, member }] : []
   })
 }
 
@@ -371,44 +376,13 @@ async function collectHandOffs(
   return handOffs
 }
 
-/** Where an entry runs among its file's statements: a chained call at its member name. */
-export function entryStart(ts: RouterCompiler, node: Node): number {
-  return ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) ? node.expression.name.getStart() : node.getStart()
-}
-
-/**
- * A registrar's registrations and hand-offs are in a proven order when every one is at the top level of
- * one file, where chained calls run in the order their member names are written; otherwise their order
- * is unknown and they share one index.
- */
-function orderIndices(ts: RouterCompiler, registrations: readonly Registration[], handOffs: readonly HandOff[]): Map<Node, number> {
-  const entries = [
-    ...registrations.map(({ call, declaration }) => ({ node: call as Node, declaration, start: entryStart(ts, call), last: false })),
-    ...handOffs.map(({ reference, declaration, last }) => ({
-      node: reference, declaration, start: last ? Number.POSITIVE_INFINITY : reference.getStart(), last,
-    })),
-  ]
-  const byRegistrar = new Map<Node, typeof entries>()
-  for (const entry of entries) byRegistrar.set(entry.declaration, [...byRegistrar.get(entry.declaration) ?? [], entry])
-  const indices = new Map<Node, number>()
-  for (const list of byRegistrar.values()) {
-    const files = new Set(list.map(({ node }) => node.getSourceFile()))
-    if (files.size !== 1 || !list.every(({ node, last }) => last || atTopLevel(ts, node))) continue
-    const sorted = [...list].sort((left, right) => left.start - right.start)
-    for (const [index, { node }] of sorted.entries()) indices.set(node, index)
-  }
-  return indices
-}
-
 export interface Registrations {
   registrars: Map<Node, Registrar>
   registrations: Registration[]
   handOffs: HandOff[]
-  /** Each registration's and hand-off's index among its registrar's, when the source proves their order. */
-  indices: Map<Node, number>
 }
 
-/** The registrars the sources create, what the calls register on them, and in what order. */
+/** The registrars the sources create, what the calls register on them, and what hands them off. */
 export async function routerRegistrations(
   context: RouterContext, sources: readonly Node[], calls: readonly Call[],
 ): Promise<Registrations> {
@@ -416,5 +390,5 @@ export async function routerRegistrations(
   await applyPrefixes(context, calls, registrars)
   const registrations = await collectRegistrations(context, calls, registrars)
   const handOffs = await collectHandOffs(context, registrars, registrations)
-  return { registrars, registrations, handOffs, indices: orderIndices(context.ts, registrations, handOffs) }
+  return { registrars, registrations, handOffs }
 }

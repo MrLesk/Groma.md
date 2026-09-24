@@ -2,8 +2,8 @@ import type { ScanHttpEndpoint } from '@groma/scanner'
 import { below, type Placed, type Placement } from './http-order.ts'
 import { blockedPath, endpointPath, readablePrefix } from './http-paths.ts'
 import {
-  atTopLevel, entryStart, mounting, orderedFrameworks, routeMembers, routeMethod, routerRegistrations, unreadHonoMembers,
-  type Call, type Registrar, type Registration, type Registrations, type RouterContext,
+  atTopLevel, mounting, orderedFrameworks, routeMembers, routeMethod, routerRegistrations, unreadHonoMembers,
+  type Call, type Registrar, type Registration, type Registrations, type RouterCompiler, type RouterContext,
 } from './http-routers.ts'
 import type { Node } from './http-syntax.ts'
 import { methodText } from './http-url.ts'
@@ -33,13 +33,16 @@ interface MountCall {
   blocks: boolean
 }
 
-interface Routing extends Registrations {
-  mounts: Map<Node, Mount[]>
-  calls: Map<Registration, MountCall>
+interface Reading extends Registrations {
   context: RouterContext
 }
 
-type Reading = Omit<Routing, 'mounts' | 'calls'>
+interface Routing extends Reading {
+  mounts: Map<Node, Mount[]>
+  calls: Map<Registration, MountCall>
+  /** Each entry's index among its registrar's, when the source proves their order. */
+  indices: Map<Node, number>
+}
 
 /** A mounted instance: the router itself, or the routes a Koa router exposes through `routes()`. */
 async function registrarArgument(reading: Reading, argument: Node): Promise<Node | undefined> {
@@ -135,6 +138,42 @@ async function collectMounts(reading: Reading): Promise<Pick<Routing, 'mounts' |
     }
   }
   return { mounts, calls }
+}
+
+/** Where an entry runs among its file's statements: a chained call at its member name. */
+function entryStart(ts: RouterCompiler, node: Node): number {
+  return ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) ? node.expression.name.getStart() : node.getStart()
+}
+
+/**
+ * Each entry's index among its registrar's entries, when the source proves their order. A registrar's entries
+ * are its registrations and hand-offs, except a `use` call that mounts no router and blocks nothing, because
+ * middleware takes no place. Their order is proven when every one is at the top level of one file, where
+ * chained calls run in the order their member names are written; otherwise they share one index.
+ */
+function orderIndices(reading: Reading, calls: ReadonlyMap<Registration, MountCall>): Map<Node, number> {
+  const { ts } = reading.context
+  const places = (registration: Registration) => {
+    const mount = calls.get(registration)
+    return mount === undefined || mount.children.length > 0 || mount.blocks
+  }
+  const entries = [
+    ...reading.registrations.filter(places)
+      .map(({ call, declaration }) => ({ node: call as Node, declaration, start: entryStart(ts, call), last: false })),
+    ...reading.handOffs.map(({ reference, declaration, last }) => ({
+      node: reference, declaration, start: last ? Number.POSITIVE_INFINITY : reference.getStart(), last,
+    })),
+  ]
+  const byRegistrar = new Map<Node, typeof entries>()
+  for (const entry of entries) byRegistrar.set(entry.declaration, [...byRegistrar.get(entry.declaration) ?? [], entry])
+  const indices = new Map<Node, number>()
+  for (const list of byRegistrar.values()) {
+    const files = new Set(list.map(({ node }) => node.getSourceFile()))
+    if (files.size !== 1 || !list.every(({ node, last }) => last || atTopLevel(ts, node))) continue
+    const sorted = [...list].sort((left, right) => left.start - right.start)
+    for (const [index, { node }] of sorted.entries()) indices.set(node, index)
+  }
+  return indices
 }
 
 /** The registrar's own path follows where it is placed. */
@@ -287,7 +326,7 @@ async function routeCall(routing: Routing, registration: Registration, placement
   if (member === 'register') return registerCall(routing, registration, placement)
   if (member === 'route' && call.arguments.length === 1) return routeOptions(routing, registration, placement)
   const method = routeMethod(member, framework)
-  if (method === undefined || call.arguments.length < 2) return []
+  if (method === undefined) return []
   const parts = await urlParts(routing.context, await pathArgument(routing, registration))
   const route = parts.length === 1 && parts[0]!.kind === 'text' ? parts[0]!.text : undefined
   if (route === undefined || (member === 'redirect' && !route.startsWith('/'))) {
@@ -322,7 +361,8 @@ export async function routerEndpoints(
   context: RouterContext, sources: readonly Node[], calls: readonly Call[],
 ): Promise<Placed[]> {
   const reading: Reading = { ...await routerRegistrations(context, sources, calls), context }
-  const routing: Routing = { ...reading, ...await collectMounts(reading) }
+  const mounted = await collectMounts(reading)
+  const routing: Routing = { ...reading, ...mounted, indices: orderIndices(reading, mounted.calls) }
   const placed = routing.handOffs.flatMap(({ reference, declaration }) => placements(routing, declaration, reference)
     .flatMap(placement => blocked(routing, placement, '', '*', reference)))
   for (const registration of routing.registrations) placed.push(...await registrationEndpoints(routing, registration))
