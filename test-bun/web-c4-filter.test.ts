@@ -3,8 +3,8 @@ import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { C4Kind } from '../src/types.ts'
 import { filterC4Scene } from '../src/viewers/web/chrome/c4-filter.ts'
-import { presentScene } from '../src/viewers/web/iso/presentation.ts'
-import { EXPLODED_POSE, NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
+import { presentScene } from '../src/viewers/web/iso/view-motion/presentation.ts'
+import { EXPLODED_POSE, NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/iso/view-motion/orbit.ts'
 import { viewerFixtureRoot } from './helpers.ts'
 
 test.concurrent('hiding a container preserves its visible children and geometry in every map view', async () => {

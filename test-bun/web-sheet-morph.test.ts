@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { Building, Route, SheetScene } from '../src/sheet/types.ts'
-import { MORPH_DURATION_MS, MORPH_FASTEST_MS, sameSheet, tweenSheet } from '../src/viewers/web/iso/morph.ts'
-import { createMapMotion, presentScene } from '../src/viewers/web/iso/presentation.ts'
-import { NESTED_POSE } from '../src/viewers/web/layers/orbit.ts'
+import { MORPH_DURATION_MS, MORPH_FASTEST_MS, sameSheet, tweenSheet } from '../src/viewers/web/iso/view-motion/morph.ts'
+import { createMapMotion, presentScene } from '../src/viewers/web/iso/view-motion/presentation.ts'
+import { NESTED_POSE } from '../src/viewers/web/iso/view-motion/orbit.ts'
 import { labelBand, CONTAINER_FONT } from '../src/sheet/measure.ts'
 import { box, uses, worldOf } from './helpers.ts'
 

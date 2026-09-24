@@ -1,11 +1,11 @@
-import { createMapMotion } from '../src/viewers/web/iso/presentation.ts'
+import { createMapMotion } from '../src/viewers/web/iso/view-motion/presentation.ts'
 import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { fitArchitecture, fitCamera, pan, zoomAbout } from '../src/viewers/web/iso/camera/camera.ts'
-import { boundsOf } from '../src/viewers/web/iso/project.ts'
-import { presentScene } from '../src/viewers/web/iso/presentation.ts'
-import { NESTED_POSE, OVERHEAD_POSE, PLAN_DURATION_MS } from '../src/viewers/web/layers/orbit.ts'
+import { boundsOf } from '../src/viewers/web/iso/projection/project.ts'
+import { presentScene } from '../src/viewers/web/iso/view-motion/presentation.ts'
+import { NESTED_POSE, OVERHEAD_POSE, PLAN_DURATION_MS } from '../src/viewers/web/iso/view-motion/orbit.ts'
 import { box, uses, worldOf } from './helpers.ts'
 
 function fixture() {

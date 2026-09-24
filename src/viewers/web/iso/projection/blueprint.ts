@@ -1,8 +1,8 @@
-import type { MarkdownBlock, MarkdownSpan, MarkdownStyle } from '../../../project-markdown.ts'
-import type { ProjectProfile } from '../../../project-profile.ts'
-import { ISLAND_FONT, PLANE, PROJECT_FONT, textPadding, textWidth } from '../../../sheet/measure.ts'
-import type { CellRect } from '../../../sheet/types.ts'
-import type { Point } from '../../../types.ts'
+import type { MarkdownBlock, MarkdownSpan, MarkdownStyle } from '../../../../project-markdown.ts'
+import type { ProjectProfile } from '../../../../project-profile.ts'
+import { ISLAND_FONT, PLANE, PROJECT_FONT, textPadding, textWidth } from '../../../../sheet/measure.ts'
+import type { CellRect } from '../../../../sheet/types.ts'
+import type { Point } from '../../../../types.ts'
 
 const MAX_SCALE = 3
 const FRAME_MARGIN = 2.5

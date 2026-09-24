@@ -5,11 +5,11 @@ status: stable
 groma:
   id: map-highlights
   parent: export
+  group: Map drawing
   code:
     - scanner: typescript
-      file: src/viewers/web/map-highlights.ts
+      file: src/viewers/web/iso/highlights.ts
       symbol: createMapHighlights
-  group: Map drawing
 description: Emphasises the current flow, task and neighbour components
 ---
 

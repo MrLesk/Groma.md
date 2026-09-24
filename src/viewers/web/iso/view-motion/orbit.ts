@@ -1,5 +1,5 @@
-import { DEFAULT_PROJECTION } from '../iso/project.ts'
-import type { ProjectionView } from '../iso/project.ts'
+import { DEFAULT_PROJECTION } from '../projection/project.ts'
+import type { ProjectionView } from '../projection/project.ts'
 
 export interface LayerPose extends ProjectionView {
   /** Zero is the nested map; one is the fully separated stack. */

@@ -1,4 +1,4 @@
-import type { MapView } from '../iso/presentation.ts'
+import type { MapView } from '../iso/view-motion/presentation.ts'
 
 const views: { value: MapView; label: string; title: string; icon: string }[] = [
   { value: 'iso', label: 'Iso', title: 'Isometric', icon: '<path d="m12 3 9 5v8l-9 5-9-5V8l9-5ZM3 8l9 5 9-5m-9 5v8M12 3v10"/>' },

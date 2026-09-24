@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { createDetailsExpansion, mapFrame } from '../src/viewers/web/chrome/shell.ts'
+import { shortcut } from '../src/viewers/web/chrome/shortcuts.ts'
 
 const map = { left: 10, top: 20, right: 1010, bottom: 720, width: 1000, height: 700 }
 const header = { left: 10, top: 20, right: 1010, bottom: 82, width: 1000, height: 62 }
@@ -57,4 +58,11 @@ test.concurrent('manual expansion belongs to the panel across content and file r
   panel.toggle(false)
   assert.equal(panel.expanded(false), false)
   assert.equal(panel.expanded(true), false)
+})
+
+test.concurrent('Escape clears selection while x has no map action', () => {
+  assert.equal(shortcut('Escape', false), 'deselect')
+  for (const key of ['Escape', '+', '-', '0']) assert.equal(shortcut(key, true), undefined)
+  assert.equal(shortcut('x', false), undefined)
+  assert.equal(shortcut('X', false), undefined)
 })

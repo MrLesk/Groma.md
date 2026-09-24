@@ -1,5 +1,5 @@
-import type { Point } from '../../../types.ts'
-import { escaped } from '../atoms/escape.ts'
+import type { Point } from '../../../../types.ts'
+import { escaped } from '../../atoms/escape.ts'
 
 const NAMESPACE = 'http://www.w3.org/2000/svg'
 

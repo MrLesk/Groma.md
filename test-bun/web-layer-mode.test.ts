@@ -1,10 +1,10 @@
-import { createMapMotion } from '../src/viewers/web/iso/presentation.ts'
+import { createMapMotion } from '../src/viewers/web/iso/view-motion/presentation.ts'
 import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { projectScene } from '../src/viewers/web/iso/project.ts'
-import { sceneAtSeparation } from '../src/viewers/web/layers/separation.ts'
+import { projectScene } from '../src/viewers/web/iso/projection/project.ts'
+import { sceneAtSeparation } from '../src/viewers/web/iso/projection/separation.ts'
 import {
   EXPLODED_POSE,
   NESTED_POSE,
@@ -13,7 +13,7 @@ import {
   PLAN_DURATION_MS,
   interpolatePose,
   orbitPose,
-} from '../src/viewers/web/layers/orbit.ts'
+} from '../src/viewers/web/iso/view-motion/orbit.ts'
 import { box, uses, worldOf } from './helpers.ts'
 
 function sourceScene() {

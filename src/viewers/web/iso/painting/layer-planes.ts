@@ -1,5 +1,5 @@
-import { node, pointsAttribute, type SvgNode } from '../iso/svg.ts'
-import type { LayeredScene } from './separation.ts'
+import { node, pointsAttribute, type SvgNode } from './svg.ts'
+import type { LayeredScene } from '../projection/separation.ts'
 
 /** The three aligned blueprint planes and the risers that show their separation. */
 export function layerPlanesSvg(scene: LayeredScene): SvgNode[] {

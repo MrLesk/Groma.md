@@ -25,7 +25,6 @@ title: Architecture relationships
 | [src/view-host.ts](../src/view-host.ts) | [plugins/work-sources/backlog/src/index.ts](../plugins/work-sources/backlog/src/index.ts) | Reads tasks and subscribes to task changes | Work source plugin |
 | [src/view-host.ts](../src/view-host.ts) | [src/scanner/session.ts](../src/scanner/session.ts) | Starts the scanner session for the terminal viewer | Function call |
 | [src/viewers/web/runtime.ts](../src/viewers/web/runtime.ts) | [src/sheet/scene.ts](../src/sheet/scene.ts) | Builds the shared map layout | Function call |
-| [src/viewers/web/render.ts](../src/viewers/web/render.ts) | [src/viewers/web/iso/map.ts](../src/viewers/web/iso/map.ts) | Draws the current map and selection | Function call |
 | [plugins/scanners/csharp/src/adapter.ts](../plugins/scanners/csharp/src/adapter.ts) | [plugins/scanners/csharp/dotnet/Program.cs](../plugins/scanners/csharp/dotnet/Program.cs) | Starts C# analysis and reads its result | Child process and JSON |
 | [plugins/scanners/csharp/dotnet/Command.cs](../plugins/scanners/csharp/dotnet/Command.cs) | [plugins/scanners/csharp/dotnet/Scanner.cs](../plugins/scanners/csharp/dotnet/Scanner.cs) | Runs the requested compiler analysis | Function call |
 | [plugins/scanners/go/src/adapter.ts](../plugins/scanners/go/src/adapter.ts) | [plugins/scanners/go/worker/main.go](../plugins/scanners/go/worker/main.go) | Starts Go analysis and reads its result | Child process and JSON |
@@ -49,6 +48,7 @@ title: Architecture relationships
 | [src/viewers/web/export.ts](../src/viewers/web/export.ts) | [src/viewers/web/sharing/images.ts](../src/viewers/web/sharing/images.ts) | Writes theme-specific cover PNGs next to the static map | Function call |
 | [src/viewers/web/map-session.ts](../src/viewers/web/map-session.ts) | [src/viewers/web/sharing/images.ts](../src/viewers/web/sharing/images.ts) | Generates live cover images for the current architecture | Function call |
 | [src/viewers/web/server.ts](../src/viewers/web/server.ts) | [src/viewers/web/startup/progress.ts](../src/viewers/web/startup/progress.ts) | Reports named startup phases to the open browser page | Function call |
+| [src/viewers/web/render.ts](../src/viewers/web/render.ts) | [src/viewers/web/iso/painting/map.ts](../src/viewers/web/iso/painting/map.ts) | Draws the current map and selection | Function call |
 
 ## Derived relationships
 
@@ -68,7 +68,7 @@ title: Architecture relationships
 | [src/viewers/tui/panes/screen.ts](../src/viewers/tui/panes/screen.ts) | [src/viewers/tui/terminal-viewer.ts](../src/viewers/tui/terminal-viewer.ts) | Invokes supplied callbacks: onHierarchyRow, onMapCell | typescript |
 | [src/viewers/web/atoms/settings-dialog.ts](../src/viewers/web/atoms/settings-dialog.ts) | [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | Invokes supplied callback: onClose | typescript |
 | [src/viewers/web/authoring.ts](../src/viewers/web/authoring.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: live, world | typescript |
-| [src/viewers/web/iso/camera/layer.ts](../src/viewers/web/iso/camera/layer.ts) | [src/viewers/web/iso/map.ts](../src/viewers/web/iso/map.ts) | Invokes supplied callbacks: drawCamera, moveStarted, settled | typescript |
+| [src/viewers/web/iso/camera/layer.ts](../src/viewers/web/iso/camera/layer.ts) | [src/viewers/web/iso/painting/map.ts](../src/viewers/web/iso/painting/map.ts) | Invokes supplied callbacks: drawCamera, moveStarted, settled | typescript |
 | [src/viewers/web/iso/camera/pointer.ts](../src/viewers/web/iso/camera/pointer.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: editProject, orbit, orbiting, pan, select, zoom | typescript |
 | [src/viewers/web/review/control.ts](../src/viewers/web/review/control.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callback: world | typescript |
 | [src/viewers/web/search/session.ts](../src/viewers/web/search/session.ts) | [src/viewers/web/render.ts](../src/viewers/web/render.ts) | Invokes supplied callbacks: anchorOf, apply, openTask, previewMap, snapshot, taskElements | typescript |

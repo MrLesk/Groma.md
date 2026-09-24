@@ -4,8 +4,8 @@ import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Point } from '../src/types.ts'
 import { fitArchitecture, fitCamera, zoomAbout, type Camera } from '../src/viewers/web/iso/camera/camera.ts'
-import { boundsOf, projectScene } from '../src/viewers/web/iso/project.ts'
-import { sceneAtSeparation } from '../src/viewers/web/layers/separation.ts'
+import { boundsOf, projectScene } from '../src/viewers/web/iso/projection/project.ts'
+import { sceneAtSeparation } from '../src/viewers/web/iso/projection/separation.ts'
 
 const viewport = { width: 800, height: 600 }
 

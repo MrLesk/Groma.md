@@ -1,6 +1,6 @@
-import { CONTAINER_FONT, PLANE, textLineHeight, textPadding } from '../../../sheet/measure.ts'
-import type { ProjectionView, SurfaceLabel, SurfaceText } from './project.ts'
-import { planeMatrix, project } from './project.ts'
+import { CONTAINER_FONT, PLANE, textLineHeight, textPadding } from '../../../../sheet/measure.ts'
+import type { ProjectionView, SurfaceLabel, SurfaceText } from '../projection/project.ts'
+import { planeMatrix, project } from '../projection/project.ts'
 import { node, round, type SvgNode } from './svg.ts'
 
 /** Fixed plane-space sizes keep titles readable without relaying out at every camera scale. */

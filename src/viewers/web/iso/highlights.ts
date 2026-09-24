@@ -1,9 +1,9 @@
-import type { ArchitectureGraph, WorkItem } from '../../types.ts'
-import { touchedElements } from '../../work/pins.ts'
-import { elementOnPath, type FlowRef } from '../flows.ts'
-import { flowHighlight } from './flow/state.ts'
-import type { IsoMap } from './iso/map.ts'
-import { primarySelection, selectedArchitecture, type Selection } from './selection.ts'
+import type { ArchitectureGraph, WorkItem } from '../../../types.ts'
+import { touchedElements } from '../../../work/pins.ts'
+import { elementOnPath, type FlowRef } from '../../flows.ts'
+import { flowHighlight } from '../flow/state.ts'
+import type { IsoMap } from './painting/map.ts'
+import { primarySelection, selectedArchitecture, type Selection } from '../selection.ts'
 
 /** One hop in either direction, limited to components rather than their containing surfaces. */
 function componentNeighborhood(selection: Selection, world: ArchitectureGraph) {

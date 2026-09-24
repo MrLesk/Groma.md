@@ -1,8 +1,8 @@
-import { mixColour, webFontFamily, type Palette } from '../atoms/theme.ts'
-import { layerCss } from '../layers/paint.ts'
+import { mixColour, webFontFamily, type Palette } from '../../atoms/theme.ts'
+import { layerCss } from './layer-planes.ts'
 import { glowCss } from './glow.ts'
-import { DEFAULT_PROJECTION, planeMatrix } from './project.ts'
-import type { Plane, ProjectionView } from './project.ts'
+import { DEFAULT_PROJECTION, planeMatrix } from '../projection/project.ts'
+import type { Plane, ProjectionView } from '../projection/project.ts'
 import { FACADE_MARK, SIDE, SURFACE_TILE, depthOf, emphasis, facadeDetailsVisible, strokeAt, surfacePatternsVisible, tintAt } from './scale.ts'
 import type { Level } from './scale.ts'
 import { mark, node, type SvgNode } from './svg.ts'
@@ -186,7 +186,7 @@ export function mapDrawingCss(palette?: Palette, zoom = 1): string {
 }
 
 /**
- * What shows a hover look. Map hover looks key off the .hovered class that iso/map.ts puts on the closest of these
+ * What shows a hover look. Map hover looks key off the .hovered class that map.ts puts on the closest of these
  * under a resting mouse, never :hover: a :hover rule would make Safari redraw the whole map when a pan starts.
  */
 export const HOVERABLE = '.building, .slab, .island.system, .route, .project-edit'

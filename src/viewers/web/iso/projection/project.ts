@@ -1,5 +1,5 @@
-import { centredRect } from '../../../sheet/grid.ts'
-import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, PLANE, buildingFont, curved, labelBand, roofBlock, textWidth } from '../../../sheet/measure.ts'
+import { centredRect } from '../../../../sheet/grid.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, PLANE, buildingFont, curved, labelBand, roofBlock, textWidth } from '../../../../sheet/measure.ts'
 import type {
   Building,
   CellRect,
@@ -8,9 +8,9 @@ import type {
   SheetScene,
   Slab,
   Zone,
-} from '../../../sheet/types.ts'
-import type { ProjectProfile } from '../../../project-profile.ts'
-import type { Bounds, Point } from '../../../types.ts'
+} from '../../../../sheet/types.ts'
+import type { ProjectProfile } from '../../../../project-profile.ts'
+import type { Bounds, Point } from '../../../../types.ts'
 import { projectBlueprint } from './blueprint.ts'
 import type { Blueprint } from './blueprint.ts'
 

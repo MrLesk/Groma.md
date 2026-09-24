@@ -1,7 +1,7 @@
 import type { AnnotatedArchitectureModel } from '../../types.ts'
 import { createMapEditor } from './editing/gestures.ts'
 import type { WebDataSource } from './data.ts'
-import type { IsoMap } from './iso/map.ts'
+import type { IsoMap } from './iso/painting/map.ts'
 import type { MeaningEdit, PaneWrites, RelationWrites, SelectionWrites } from './organisms/writes.ts'
 
 export interface AuthoringDependencies {

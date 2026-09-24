@@ -11,7 +11,6 @@ import type { Bounds, Point } from '../src/types.ts'
 import type { ProjectProfile } from '../src/project-profile.ts'
 import {
   fitCamera,
-  keyAction,
   pan,
   wheelAction,
   zoomAbout,
@@ -23,11 +22,11 @@ import {
   paintOrder,
   project,
   projectScene,
-} from '../src/viewers/web/iso/project.ts'
-import type { ProjectedScene, ProjectionView } from '../src/viewers/web/iso/project.ts'
-import { presentScene } from '../src/viewers/web/iso/presentation.ts'
-import { NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/layers/orbit.ts'
-import { surfaceLabelLayout } from '../src/viewers/web/iso/text.ts'
+} from '../src/viewers/web/iso/projection/project.ts'
+import type { ProjectedScene, ProjectionView } from '../src/viewers/web/iso/projection/project.ts'
+import { presentScene } from '../src/viewers/web/iso/view-motion/presentation.ts'
+import { NESTED_POSE, OVERHEAD_POSE } from '../src/viewers/web/iso/view-motion/orbit.ts'
+import { surfaceLabelLayout } from '../src/viewers/web/iso/painting/text.ts'
 import { box, openclawFixtureRoot, repositoryRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const profile = (title: string, overview: string): ProjectProfile => ({
@@ -186,16 +185,6 @@ test.concurrent('a plain wheel pans by the scroll delta; a pinch or cmd+wheel zo
   const wheel = wheelAction({ deltaX: 0, deltaY: -100, ctrlKey: false, metaKey: true })
   assert.ok(wheel.kind === 'zoom' && Math.abs(wheel.factor - Math.exp(0.15)) < 1e-12)
 })
-
-test.concurrent('Escape clears selection while x has no map action', () => {
-  assert.equal(keyAction('Escape', 'other'), 'deselect')
-  assert.equal(keyAction('Escape', 'control'), 'deselect')
-  for (const key of ['Escape', '+', '-', '0']) assert.equal(keyAction(key, 'text'), undefined)
-  assert.equal(keyAction('x', 'other'), undefined)
-  assert.equal(keyAction('X', 'other'), undefined)
-})
-
-
 
 test.concurrent('every relationship has a polyline whose arrowhead lies on the sheet along its last step', async () => {
   const world = await loadAnnotatedArchitecture(viewerFixtureRoot)

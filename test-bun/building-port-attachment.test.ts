@@ -7,7 +7,7 @@ import { ROUTE_UNIT } from '../src/sheet/route/space.ts'
 import { assignFixedPorts } from '../src/sheet/route/ports.ts'
 import { routeAll } from '../src/sheet/route/route.ts'
 import type { Building, SheetScene } from '../src/sheet/types.ts'
-import { projectScene } from '../src/viewers/web/iso/project.ts'
+import { projectScene } from '../src/viewers/web/iso/projection/project.ts'
 import type { Point } from '../src/types.ts'
 
 function tower(): Building {

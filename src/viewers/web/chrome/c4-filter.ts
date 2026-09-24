@@ -1,6 +1,6 @@
 import type { C4Kind } from '../../../types.ts'
 import { kindLabel } from '../../atoms/kind.ts'
-import type { LayeredScene } from '../layers/separation.ts'
+import type { LayeredScene } from '../iso/projection/separation.ts'
 
 /** The shared ● ■ ▱ ▪ marks, with crisp geometry and gently rounded square corners. */
 const kinds: { kind: C4Kind; icon: string }[] = [

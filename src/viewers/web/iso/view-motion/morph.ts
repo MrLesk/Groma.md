@@ -1,5 +1,5 @@
-import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, labelBand } from '../../../sheet/measure.ts'
-import type { Building, CellRect, Route, RoutePoint, SheetScene } from '../../../sheet/types.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, labelBand } from '../../../../sheet/measure.ts'
+import type { Building, CellRect, Route, RoutePoint, SheetScene } from '../../../../sheet/types.ts'
 
 /** How long a world change takes to settle on the map. */
 export const MORPH_DURATION_MS = 700

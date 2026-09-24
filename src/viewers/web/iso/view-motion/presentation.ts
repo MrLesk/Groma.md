@@ -1,11 +1,11 @@
-import type { ProjectProfile } from '../../../project-profile.ts'
-import { ROOF_SHADOW } from '../../../sheet/grid.ts'
-import type { Building, RoutePoint, SheetScene } from '../../../sheet/types.ts'
-import type { LayerPose } from '../layers/orbit.ts'
-import { EXPLODED_POSE, NESTED_POSE, OVERHEAD_POSE, ORBIT_DURATION_MS, PLAN_DURATION_MS, interpolatePose, orbitPose } from '../layers/orbit.ts'
-import { sceneAtSeparation, type LayeredScene } from '../layers/separation.ts'
+import type { ProjectProfile } from '../../../../project-profile.ts'
+import { ROOF_SHADOW } from '../../../../sheet/grid.ts'
+import type { Building, RoutePoint, SheetScene } from '../../../../sheet/types.ts'
+import type { LayerPose } from './orbit.ts'
+import { EXPLODED_POSE, NESTED_POSE, OVERHEAD_POSE, ORBIT_DURATION_MS, PLAN_DURATION_MS, interpolatePose, orbitPose } from './orbit.ts'
+import { sceneAtSeparation, type LayeredScene } from '../projection/separation.ts'
 import { MORPH_DURATION_MS, MORPH_FASTEST_MS, MORPH_LIMIT, sameSheet, tweenSheet } from './morph.ts'
-import { projectScene } from './project.ts'
+import { projectScene } from '../projection/project.ts'
 
 export type MapView = 'iso' | '2d' | 'layers'
 

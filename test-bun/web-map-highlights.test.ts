@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import path from 'node:path'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { createMapHighlights } from '../src/viewers/web/map-highlights.ts'
+import { createMapHighlights } from '../src/viewers/web/iso/highlights.ts'
 import { noSelection, primarySelection, selectArchitecture, selectTask } from '../src/viewers/web/selection.ts'
 
 async function session(fixture = 'relationship-pairs') {

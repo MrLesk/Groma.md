@@ -4,7 +4,7 @@ import { test } from 'bun:test'
 
 import type { SheetScene } from '../src/sheet/types.ts'
 import { fitHighlights } from '../src/viewers/web/iso/camera/camera.ts'
-import { projectScene } from '../src/viewers/web/iso/project.ts'
+import { projectScene } from '../src/viewers/web/iso/projection/project.ts'
 
 const sheet: SheetScene = {
   sheet: { gx: 0, gy: 0, w: 30, d: 30 },

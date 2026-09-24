@@ -1,5 +1,5 @@
-import type { LayeredScene } from '../layers/separation.ts'
-import { planeMatrix } from './project.ts'
+import type { LayeredScene } from '../projection/separation.ts'
+import { planeMatrix } from '../projection/project.ts'
 import { node, pointsAttribute, type SvgNode } from './svg.ts'
 
 /** Neutral strokes are batched by origin; each route keeps its own interaction overlay and identity. */

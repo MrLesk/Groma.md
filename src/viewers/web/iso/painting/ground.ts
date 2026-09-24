@@ -1,7 +1,7 @@
-import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, textWidth } from '../../../sheet/measure.ts'
-import type { Compass, PlateText, ProjectPlate, RichPlateText, Segment } from './blueprint.ts'
-import type { ProjectedScene, ProjectedZone, ProjectionView } from './project.ts'
-import { planeMatrix } from './project.ts'
+import { CONTAINER_FONT, GROUP_FONT, ISLAND_FONT, ISLAND_SPACING, textWidth } from '../../../../sheet/measure.ts'
+import type { Compass, PlateText, ProjectPlate, RichPlateText, Segment } from '../projection/blueprint.ts'
+import type { ProjectedScene, ProjectedZone, ProjectionView } from '../projection/project.ts'
+import { planeMatrix } from '../projection/project.ts'
 import { node, pointsAttribute, round, type SvgNode } from './svg.ts'
 import { surfaceLabel } from './text.ts'
 

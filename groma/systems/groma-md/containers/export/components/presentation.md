@@ -5,14 +5,14 @@ status: stable
 groma:
   id: presentation
   parent: export
+  group: Map drawing
   code:
     - scanner: typescript
-      file: src/viewers/web/iso/presentation.ts
+      file: src/viewers/web/iso/view-motion/presentation.ts
     - scanner: typescript
-      file: src/viewers/web/layers/orbit.ts
+      file: src/viewers/web/iso/view-motion/orbit.ts
     - scanner: typescript
-      file: src/viewers/web/iso/morph.ts
-  group: Map drawing
+      file: src/viewers/web/iso/view-motion/morph.ts
 description: Animates transitions between browser map views
 ---
 

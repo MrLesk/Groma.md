@@ -1,7 +1,7 @@
 import { PLANE } from '../../../sheet/measure.ts'
 import type { Camera } from './camera/camera.ts'
-import { DEFAULT_PROJECTION, planeMatrix, type ProjectionView } from './project.ts'
-import { mark, node, patch, svg, type SvgNode } from './svg.ts'
+import { DEFAULT_PROJECTION, planeMatrix, type ProjectionView } from './projection/project.ts'
+import { mark, node, patch, svg, type SvgNode } from './painting/svg.ts'
 
 /** A graph-paper tile: minor rows one plane cell apart, and a major row at its edge. */
 const TILE_CELLS = 5

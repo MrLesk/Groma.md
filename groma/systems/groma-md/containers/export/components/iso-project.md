@@ -5,14 +5,14 @@ status: stable
 groma:
   id: iso-project
   parent: export
+  group: Map drawing
   code:
     - scanner: typescript
-      file: src/viewers/web/iso/project.ts
+      file: src/viewers/web/iso/projection/project.ts
     - scanner: typescript
-      file: src/viewers/web/iso/blueprint.ts
+      file: src/viewers/web/iso/projection/blueprint.ts
     - scanner: typescript
-      file: src/viewers/web/layers/separation.ts
-  group: Map drawing
+      file: src/viewers/web/iso/projection/separation.ts
 description: Projects the layout into isometric, 2D and layer views
 ---
 

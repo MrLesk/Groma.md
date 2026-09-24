@@ -1,10 +1,10 @@
-import type { Point } from '../../../types.ts'
-import { boundsOf } from '../iso/project.ts'
+import type { Point } from '../../../../types.ts'
+import { boundsOf } from './project.ts'
 import type {
   ProjectedRoute,
   ProjectedScene,
   SurfaceText,
-} from '../iso/project.ts'
+} from './project.ts'
 
 export type ArchitectureLayer = 'system' | 'container' | 'component'
 

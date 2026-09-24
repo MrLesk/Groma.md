@@ -7,26 +7,26 @@ groma:
   parent: export
   code:
     - scanner: typescript
-      file: src/viewers/web/iso/map.ts
+      file: src/viewers/web/iso/painting/map.ts
     - scanner: typescript
-      file: src/viewers/web/iso/paint-buildings.ts
+      file: src/viewers/web/iso/painting/buildings.ts
     - scanner: typescript
-      file: src/viewers/web/iso/paint-ground.ts
+      file: src/viewers/web/iso/painting/ground.ts
     - scanner: typescript
-      file: src/viewers/web/iso/paint-routes.ts
+      file: src/viewers/web/iso/painting/routes.ts
       symbol: routesSvg
     - scanner: typescript
-      file: src/viewers/web/iso/style.ts
+      file: src/viewers/web/iso/painting/style.ts
     - scanner: typescript
-      file: src/viewers/web/iso/svg.ts
+      file: src/viewers/web/iso/painting/svg.ts
     - scanner: typescript
-      file: src/viewers/web/iso/text.ts
+      file: src/viewers/web/iso/painting/text.ts
     - scanner: typescript
-      file: src/viewers/web/iso/scale.ts
+      file: src/viewers/web/iso/painting/scale.ts
     - scanner: typescript
-      file: src/viewers/web/layers/paint.ts
+      file: src/viewers/web/iso/painting/glow.ts
     - scanner: typescript
-      file: src/viewers/web/iso/glow.ts
+      file: src/viewers/web/iso/painting/layer-planes.ts
   group: Map drawing
 description: Paints the browser map as SVG buildings, routes and labels
 ---

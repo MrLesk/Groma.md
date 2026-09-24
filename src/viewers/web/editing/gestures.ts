@@ -1,8 +1,8 @@
 import type { AnnotatedElement, Point } from '../../../types.ts'
 import { createRelateDialog } from '../chrome/relate.ts'
 import type { WebDataSource } from '../data.ts'
-import type { IsoMap } from '../iso/map.ts'
-import { svg } from '../iso/svg.ts'
+import type { IsoMap } from '../iso/painting/map.ts'
+import { svg } from '../iso/painting/svg.ts'
 import { createDialog } from './create.ts'
 import { creationParent, enclosed, gestureBounds, type CreationKind } from './intent.ts'
 

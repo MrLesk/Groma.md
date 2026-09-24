@@ -1,7 +1,7 @@
-import type { Point } from '../../../types.ts'
-import type { LayeredScene } from '../layers/separation.ts'
-import type { Camera } from './camera/camera.ts'
-import { boundsOf } from './project.ts'
+import type { Point } from '../../../../types.ts'
+import type { LayeredScene } from '../projection/separation.ts'
+import type { Camera } from '../camera/camera.ts'
+import { boundsOf } from '../projection/project.ts'
 import { node, patch, pointsAttribute, svg } from './svg.ts'
 
 /**

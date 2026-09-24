@@ -1,7 +1,7 @@
 import type { ArchitectureGraph, Bounds, Point } from '../../../../types.ts'
 import { ancestorIds, parentOfElements } from '../../../relationship-text.ts'
-import type { LayeredScene } from '../../layers/separation.ts'
-import { boundsOf, type ProjectedScene } from '../project.ts'
+import type { LayeredScene } from '../projection/separation.ts'
+import { boundsOf, type ProjectedScene } from '../projection/project.ts'
 
 /** Screen = world · k + (x, y); the same camera transform owns pan and zoom. */
 export interface Camera {
@@ -149,28 +149,4 @@ export function wheelAction(
 export function zoomReadout(camera: Camera, fit: Camera): string {
   const percent = Math.round((camera.k / fit.k) * 100)
   return percent === 100 ? '' : `${percent}%`
-}
-
-export type KeyTarget = 'hierarchy' | 'control' | 'text' | 'other'
-
-export function keyTarget(target: EventTarget | null): KeyTarget {
-  if (!(target instanceof Element)) return 'other'
-  if (target.closest('input[type="radio"], input[type="checkbox"]')) return 'control'
-  if (target.closest('input, textarea, [contenteditable]')) return 'text'
-  if (target.closest('#tree')) return 'hierarchy'
-  if (target.closest('button, select')) return 'control'
-  return 'other'
-}
-
-/** Map keys, leaving text fields alone. */
-export function keyAction(
-  key: string,
-  target: KeyTarget,
-): 'in' | 'out' | 'fit' | 'deselect' | undefined {
-  if (target === 'text') return undefined
-  if (key === '+' || key === '=') return 'in'
-  if (key === '-' || key === '_') return 'out'
-  if (key === '0') return 'fit'
-  if (key === 'Escape') return 'deselect'
-  return undefined
 }
