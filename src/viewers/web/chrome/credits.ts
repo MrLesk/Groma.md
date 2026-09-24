@@ -73,7 +73,7 @@ const thirdPartyCredits = {
 
 export const creditsCss = `
   #credits { position: relative; --popover-width: 520px; }
-  #credits > summary { width: 32px; padding: 0; list-style: none; }
+  #credits > summary { list-style: none; }
   #credits > summary::-webkit-details-marker { display: none; }
   #credits .credits-menu { right: 0; padding: 0; }
   #credits .about-logo { display: block; width: 220px; max-width: 100%; height: auto; }
@@ -104,7 +104,7 @@ function creditSection(title: string, credits: Credit[]): string {
 export function creditsControl(infoIcon: string, lockup: string): string {
   const runtime = creditSection('Runtime libraries', thirdPartyCredits.runtime)
   const development = creditSection('Development tools', thirdPartyCredits.development)
-  return `<details id="credits"><summary class="chrome-button" aria-label="About Groma">${infoIcon}</summary>`
+  return `<details id="credits"><summary class="chrome-button" aria-label="Info">${infoIcon}<span>Info</span></summary>`
     + '<div class="anchored-popover credits-menu" role="dialog" aria-label="About Groma">'
     + `<section aria-label="Groma.md"><div class="about-logo">${lockup}</div>`
     + '<p>Your software architecture as Markdown in Git, and one C4 map you can explore. Groma connects source evidence with the responsibilities and relationships described by people and coding agents.</p>'

@@ -237,8 +237,8 @@ Search narrows to 200 px; then the commit messages clip together. The project
 title never gives way. Up to 1320 px the header has no spare room for a
 comparison being started or for compare words outside a short revision field, so
 Search folds to its icon until the list closes; opening Search, by key or by
-clicking its icon, unfolds it. At 1080 px and below the Fit
-text leaves, a revision field shows its exact tag or short ID instead of its
+clicking its icon, unfolds it. At 1080 px and below Fit, Help and Info
+show only their icons, a revision field shows its exact tag or short ID instead of its
 message, Search may narrow to 120 px, and an open revision search takes the whole
 box. At 1000 px and below Search also stays folded while a comparison is open, so
 both short IDs read whole down to the page's 900 px minimum. `page.ts` reads the

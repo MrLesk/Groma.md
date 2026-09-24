@@ -63,6 +63,7 @@ const expandIcon = icon('<path d="M10 12H3m4-4-4 4 4 4M14 12h7m-4-4 4 4-4 4"/>',
 const collapseIcon = icon('<path d="M3 12h7m-4-4 4 4-4 4M21 12h-7m4-4-4 4 4 4"/>', 'collapse-arrows')
 const hierarchyIcon = icon('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>', 'hierarchy-chevron')
 const infoIcon = icon('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>')
+const helpIcon = icon('<circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>')
 
 const legendKinds: C4Kind[][] = [
   ['actor', 'system'],
@@ -231,7 +232,8 @@ const style = `
   @media (max-width: 1080px) {
     #header { gap: 12px; padding: 0 12px; }
     .header-context { gap: 10px; }
-    #fit > span { display: none; }
+    /* The labelled buttons fold to their icons; each keeps its name in an aria-label. */
+    #fit > span, #help > summary > span, #credits > summary > span { display: none; }
     /* Both short IDs must fit at 1000px, so Search may narrow to 120px here. */
     #header > #web-search { min-width: 120px; }
   }
@@ -440,7 +442,7 @@ function helpControl(): string {
   const body = sections.map(([title, rows]) => `<section><h2>${title}</h2><dl>`
     + rows.map(([action, shortcut]) => `<div><dt>${action}</dt><dd>${shortcut}</dd></div>`).join('')
     + '</dl></section>').join('')
-  return `<details id="help"><summary class="chrome-button">Help</summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${guide}<div class="help-shortcuts">${body}</div></div></details>`
+  return `<details id="help"><summary class="chrome-button" aria-label="Help">${helpIcon}<span>Help</span></summary><div class="anchored-popover help-panel" role="region" aria-label="Help">${guide}<div class="help-shortcuts">${body}</div></div></details>`
 }
 
 /**
