@@ -79,8 +79,11 @@ export function createCameraMotion(initial: Camera) {
   }
 }
 
-/** Camera frames share the same paint callback as direct gestures and respect reduced motion. */
-export function createCameraAnimator(initial: Camera, paint: () => void) {
+/**
+ * Camera frames share the same paint callback as direct gestures and respect reduced motion. Navigation announces its
+ * destination through `approach` before it moves; direct gestures never do, or a pinch would redraw the map every frame.
+ */
+export function createCameraAnimator(initial: Camera, paint: () => void, approach: (destination: Camera) => void) {
   const motion = createCameraMotion(initial)
   let frame: number | undefined
   const stopFrame = (): void => {
@@ -95,6 +98,7 @@ export function createCameraAnimator(initial: Camera, paint: () => void) {
   }
   const move = (to: Camera, animate = true): void => {
     stopFrame()
+    if (animate) approach(to)
     motion.move(to, performance.now(), animate && !matchMedia('(prefers-reduced-motion: reduce)').matches)
     frame = requestAnimationFrame(tick)
   }

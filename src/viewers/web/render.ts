@@ -111,7 +111,7 @@ function fitScene(frame: MapFrame): Camera {
   return pan(fitCamera(scene.bounds, frame), frame.x, frame.y)
 }
 let fitted: Camera = fitScene(viewport())
-const camera = createCameraAnimator(fitted, applyCamera)
+const camera = createCameraAnimator(fitted, applyCamera, to => map.approach(to, to.k / fitted.k))
 /** Once an interaction positions the camera, live refits stop until the viewer presses 0. */
 let touched = false
 /** A world update's blend: the camera tracks its fit on every frame, through the last, instead of refitting a selection. */

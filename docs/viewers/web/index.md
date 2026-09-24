@@ -689,8 +689,10 @@ a stop, like trackpad momentum; a pause before release, a pinch, and a Layers
 orbit do not glide, and reduced motion turns the glide off. Pressing the map
 holds the camera where it is, stopping a glide or an unfinished transition, and
 any other navigation takes over from the displayed position.
-The map keeps one cached camera layer, which animated navigation and direct gestures move without redrawing the map.
-The map restores crisp SVG rendering after movement settles.
+The map keeps one cached camera layer, which direct gestures and navigation that pans or zooms in move without
+redrawing the map. Navigation that zooms out draws its destination first and moves that picture into place, enlarged
+at the start, so it looks soft while it moves; shrinking a close-up picture would freeze Safari. The map restores
+crisp SVG rendering after movement settles.
 Component selection and focused flow endpoints share one glow per
 highlighted shape. Each uses a small, separate layer containing its blurred
 silhouette. The blur stays fixed while the layer's opacity pulses every 2.6

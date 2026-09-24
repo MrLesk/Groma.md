@@ -14,7 +14,7 @@ import { HOVERABLE, mapDefs } from './style.ts'
 import { patch, svg } from './svg.ts'
 import { surfaceLabelStep } from './text.ts'
 
-/** The map settles this long after its camera last moved or it was last repainted: a zoom commits its sharp SVG scale, and hover and glows return. Panning keeps the cached layer. */
+/** The map settles this long after its camera last moved or it was last repainted: a zoom-in or gesture commits its SVG scale, a layer the compositor scaled is rebuilt sharp, and hover and glows return. Panning keeps the cached layer. */
 const SETTLE_MS = 250
 
 interface RouteNode {
@@ -30,6 +30,12 @@ export interface IsoMap {
   dragging(active: boolean): void
   /** Applies the camera and reports whether its compositor scale changed. */
   move(camera: Camera, zoomRatio: number): boolean
+  /**
+   * Navigation is about to head for `destination`. A zoom-out draws the destination into the SVG at once and shows the
+   * current view from it, enlarged: shrinking a close-up picture instead makes Safari paint the whole map at close-up
+   * resolution.
+   */
+  approach(destination: Camera, zoomRatio: number): void
   /**
    * Draws the scene into the existing layers, reusing their elements; a repaint counts as map motion. Returns true
    * when the highlights must be applied again: elements were created or removed, or the routes and surfaces they
@@ -140,6 +146,8 @@ export function createMap(host: HTMLElement): IsoMap {
   let labelStep = surfaceLabelStep(1)
   /** True from a repaint until the camera is next committed or the map settles: the cached layer no longer shows the picture. */
   let repainted = false
+  /** True once the compositor has scaled the cached layer since it was last rebuilt. */
+  let scaled = false
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
   /** The scene inputs the current highlights were applied with, as JSON. */
@@ -223,11 +231,18 @@ export function createMap(host: HTMLElement): IsoMap {
     camera.style.transform = 'translate(0px, 0px) scale(1)'
   }
 
+  /** Shows `shown` by moving the cached picture that the SVG holds for `drawn`. */
+  const showCached = (shown: Camera, drawn: Camera): void => {
+    const ratio = shown.k / drawn.k
+    camera.style.transform = `translate(${shown.x - drawn.x * ratio}px, ${shown.y - drawn.y * ratio}px) scale(${ratio})`
+    if (ratio !== 1) scaled = true
+  }
+
   /**
    * Once the compositor has scaled the cached layer, Safari keeps drawing it below full resolution, even with the zoom
    * committed into the SVG. Changing its will-change around a forced layout makes Safari rebuild it sharp without
    * drawing a frame uncached, which would hold Safari for hundreds of milliseconds on a zoomed-out map. It runs in the
-   * frame after the commit: in the commit's own frame it leaves a zoomed-in map soft.
+   * frame after the settle: in the settle's own frame, where a zoom-in commits, it leaves the map soft.
    */
   const rebuildCachedLayer = (): void => {
     camera.style.willChange = 'auto'
@@ -249,8 +264,9 @@ export function createMap(host: HTMLElement): IsoMap {
     settleTimer = undefined
     moving = false
     repainted = false
-    if (latest !== undefined && (latest.camera.k !== committed?.camera.k || latest.zoomRatio !== committed?.zoomRatio)) {
-      commitCamera(latest)
+    if (latest !== undefined && (latest.camera.k !== committed?.camera.k || latest.zoomRatio !== committed?.zoomRatio)) commitCamera(latest)
+    if (scaled) {
+      scaled = false
       requestAnimationFrame(rebuildCachedLayer)
     }
     // A drag held still keeps its hover: the point under the pointer is the drag cover, not the map.
@@ -301,13 +317,14 @@ export function createMap(host: HTMLElement): IsoMap {
       markMoving()
       // A repainted picture has no cached layer worth moving, so the camera goes straight into the SVG.
       if (committed === undefined || repainted) commitCamera(latest)
-      else {
-        const ratio = current.k / committed.camera.k
-        const x = current.x - committed.camera.x * ratio
-        const y = current.y - committed.camera.y * ratio
-        camera.style.transform = `translate(${x}px, ${y}px) scale(${ratio})`
-      }
+      else showCached(current, committed.camera)
       return scaleChanged
+    },
+    approach(destination, zoomRatio) {
+      if (latest === undefined || committed === undefined || destination.k >= committed.camera.k) return
+      commitCamera({ camera: destination, zoomRatio })
+      showCached(latest.camera, destination)
+      markMoving()
     },
     paint(scene) {
       painted = scene
