@@ -259,9 +259,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
       prefix followed by a constrained optional catch-all, with method `*`
       unless the call states one, named by the registering operation: a route
       with a computed path, a mount under a computed prefix, a path mounted to
-      something other than a recognized router, such as
-      `app.use('/static', express.static('public'))`, a router the scan cannot
-      follow, mounted with or without a path, such as
+      something other than a recognized router or a function the scan sees,
+      such as `app.use('/static', express.static('public'))`, a router the
+      scan cannot follow, mounted with or without a path, such as
       `app.use(require('./routes'))`, a Koa router's `routes()` from another
       file, or a function imported from one, which the scanner cannot see, a
       route builder such as `app.route('/reports')`, Hono's `on`, `mount` and
@@ -270,7 +270,11 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
       registrar's root.
    5. Middleware takes no place: a package's handler, such as `express.json()`,
       and any handler before or beside a recognized router in one call, as in
-      `app.use(requireAuth, api)`, which then states no path.
+      `app.use(requireAuth, api)`, which then states no path. Hono's `use`
+      never mounts a router, so it takes no place with or without a path,
+      whatever its handlers. Under a path, an Express or Koa `use` takes none
+      when the scan sees that every handler is a function, as in
+      `app.use('/api', requireAuth)`.
    6. Fastify and Bun.serve prefer the most specific route and carry no order; a
       Fastify plugin, whose routes the scan does not read, blocks its prefix
       without one.

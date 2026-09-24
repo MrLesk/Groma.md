@@ -27,12 +27,10 @@ interface Mount {
 interface MountCall {
   /** The recognized registrars among its arguments. */
   children: Node[]
-  /** The path it states: empty when its first argument is a registrar or a handler, undefined when computed. */
+  /** The path it states: empty when it states none, undefined when computed. */
   prefix?: string
-  /** Whether its first argument is a registrar or a handler rather than a path. */
-  pathless: boolean
-  /** Whether it mounts, beside no recognized registrar, a router the scan cannot follow. */
-  foreign: boolean
+  /** Whether it may serve anything below its prefix, which blocks that path in its place. */
+  blocks: boolean
 }
 
 interface Routing extends Registrations {
@@ -67,15 +65,19 @@ async function foreignRouter(reading: Reading, argument: Node): Promise<boolean>
   }
   const origin = await importOrigin(context, argument)
   if (origin?.module.startsWith('.') !== true) return false
+  return !await seenFunction(context, argument)
+}
+
+/** Whether the scan sees that the argument holds a function. */
+async function seenFunction(context: RouterContext, argument: Node): Promise<boolean> {
   const held = await heldAt(context, argument)
-  return typeof held !== 'object' || !ts.isFunctionLike(held.node)
+  return typeof held === 'object' && context.ts.isFunctionLike(held.node)
 }
 
 /** Middleware: a function the scan sees, or a handler a package provides, such as `express.json()` or `cors()`. */
 async function middleware(context: RouterContext, argument: Node): Promise<boolean> {
   const { ts } = context
-  const held = await heldAt(context, argument)
-  if (typeof held === 'object' && ts.isFunctionLike(held.node)) return true
+  if (await seenFunction(context, argument)) return true
   const callee = ts.isCallExpression(argument) ? argument.expression : argument
   const holder = ts.isPropertyAccessExpression(callee) ? callee.expression : callee
   const origin = await importOrigin(context, holder)
@@ -83,15 +85,29 @@ async function middleware(context: RouterContext, argument: Node): Promise<boole
 }
 
 /**
+ * Whether a `use` call under a path only adds middleware. An Express or Koa `use` can also mount a router, so
+ * only when the scan sees that every handler is a function.
+ */
+async function onlyMiddleware(reading: Reading, registration: Registration, handlers: readonly Node[]): Promise<boolean> {
+  if (registration.member !== 'use') return false
+  return (await Promise.all(handlers.map(handler => seenFunction(reading.context, handler)))).every(Boolean)
+}
+
+/**
  * What a `use` or `route` call mounts: the recognized registrars among its arguments, under the path
  * its first argument states, or under no path when the first argument is itself a registrar or a
- * handler, such as `app.use(requireAuth, api)`.
+ * handler, such as `app.use(requireAuth, api)`. A call that only adds middleware mounts nothing. A mount
+ * the scan cannot follow blocks: its prefix is not literal, what it mounts under a path is neither a
+ * recognized registrar nor middleware, a mounted router states an own path the scan cannot read, or it
+ * mounts only a router the scan cannot follow, with or without a path.
  */
 async function readMount(reading: Reading, registration: Registration): Promise<MountCall> {
   const [first, ...rest] = registration.call.arguments
-  if (first === undefined) return { children: [], prefix: '', pathless: true, foreign: false }
+  const nothing = { children: [], prefix: '', blocks: false }
+  if (first === undefined) return nothing
   const leading = await registrarArgument(reading, first)
   const pathless = leading !== undefined || await foreignRouter(reading, first) || await middleware(reading.context, first)
+  if (!pathless && await onlyMiddleware(reading, registration, rest)) return nothing
   const children = leading === undefined ? [] : [leading]
   for (const argument of rest) {
     const child = await registrarArgument(reading, argument)
@@ -101,7 +117,9 @@ async function readMount(reading: Reading, registration: Registration): Promise<
   // A handler next to a recognized registrar is middleware, wherever it comes from.
   const foreign = children.length === 0
     && (await Promise.all(registration.call.arguments.map(argument => foreignRouter(reading, argument)))).some(Boolean)
-  return { children, pathless, foreign, ...(prefix === undefined ? {} : { prefix }) }
+  const hidden = children.some(child => reading.registrars.get(child)!.prefix === undefined)
+  const unfollowed = prefix === undefined ? children.length > 0 : !pathless && children.length === 0
+  return { children, blocks: foreign || hidden || unfollowed, ...(prefix === undefined ? {} : { prefix }) }
 }
 
 async function collectMounts(reading: Reading): Promise<Pick<Routing, 'mounts' | 'calls'>> {
@@ -279,21 +297,11 @@ async function routeCall(routing: Routing, registration: Registration, placement
   return served(routing, placement, route, [method], await routing.context.handlerOperation(handler, call), registration)
 }
 
-/**
- * A mount the scan cannot follow may serve anything below its prefix: its prefix is not literal, what
- * it mounts under a path is not a recognized registrar, a mounted router states an own path the scan
- * cannot read, or it mounts only a router the scan cannot follow, with or without a path. Middleware is
- * not a mount: a handler from a package or one the scan sees is a function, and any handler next to a
- * recognized registrar in one call.
- */
+/** A mount the scan cannot follow may serve anything below its prefix, so it blocks that path in its place. */
 async function mountCall(routing: Routing, registration: Registration, placement: Placement): Promise<Placed[]> {
   const { call } = registration
   const mount = routing.calls.get(registration)!
-  const hidden = mount.children.some(child => routing.registrars.get(child)!.prefix === undefined)
-  const unfollowed = mount.prefix === undefined
-    ? mount.children.length > 0
-    : !mount.pathless && mount.children.length === 0 && call.arguments.length > 1
-  if (!hidden && !mount.foreign && !unfollowed) return []
+  if (!mount.blocks) return []
   const parts = await urlParts(routing.context, call.arguments[0]!)
   return blocked(routing, placement, mount.prefix ?? readablePrefix(parts), '*', call)
 }
@@ -347,9 +355,7 @@ async function serveRoute(context: RouterContext, route: string, value: Node, ca
   const path = endpointPath(route)
   const byMethod = await objectEntries(context, value)
   if (byMethod === undefined) {
-    const held = await heldAt(context, value)
-    const handler = typeof held === 'object' && context.ts.isFunctionLike(held.node)
-    return handler ? [{ operation: await context.handlerOperation(value, call), method: '*', path }] : []
+    return await seenFunction(context, value) ? [{ operation: await context.handlerOperation(value, call), method: '*', path }] : []
   }
   const endpoints: ScanHttpEndpoint[] = []
   for (const [key, handler] of byMethod) {

@@ -190,16 +190,19 @@ export function registers(member: string, framework: Framework): boolean {
   if (koaMembers.has(member)) return framework === 'koa'
   if (member === 'register') return framework === 'fastify'
   if (member === 'route') return framework !== 'koa'
-  return routeMembers.has(member) || member === 'use'
+  // Hono mounts a sub-application only with `route` and `mount`, so its `use` only adds middleware.
+  if (member === 'use') return framework !== 'hono'
+  return routeMembers.has(member)
 }
 
 /**
- * A registration returns its registrar, and so do Express's settings calls and a Koa router's `prefix`.
- * Express's `route(path)` returns a route builder and Hono's `basePath` a clone, whose calls the scan
+ * A registration returns its registrar, and so do Express's settings calls, Hono's `use` and a Koa router's
+ * `prefix`. Express's `route(path)` returns a route builder and Hono's `basePath` a clone, whose calls the scan
  * does not read.
  */
 function returnsRegistrar(member: string, framework: Framework): boolean {
   if (framework === 'express' && expressSettings.has(member)) return true
+  if (framework === 'hono' && member === 'use') return true
   if (framework === 'koa' && member === 'prefix') return true
   const builder = (member === 'route' && framework === 'express') || member === 'basePath'
   return registers(member, framework) && !builder

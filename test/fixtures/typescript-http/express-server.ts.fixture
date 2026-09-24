@@ -7,8 +7,9 @@ import { talksRouter } from './talks-router.ts'
 
 export const app = express()
 
-// A function from the application's own module is middleware, next to a router or alone.
+// A function from the application's own module is middleware: alone, under a path, or next to a router.
 app.use(requestLogger)
+app.use('/api', requireAuth)
 app.use('/api', talksRouter)
 app.get('/health', () => 'ok')
 app.get('/sessions{/:id}', () => 'session')

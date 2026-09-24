@@ -1,8 +1,14 @@
 import { Hono } from 'hono'
+import { createMiddleware } from 'hono/factory'
 
 export const items = new Hono()
 
 items.get('/items', listItems)
+
+// Hono's middleware factory returns a value, not a function the scan sees.
+export const guard = createMiddleware(async (_context, next) => {
+  await next()
+})
 
 function listItems(): string {
   return 'items'

@@ -79,24 +79,23 @@ test.concurrent('every supported framework reports its served endpoints in the o
       'PUT /api/rooms/:id bun-server.ts#updateRoom',
       // An application is its file and the variable that holds it. A mounted router's routes take the
       // mount's place, in the order its own file registers them, and a function from the application's
-      // own module is middleware, beside a router or alone. A file that imports the application and hands
-      // it on runs after them, and serving it registers nothing. An optional group of one parameter is
-      // an optional parameter.
+      // own module is middleware: alone, under a path, or beside a router. A file that imports the
+      // application and hands it on runs after them, and serving it registers nothing. An optional group
+      // of one parameter is an optional parameter.
       'express-server.ts#app@0 GET /api/talks/:id talks-router.ts#showTalk',
       'express-server.ts#app@1 POST /api/talks talks-router.ts#createTalk',
       'express-server.ts#app@2 GET /health express-server.ts#(anonymous)',
       'express-server.ts#app@3 GET /sessions/:id? express-server.ts#(anonymous)',
       'express-server.ts#app@4 GET /admin/users admin-router.ts#listUsers',
-      // Hono's trailing wildcard also matches the path without it; `on`, `basePath` and middleware under
-      // `*` block what they may serve.
+      // Hono's trailing wildcard also matches the path without it; `on` and `basePath` block what they may
+      // serve, while `use` only adds middleware, whatever its handler, so it takes no place.
       'hono-server.ts#site@0 GET /v1/rooms/:room? hono-server.ts#listRooms',
       'hono-server.ts#site@1 GET /v2/rooms/:room? hono-server.ts#listRooms',
       'hono-server.ts#site@2 * /legacy/:** hono-server.ts#forward',
       'hono-server.ts#site@3 PURGE /cache/:**! hono-server.ts#(anonymous)',
       'hono-server.ts#site@4 * /api/:**! hono-server.ts#(anonymous)',
-      'hono-server.ts#site@5 * /:**! hono-server.ts#(anonymous)',
       // A child from another module has its top-level routes before the file that imports it runs.
-      'hono-server.ts#site@6 GET /shop/items hono-routes.ts#listItems',
+      'hono-server.ts#site@5 GET /shop/items hono-routes.ts#listItems',
       // A hand-off in the file that creates the application, before routes another file registers, or
       // inside any statement but a top-level one, runs at a place the scan cannot order.
       'hosted-app.ts#hosted@0 * /:**! hosted-app.ts#(anonymous)',

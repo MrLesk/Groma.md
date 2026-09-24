@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
-import { items } from './hono-routes'
+import { guard, items } from './hono-routes'
 
 const rooms = new Hono()
 const site = new Hono()
@@ -12,7 +12,7 @@ site.all('/legacy/*', forward)
 site.on('PURGE', '/cache/*', forward)
 site.basePath('/api').get('/hidden', forward)
 serve(site)
-site.use('*', forward)
+site.use(guard)
 
 // `route` copies the routes the child has when it runs, so a later route is not under it.
 const late = new Hono()

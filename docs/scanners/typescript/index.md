@@ -171,8 +171,9 @@ The [producer decisions](../evidence.md#producer-checklist) for this ecosystem:
    `route` in another file copies every top-level route of the file that creates
    the child. A function from the
    application's own module is middleware, because the checker sees it, and a
-   value loaded from one that is neither a router nor a function blocks as a
-   router the scan cannot follow. Koa is not read. NestJS behind Express
+   value loaded from one that is neither a router nor a function blocks an
+   Express `use` as a router the scan cannot follow; Hono's `use` only adds
+   middleware. Koa is not read. NestJS behind Express
    registers its routes in an order the scan does not follow, so every route of
    its application, named by the file that calls `NestFactory.create`, shares
    one position; a computed `@Controller` path blocks every route below it, and
