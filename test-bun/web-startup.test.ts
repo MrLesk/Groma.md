@@ -118,9 +118,9 @@ for (const findsComponents of [true, false]) {
       await mkdir(path.join(root, 'plugin'))
       await writeFile(path.join(root, 'source.fixture'), 'Fixture')
       await writeFile(path.join(root, 'plugin/package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0',
-        groma: { scanner: { id: 'fixture', entry: './index.ts' } } }))
+        groma: { scanner: { id: 'fixture', entry: './index.ts', include: ['**/*.fixture'] } } }))
       await writeFile(path.join(root, 'plugin/index.ts'), `export default {
-        id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+        id: 'fixture', async scan(root) {
           await fetch('http://localhost:${gate.port}')
           if (${!findsComponents}) return undefined
           const files = await Array.fromAsync(new Bun.Glob('*.fixture').scan({ cwd: root }))
@@ -131,16 +131,16 @@ for (const findsComponents of [true, false]) {
       }`)
       await mkdir(path.join(root, 'companion'))
       await writeFile(path.join(root, 'companion/package.json'), JSON.stringify({ name: 'companion', version: '1.0.0',
-        groma: { scanner: { id: 'companion', entry: './index.ts' } } }))
+        groma: { scanner: { id: 'companion', entry: './index.ts', include: ['**/*.companion'] } } }))
       await writeFile(path.join(root, 'companion/index.ts'), `export default {
-        id: 'companion', watch: { include: ['**/*.companion'], exclude: [] }, async scan() {
+        id: 'companion', async scan() {
           await fetch('http://localhost:${gate.port}/companion')
           if (${findsComponents}) throw new Error('Fixture scanner failure')
           return undefined
         }
       }`)
       await writeScannerConfig(root, { scanners: [
-        { id: 'fixture', source: './plugin' }, { id: 'companion', source: './companion' },
+        { id: 'fixture', source: './plugin', include: ['**/*.fixture'] }, { id: 'companion', source: './companion', include: ['**/*.companion'] },
       ] })
       opening = startWebViewer(root, { port: 0, scan: true, workSource: emptyWorkSource(), onListening: listening.resolve })
       const url = await listening.promise
@@ -268,13 +268,13 @@ test.concurrent('startup does not report scanning when every selected source is 
     await mkdir(path.join(root, 'plugin'))
     await writeFile(path.join(root, 'source.fixture'), 'source')
     await writeFile(path.join(root, 'plugin/package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0',
-      groma: { scanner: { id: 'fixture', entry: './index.ts' } } }))
+      groma: { scanner: { id: 'fixture', entry: './index.ts', include: ['**/*.fixture'] } } }))
     await writeFile(path.join(root, 'plugin/index.ts'), `export default {
-      id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] },
-      async listSourceFiles() { return ['source.fixture'] },
+      id: 'fixture',
       async scan() { throw new Error('Excluded sources must not be scanned') },
     }`)
-    await writeScannerConfig(root, { scanners: [{ id: 'fixture', source: './plugin' }], exclude: ['*.fixture'] })
+    expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
+    await writeScannerConfig(root, { scanners: [{ id: 'fixture', source: './plugin', include: ['**/*.fixture'] }], exclude: ['*.fixture'] })
     const phases: string[] = []
     session = await createScannerSession(root, { scan: true, onProgress: update => phases.push(update.phase) })
     await session.ready

@@ -7,13 +7,18 @@ export interface ConfiguredScanner {
   id: string
   source: string
   settings?: ScannerSettings
-  /** Git ignore patterns for this scanner alone, applied after the global list; installing writes its declared defaults. */
+  /** Git ignore patterns naming the files this scanner reads; adding the scanner writes the globs its package declares. */
+  include: string[]
+  /** Git ignore patterns for this scanner alone, applied after the global list; adding the scanner writes its declared defaults. */
   exclude?: string[]
 }
 
 export interface ScannerConfig {
   scanners: ConfiguredScanner[]
+  /** Git ignore patterns every scanner leaves out; Groma never writes them. */
   exclude?: string[]
+  /** Whether files Git ignores stay out of every scan; true unless set to false. */
+  useGitignore?: boolean
 }
 
 const scannerId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -28,11 +33,28 @@ export function exclusionPatterns(config: ScannerConfig, scanner: string): strin
   return [...config.exclude ?? [], ...config.scanners.find(entry => entry.id === scanner)?.exclude ?? []]
 }
 
+/**
+ * Whether a list of Git ignore patterns names a repository file, where the last matching pattern decides, so a later
+ * `!pattern` takes a file back. A path outside the repository is never named.
+ */
+function patternMatcher(list: readonly string[]): (file: string) => boolean {
+  const matcher = ignore({ ignorecase: false }).add([...list])
+  return file => {
+    const relative = file.split(path.sep).join('/')
+    return !relative.startsWith('../') && !path.isAbsolute(relative) && matcher.ignores(relative)
+  }
+}
+
 /** Whether a repository file is excluded, where the last matching pattern decides, so a later `!pattern` restores a file. */
 export function exclusion(list: readonly string[]): (file: string) => boolean {
-  const matcher = ignore({ ignorecase: false }).add([...list])
-  return file => matcher.ignores(file.split(path.sep).join('/'))
+  return patternMatcher(list)
 }
+
+/** Whether a scanner's include list names a repository file as one it reads. */
+export function inclusion(list: readonly string[]): (file: string) => boolean {
+  return patternMatcher(list)
+}
+
 
 function configuredScanner(
   value: unknown,
@@ -44,8 +66,11 @@ function configuredScanner(
   }
   const candidate = value as Record<string, unknown>
   const fields = Object.keys(candidate)
-  if (fields.some(field => !['id', 'source', 'settings', 'exclude'].includes(field))) {
-    throw new Error(`${sourceFilename} scanners[${index}] must contain id and source, and optionally settings and exclude`)
+  if (fields.some(field => !['id', 'source', 'settings', 'include', 'exclude'].includes(field))) {
+    throw new Error(`${sourceFilename} scanners[${index}] must contain id, source and include, and optionally settings and exclude`)
+  }
+  if (!stringArray(candidate.include)) {
+    throw new Error(`${sourceFilename} scanners[${index}].include must be an array of strings naming the files the scanner reads`)
   }
   if (candidate.exclude !== undefined && !stringArray(candidate.exclude)) {
     throw new Error(`${sourceFilename} scanners[${index}].exclude must be an array of strings`)
@@ -62,6 +87,7 @@ function configuredScanner(
   }
   return { id: candidate.id, source: candidate.source,
     ...(candidate.settings === undefined ? {} : { settings: candidate.settings as ScannerSettings }),
+    include: candidate.include,
     ...(candidate.exclude === undefined ? {} : { exclude: candidate.exclude }),
   }
 }
@@ -75,11 +101,14 @@ function parseScannerConfig(
     throw new Error(`${sourceFilename} must be an object`)
   }
   const config = value as Record<string, unknown>
-  if (Object.keys(config).some(key => key !== 'scanners' && key !== 'exclude') || !Array.isArray(config.scanners)) {
-    throw new Error(`${sourceFilename} must contain a scanners array and optional exclude array`)
+  if (Object.keys(config).some(key => !['scanners', 'exclude', 'useGitignore'].includes(key)) || !Array.isArray(config.scanners)) {
+    throw new Error(`${sourceFilename} must contain a scanners array, and optionally an exclude array and useGitignore`)
   }
   if (config.exclude !== undefined && !stringArray(config.exclude)) {
     throw new Error(`${sourceFilename} exclude must be an array of strings`)
+  }
+  if (config.useGitignore !== undefined && typeof config.useGitignore !== 'boolean') {
+    throw new Error(`${sourceFilename} useGitignore must be true or false`)
   }
   const scanners = config.scanners.map((scanner, index) => {
     return configuredScanner(scanner, index, sourceFilename)
@@ -97,6 +126,7 @@ function parseScannerConfig(
   return {
     scanners: scanners.sort((left, right) => left.id.localeCompare(right.id)),
     ...(config.exclude === undefined ? {} : { exclude: config.exclude as string[] }),
+    ...(config.useGitignore === undefined ? {} : { useGitignore: config.useGitignore }),
   }
 }
 

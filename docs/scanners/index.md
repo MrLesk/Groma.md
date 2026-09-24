@@ -44,11 +44,11 @@ existing titles and identities, including human or agent curation.
 
 Source watching belongs to one shared source runtime per watch session. The
 first relevant change collects an initial observation from every enabled scanner.
-Each scanner declares `watch.include` and `watch.exclude` patterns for source
-and configuration changes, including newly created files. The shared runtime
-matches paths against those declarations, outside each scanner's configured
-exclusions, groups nearby changes and runs only matching scanners; overlapping
-subscriptions run together.
+A change, including a newly created file, triggers each scanner whose `include`
+list names the path and whose exclusions do not, as
+[Selecting source files](#selecting-source-files) describes. The shared runtime
+groups nearby changes and runs only those scanners; scanners that share a path
+run together.
 Changes received during analysis are queued, and scanner runs never overlap.
 
 The session retains each scanner's latest successful observation in memory.
@@ -132,20 +132,36 @@ remain in native project files. Run a new scan or restart an active viewer or
 watch session after changing settings. Scanner add and remove preserve settings
 on retained entries. See the [plugin contract](creating-a-plugin.md#scanner-settings).
 
-## Excluding source evidence
+## Selecting source files
 
-`scanners.json` inside the selected `groma/` or `.groma/` directory holds two
-kinds of exclusion list: a global `exclude` array for every scanner, and an
-`exclude` array on a scanner entry for that scanner alone:
+`scanners.json` inside the selected `groma/` or `.groma/` directory decides which
+files each scanner reads:
 
 ```json
 {
+  "useGitignore": true,
+  "exclude": ["/scripts/", "/test/", "**/*.generated.ts", "!src/keep.generated.ts"],
   "scanners": [
-    { "id": "typescript", "source": "./plugins/typescript", "exclude": ["**/*.test.ts", "!/test/"] }
-  ],
-  "exclude": ["/scripts/", "/test/", "**/*.generated.ts", "!src/keep.generated.ts"]
+    {
+      "id": "typescript",
+      "source": "./plugins/typescript",
+      "include": ["**/*.ts", "**/*.tsx", "**/tsconfig*.json", "**/package.json"],
+      "exclude": ["**/*.test.ts", "!/test/"]
+    }
+  ]
 }
 ```
+
+A scanner reads a file only when all of these hold:
+
+1. The file exists in the repository and, while `useGitignore` is true, the
+   default, Git does not ignore it. With `useGitignore` false, the files Git
+   ignores are read too, installed packages and build output included.
+2. The scanner's `include` list names it. This list is where a scanner's scan is
+   defined: adding the scanner writes the globs of the files its language reads,
+   as its package declares them.
+3. No exclusion names it: the global `exclude` list, then the scanner's own
+   `exclude` list.
 
 Patterns use [Git ignore rules](https://git-scm.com/docs/gitignore), relative
 to the repository root. Use `/` separators on every operating system.
@@ -156,27 +172,34 @@ cannot restore a file inside an excluded parent directory. `*`, `?`, character
 ranges such as `[0-9]`, comments starting with `#`, and backslash escapes follow
 the same Git ignore rules. In JSON, write a backslash as `\\`.
 
-The global list selects new evidence from every enabled scanner, including
-files tracked by Git. A scanner's own list applies after it and to that scanner
-alone, so it can add patterns, or restore with `!` a file the global list
-excludes, as `!/test/` does for the TypeScript scanner above. A global `!`
-pattern cannot restore a file a scanner's own list excludes; edit that scanner's
-list instead. Adding a scanner with `groma scanner add`, setup, init or the web
-writes the default exclusions its package declares into its entry, where they
-are edited like any other pattern; updating a scanner keeps the entry's list.
-Omitting `exclude` or using `[]` adds no exclusions. Only language coverage,
-the files the language's own build compiles, stays built into a scanner; `!`
-does not restore a file outside it. When a scanner lists source files and all of them are excluded for
-it, groma.md skips its readiness check and scan. This keeps
-excluded test projects from blocking a scan on incomplete fixture inputs.
-When included sources remain, compiler analysis can still read excluded files
-as context. A failed scanner keeps its saved evidence while successful scanners
-publish their results.
+The global `exclude` list is the project's own; groma.md never writes it. It
+selects new evidence from every enabled scanner, including files tracked by Git.
+A scanner's own `exclude` list applies after it and to that scanner alone, so it
+can add patterns, or restore with `!` a file the global list excludes, as
+`!/test/` does for the TypeScript scanner above. A global `!` pattern cannot
+restore a file a scanner's own list excludes; edit that scanner's list instead.
+Adding a scanner with `groma scanner add`, setup, init or the web writes the
+include globs and default exclusions its package declares into its entry, where
+they are edited like any other pattern; updating a scanner keeps both lists.
+A scanner's defaults name only its own ecosystem's folders and files. Omitting a
+scanner's `exclude` list or using `[]` adds no exclusions; its `include` list is
+required.
+
+Only the language's own build rules stay built into a scanner, such as which
+source roots a project compiles; `!` does not restore a file those rules leave
+out. A symlink to another listed file is listed once, through the file it points
+to. When a scanner's `include` list names files and its exclusions name all of
+them, groma.md skips its readiness check and scan. This keeps excluded test
+projects from blocking a scan on incomplete fixture inputs. When included
+sources remain, compiler analysis can still read excluded files as context. A
+failed scanner keeps its saved evidence while successful scanners publish their
+results.
 
 Run `groma scan` after editing a list. Active viewers reload the configuration
 on their own; restart `groma scan --watch` to load it. Excluded source paths no
-longer trigger scans. Scanner add, update, remove and setup keep the existing
-lists.
+longer trigger scans: a change triggers a scanner only for a file its `include`
+list names and no exclusion names. Scanner add, update, remove and setup keep
+the existing lists.
 
 Exclusions do not delete or hide components already stored on the map, and
 do not change their ownership or authored Markdown. New excluded files do not

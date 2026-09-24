@@ -9,6 +9,9 @@
     "scanner": {
       "id": "swift",
       "entry": "./src/index.ts",
+      "include": [
+        "**/*.swift"
+      ],
       "exclude": [
         ".build/",
         "Pods/",

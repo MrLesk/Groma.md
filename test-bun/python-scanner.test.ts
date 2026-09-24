@@ -7,13 +7,17 @@ import type { CodeSymbol, HttpEndpointSegment, HttpRequestSegment, ScanHttpEndpo
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { httpRelationships } from '../src/http-relationships.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
-import { exclusion, readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
+import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import { loadScannerRegistry } from '../src/scanner/registry.ts'
-import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
+import manifest from '../plugins/scanners/python/package.json'
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 const cli = path.resolve(import.meta.dir, '../src/cli.ts')
+
+/** The files Groma hands the scanner: those its package's include list names, less its default exclusions. */
+const pythonFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function fixture(name = 'python-project') {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-python-test-'))
@@ -37,9 +41,10 @@ test.concurrent('Python keeps function ownership, nested projects and exact sour
     // Python source lines exclude Unicode separators inside strings; keep CRLF offsets too.
     const source = (await readFile(file, 'utf8')).replace('🐍', '🐍\u2028text').replace(/\r?\n/g, '\r\n')
     await writeFile(file, source)
-    await scanner.checkReadiness!(root)
-    const first = (await scanner.scan(root))!
-    expect(await scanner.scan(root)).toEqual(first)
+    const files = await pythonFiles(root)
+    await scanner.checkReadiness!(root, {}, files)
+    const first = (await scanner.scan(root, {}, files))!
+    expect(await scanner.scan(root, {}, files)).toEqual(first)
     const roots = new Map(first.roots.map(item => [item.id, item]))
     const owner = first.files.find(item => item.file === 'nested/worker.py')!.roots[0]!
     expect(roots.get(owner)?.parent).toBe(first.files.find(item => item.file === 'service.py')!.roots[0])
@@ -73,7 +78,7 @@ function route(path: readonly (HttpEndpointSegment | HttpRequestSegment)[]): str
 test.concurrent('Python reports Flask, FastAPI and Django endpoints and requests, and nothing it cannot resolve', async () => {
   const { root, temporary, scanner } = await fixture('python-http')
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await pythonFiles(root)))!
     const operations = new Map(observation.operations!.map(operation => [operation.id, operation]))
     const at = (operation: string) => {
       const found = operations.get(operation)!
@@ -174,14 +179,14 @@ test.concurrent('a Django URL table the scanner cannot read keeps every Django e
   const { root, temporary, scanner } = await fixture('python-http-hidden')
   try {
     // The root table is built by addition, so the prefix above the included table is unknown.
-    expect((await scanner.scan(root))!.httpEndpoints).toEqual([])
+    expect((await scanner.scan(root, {}, await pythonFiles(root)))!.httpEndpoints).toEqual([])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
 test.concurrent('a request that an earlier Django entry the scanner cannot read could capture derives no row', async () => {
   const { root, temporary, scanner } = await fixture('python-http-blocked')
   try {
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await pythonFiles(root)))!
     const owners = new Map(scan.files.map(file => [file.file, file.file]))
     // Django tries boards/<slug>/ first, and its class-based view is unknown, so only /talks/ derives a row.
     expect(httpRelationships([scan], owners).map(row => [row.source, row.target, row.description])).toEqual([
@@ -193,13 +198,13 @@ test.concurrent('a request that an earlier Django entry the scanner cannot read 
 test.concurrent('a base_url set on any client outside a class leaves every class base_url configured', async () => {
   const { root, temporary, scanner } = await fixture('python-http-base-store')
   try {
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await pythonFiles(root)))!
     expect(scan.httpRequests!.map(fact => [fact.configured ?? false, route(fact.path)])).toEqual([[true, '/repos']])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
 test.concurrent('Python skips Git-ignored and excluded inputs, project declarations included, and reads tracked or restored source', async () => {
-  const { root, temporary, scanner, artifact } = await fixture()
+  const { root, temporary, scanner } = await fixture()
   try {
     await writeFile(path.join(root, '.gitignore'), 'ignored.py\ntracked.py\n')
     for (const file of ['ignored.py', 'tracked.py', 'test_bad.py', 'conftest.py', 'test_restored.py']) {
@@ -213,16 +218,13 @@ test.concurrent('Python skips Git-ignored and excluded inputs, project declarati
     const git = Bun.spawn(['git', 'add', '-f', 'tracked.py'], { cwd: root })
     expect(await git.exited).toBe(0)
     // The package's defaults as adding the scanner writes them, then a restore appended to its list.
-    const defaults: string[] = JSON.parse(await readFile(path.join(artifact, 'package.json'), 'utf8')).groma.scanner.exclude
-    const files = (await scanner.scan(root, {}, exclusion([...defaults, '!test_restored.py'])))!.files.map(item => item.file)
+    const { include, exclude } = manifest.groma.scanner
+    const selected = await scannerFiles(root, { include, exclude: [...exclude, '!test_restored.py'] })
+    const files = (await scanner.scan(root, {}, selected))!.files.map(item => item.file)
     expect(files).toEqual(['nested/worker.py', 'service.py', 'test_restored.py', 'tracked.py'])
     // Groma explains a file without an owner from this listing, so it names every source before exclusions.
-    expect(await scanner.listSourceFiles!(root)).toEqual(expect.arrayContaining([...files, 'tests/bad.py']))
-    const watches = compileWatchPatterns(scanner.watch)
-    expect(watches('nested/worker.py')).toBe(true)
-    expect(watches('nested/pyproject.toml')).toBe(true)
-    // Exclusions decide what triggers a rescan, so editing a restored file does.
-    expect(watches('test_restored.py')).toBe(true)
+    expect(await scanner.listSourceFiles!(root, {}, await scannerFiles(root, { include })))
+      .toEqual(expect.arrayContaining([...files, 'tests/bad.py']))
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -287,7 +289,7 @@ test.concurrent('Python rejects syntax and scope errors without returning partia
   try {
     for (const source of ['def broken(:\n', 'return 1\n']) {
       await writeFile(path.join(root, 'nested/worker.py'), source)
-      await expect(scanner.scan(root)).rejects.toThrow('PYTHON_SCAN_FAILED')
+      await expect(scanner.scan(root, {}, await pythonFiles(root))).rejects.toThrow('PYTHON_SCAN_FAILED')
     }
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
@@ -296,7 +298,7 @@ test.concurrent('Python scans valid module-level await without executing it', as
   const { root, temporary, scanner } = await fixture()
   try {
     await writeFile(path.join(root, 'await.py'), 'async def main(): pass\nawait main()\n')
-    expect((await scanner.scan(root))!.files.some(file => file.file === 'await.py')).toBe(true)
+    expect((await scanner.scan(root, {}, await pythonFiles(root)))!.files.some(file => file.file === 'await.py')).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -306,7 +308,7 @@ test.concurrent('a declared Python script selects its own project module despite
     await writeFile(path.join(root, 'nested/pyproject.toml'), '[project]\nname = "nested"\n[project.scripts]\ntermui = "termui:cli"\n')
     await writeFile(path.join(root, 'nested/termui.py'), 'def cli(): pass\n')
     await writeFile(path.join(root, 'termui.py'), 'def other(): pass\n')
-    expect((await scanner.scan(root))!.entryPoints).toContainEqual({
+    expect((await scanner.scan(root, {}, await pythonFiles(root)))!.entryPoints).toContainEqual({
       file: 'nested/termui.py', declaration: 'nested/pyproject.toml', name: 'termui', files: ['nested/termui.py'],
     })
   } finally { await rm(temporary, { recursive: true, force: true }) }
@@ -318,7 +320,7 @@ test.concurrent('a Python entry includes repeated star imports and imports in a 
     await mkdir(path.join(root, 'pkg'))
     await writeFile(path.join(root, 'pkg/__main__.py'), 'from .first import *\nfrom .second import *\ntry:\n    from .third import run\nexcept ImportError:\n    pass\n')
     for (const name of ['first', 'second', 'third']) await writeFile(path.join(root, `pkg/${name}.py`), 'def run(): pass\n')
-    expect((await scanner.scan(root))!.entryPoints?.find(entry => entry.file === 'pkg/__main__.py')?.files).toEqual([
+    expect((await scanner.scan(root, {}, await pythonFiles(root)))!.entryPoints?.find(entry => entry.file === 'pkg/__main__.py')?.files).toEqual([
       'pkg/__main__.py', 'pkg/first.py', 'pkg/second.py', 'pkg/third.py',
     ])
   } finally { await rm(temporary, { recursive: true, force: true }) }
@@ -341,7 +343,7 @@ test.concurrent('Python recognizes a Flask route registered with a view function
   const { root, temporary, scanner } = await fixture()
   try {
     await writeFile(path.join(root, 'flask_case.py'), 'from flask import Flask\napp = Flask(__name__)\ndef hello(): pass\napp.add_url_rule("/hello", view_func=hello)\n')
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await pythonFiles(root)))!
     const handler = scan.operations!.find(operation => operation.file === 'flask_case.py' && operation.name === 'hello')!
     expect(scan.httpEndpoints).toContainEqual({
       operation: handler.id, method: 'GET', path: [{ kind: 'literal', value: 'hello' }],
@@ -353,7 +355,7 @@ test.concurrent('Python recognizes a Flask route on an app created inside a fact
   const { root, temporary, scanner } = await fixture()
   try {
     await writeFile(path.join(root, 'factory.py'), 'from flask import Flask\ndef create_app():\n    app = Flask(__name__)\n    @app.route("/inside")\n    def inside(): pass\n    def unrelated(app):\n        @app.route("/wrong")\n        def wrong(): pass\n    return app\n')
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await pythonFiles(root)))!
     const handler = scan.operations!.find(operation => operation.file === 'factory.py' && operation.name.endsWith('inside'))!
     expect(scan.httpEndpoints).toContainEqual({
       operation: handler.id, method: 'GET', path: [{ kind: 'literal', value: 'inside' }],
@@ -367,11 +369,11 @@ test.concurrent('Python supports source without packaging metadata and returns n
   try {
     await rm(path.join(root, 'pyproject.toml'))
     await rm(path.join(root, 'nested'), { recursive: true })
-    const result = (await scanner.scan(root))!
+    const result = (await scanner.scan(root, {}, await pythonFiles(root)))!
     expect(result.roots).toHaveLength(1)
     expect(result.roots[0]?.kind).toBe('source-group')
     expect(result.files[0]?.roots).toEqual([result.roots[0]!.id])
     await rm(path.join(root, 'service.py'))
-    expect(await scanner.scan(root)).toBeUndefined()
+    expect(await scanner.scan(root, {}, await pythonFiles(root))).toBeUndefined()
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

@@ -15,10 +15,10 @@ for (const present of [false, true]) {
       if (present) {
         await mkdir(path.join(root, source))
         await writeFile(path.join(root, source, 'package.json'), JSON.stringify({ name: 'local', version: '1.0.0',
-          groma: { scanner: { id: 'local', entry: './index.js' } } }))
+          groma: { scanner: { id: 'local', entry: './index.js', include: ['**/*.local'] } } }))
         await writeFile(path.join(root, source, 'index.js'), 'throw new Error("Restore must not execute the scanner")')
       }
-      await writeScannerConfig(root, { scanners: [{ id: 'local', source }] })
+      await writeScannerConfig(root, { scanners: [{ id: 'local', source, include: ['**/*.local'] }] })
       const selection = await readFile(path.join(root, 'groma/scanners.json'), 'utf8')
       const architecture = await loadAnnotatedArchitecture(root)
       if (present) expect(await installScanners(root)).toBe(0)

@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process'
 import { access, realpath } from 'node:fs/promises'
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseScanObservation, type CodeFile, type ScanObservation, type SourceReference } from '@groma/scanner'
 import { moduleSources } from './sources.ts'
@@ -30,10 +29,10 @@ async function workerPath(options: GoScanOptions): Promise<string> {
   return worker
 }
 
+/** The module's go.mod needs no check: it is among the files that selected the module. */
 export async function checkGoReadiness(moduleRoot: string, options: GoScanOptions = {}) {
   const root = await realpath(moduleRoot)
   const worker = await workerPath(options)
-  await access(path.join(root, 'go.mod'))
   return { root, worker }
 }
 
@@ -45,13 +44,12 @@ export async function readGoCodeStructure(repositoryRoot: string, references: re
 }
 
 /**
- * Scans one module: the worker reads its go.mod, which module selection kept, and the files sources.ts selects less
- * those `excluded` names, then applies the build context.
+ * Scans one module from its files, relative to its directory: the worker reads its go.mod and the Go source sources.ts
+ * selects among them, then applies the build context.
  */
-export async function scanGoSource(moduleRoot: string, options: GoScanOptions = {},
-  excluded: (file: string) => boolean = () => false): Promise<ScanObservation> {
+export async function scanGoSource(moduleRoot: string, options: GoScanOptions,
+  files: readonly string[]): Promise<ScanObservation> {
   const { root, worker } = await checkGoReadiness(moduleRoot, options)
-  const files = await moduleSources(root, excluded)
-  try { return parseScanObservation(await run(worker, [root], root, { input: JSON.stringify(files) })) }
+  try { return parseScanObservation(await run(worker, [root], root, { input: JSON.stringify(moduleSources(files)) })) }
   catch (error) { throw new Error(`GO_SOURCE_INVALID: No observation was produced. Check Go source syntax and module declarations. ${error}`) }
 }

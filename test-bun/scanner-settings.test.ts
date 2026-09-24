@@ -24,7 +24,7 @@ test.concurrent('an installed equivalent plugin suppresses duplicate official re
     findings: [finding], inventory: [], limits: [],
     recommendations: [{ id: 'react', package: '@groma/scanner-react', status: 'installable', evidence: [finding], reason: '', installSource: '@groma/scanner-react@1.0.0' }],
   }
-  const custom = { id: 'custom', name: 'custom', version: '1.0.0', source: '/plugins/custom', entry: '/plugins/custom/index.ts', status: 'found' as const }
+  const custom = { id: 'custom', name: 'custom', version: '1.0.0', source: '/plugins/custom', entry: '/plugins/custom/index.ts', include: ['**/*.custom'], status: 'found' as const }
   const known = scannerSettingsState(proposal, [{ ...custom, discovery: { technologies: ['react'], rules: [] } }])
   expect(known.scanners.map(item => item.id)).toEqual(['custom'])
   expect(known.scanners[0]?.matches).toEqual(['ui/package.json'])

@@ -23,14 +23,13 @@ import { scanPython } from './scan.ts'
 
 const scanner = {
   id: 'python',
-  watch: { include: ['**/*.py', 'pyproject.toml'], exclude: [] },
   scan: scanPython,
 } satisfies ScannerPlugin
 
 export default scanner
 ```
 
-Declare the module entry in the package manifest:
+Declare the module entry and what the scanner reads in the package manifest:
 
 ```json
 {
@@ -41,6 +40,7 @@ Declare the module entry in the package manifest:
     "scanner": {
       "id": "python",
       "entry": "./src/index.ts",
+      "include": ["**/*.py", "**/pyproject.toml"],
       "exclude": [".venv/", "tests/", "test_*.py"]
     }
   }
@@ -53,32 +53,42 @@ depend on installation scripts. Bundle executable package imports into the entry
 before distribution, as the authoring example does. groma.md loads the bundled
 entry and packaged assets; consumers do not build the plugin.
 
-Optional `exclude` lists the scanner's default exclusions as Git ignore
-patterns: the tests, fixtures, generated code, vendored folders and build output
-most projects of this ecosystem keep out of their architecture. Adding the
-scanner to a project writes them into its entry in `scanners.json`, where people
-extend or override them; an update never rewrites that list. Keep only language
-coverage in code, meaning the files the language's own build compiles.
+## What a scanner reads
 
-`id` identifies the scanner inside groma.md. `watch.include` and `watch.exclude`
-are required arrays of repository-relative patterns. They subscribe this
-scanner to relevant source and configuration changes, including new files.
-Patterns are anchored at the repository root and use `/` separators, `*`, `**`,
-`?`, and character classes such as `[cC]`. Matching is case-sensitive; exclusions
-override includes, and an empty include array never triggers a scan. For example,
-`*.py` selects root files, while `**/*.py` also selects files in subdirectories.
+A scanner declares what it scans in its manifest, never in code:
 
-The shared source runtime compiles these patterns once, applies each scanner's
-exclusions, watches the filesystem, and schedules matching scanners. Plugins
-supply subscription data and do not create watchers or match changed paths.
-Watch patterns select scan triggers; compiler project rules still determine
-the files analyzed by `scan`. Each `scan` receives the repository root, its optional settings object,
-and its exclusion predicate, the project's global list followed by the scanner's
-own, as the optional third argument. The predicate tests repository-relative
-paths with `/` separators. A scanner that
-can filter its source inventory should apply the predicate before parsing;
-groma.md also filters returned evidence. The scan returns one complete observation, replacing this scanner's previous observation in the
-session. Unaffected scanners retain their evidence for core's combined view.
+- `include`, required, names every file the scanner reads, directly or through
+  its language tooling: sources, project and build files, and manifests. List
+  the globs of the files the language reads, such as `**/*.py`.
+- `exclude`, optional, names the scanner's default exclusions: the tests,
+  generated code, and dependency and build folders of its own ecosystem that most
+  projects keep out of their architecture. It names nothing from another
+  ecosystem.
+
+Both lists use Git ignore patterns with `/` separators. Adding the scanner to a
+project writes them into its entry in `scanners.json`, where people edit them;
+an update never rewrites them. [Selecting source files](index.md#selecting-source-files)
+describes how the lists combine with the global list and `useGitignore`.
+
+groma.md lists the repository once, keeps the files the scanner's `include` list
+names, drops those the global and then the scanner's own exclusions name, and,
+while `useGitignore` holds, those Git ignores. `scan(repositoryRoot, settings, files)`
+receives the rest as repository-relative paths with `/` separators. The scanner
+reads nothing else: it never runs Git, walks the disk or globs for inputs, and a
+file that a manifest or setting names, such as a configured input, a path
+dependency or a command, is read only when it is among `files`. A build file the
+compiler follows from a selected input, such as an MSBuild import or a tsconfig
+`extends`, is read as the build reads it. Code keeps only the build rules globs
+cannot express, such as which source roots a project compiles. groma.md also
+filters returned evidence by the exclusions.
+
+The same lists decide which changes trigger a rescan: a change to a file the
+scanner's `include` list names and no exclusion names schedules it. Plugins
+declare no watch patterns, create no watchers and match no changed paths.
+
+`id` identifies the scanner inside groma.md. The scan returns one complete
+observation, replacing this scanner's previous observation in the session.
+Unaffected scanners retain their evidence for core's combined view.
 
 ## Explicit source units
 
@@ -92,12 +102,12 @@ filename similarity, ordinary imports, or folder proximity to propose a unit.
 Overlapping declarations remain separate claims for core to review, never a
 request for a transitive merge. Project relocation updates every member path.
 A scanner's exclusions remove excluded members, and remove a whole unit when its
-primary is excluded. Scanners must watch their companion file types as well as
-the declaring source.
+primary is excluded. A scanner's `include` list names its companion file types as
+well as the declaring source.
 
-A plugin may also implement `async checkReadiness(repositoryRoot, settings, excluded): Promise<void>`.
-Return when supported source inputs and the scanner's own tools are available.
-It receives the same exclusion predicate as `scan` and skips the inputs it names.
+A plugin may also implement `async checkReadiness(repositoryRoot, settings, files): Promise<void>`.
+Return when supported source inputs among `files`, the same files `scan`
+receives, and the scanner's own tools are available.
 The installed scanner must carry the parsers, compiler libraries, workers and
 runtimes needed for its supported source scan. A fresh checkout must not need
 project dependency installation, a project build, or a separately installed
@@ -209,27 +219,18 @@ declaration's access when it states none of its own.
 ## Source file listing
 
 Every official scanner implements
-`listSourceFiles(repositoryRoot, settings)`. It returns the repository-relative
-files this scanner would analyze for these settings, selected the way `scan`
-selects them, without analyzing a file, starting a language server, or running a
-project tool such as Maven, Gradle, `dotnet`, `go` or `cargo`. Watch patterns are
-not that selection: they subscribe to changes, so they include configuration and
-test sources a scan never reads.
-
-Report the files the language's own build compiles, before exclusions. groma.md
-applies the scanner's exclusion list to the listing, so it can skip a scanner
-whose sources are all excluded and name the pattern that hides a file. Tests,
+`listSourceFiles(repositoryRoot, settings, candidates)`. The candidates are the
+repository files the scanner's `include` list names, before exclusions. It
+returns the candidates the language's own build compiles, selected the way
+`scan` selects them, without analyzing a file, starting a language server, or
+running a project tool such as Maven, Gradle, `dotnet`, `go` or `cargo`. Tests,
 generated output, vendored code and build directories belong in the scanner's
 default `exclude` list rather than in its listing code.
 
-groma.md runs the listing before every readiness check and scan, so a listing that
-throws fails its scanner. Because it reads before exclusions, a listing meets
-broken inputs in excluded folders, so a manifest the build cannot read names
-nothing.
-
-Official scanners list tracked and unignored files through one shared Git
-listing. A symlink to another file in that listing is the same physical source,
-so only the file it points to is listed and each source is read once.
+groma.md uses the listing only to explain a file with no architecture owner, so a
+listing that throws never fails a scan. Because it runs before exclusions, a
+listing meets broken inputs in excluded folders: a manifest the build cannot read
+names nothing.
 
 A listing may name a file the analysis then leaves out, because deciding that
 would mean analyzing it or running a build. Each approximation an official
@@ -295,9 +296,12 @@ For a framework detected through a dependency:
 
 `technologies` names the evidence the scanner actually supports. Each rule
 reports a `technology` and a `kind` (`language` or `framework`) for matching
-repository-relative `files`. File patterns use the same syntax as watch patterns,
-but discovery rules and watch subscriptions have separate purposes. A rule may
-report an additional technology outside `technologies` to expose a coverage gap.
+repository-relative `files`. Rule file patterns are anchored at the repository
+root and use `/` separators, `*`, `**`, `?`, and character classes such as
+`[cC]`; `*.py` selects root files, while `**/*.py` also selects files in
+subdirectories. Discovery rules are separate from the scanner's `include` list. A
+rule may report an additional technology outside `technologies` to expose a
+coverage gap.
 
 | Rule type | Fields and behavior |
 | --- | --- |
@@ -365,8 +369,9 @@ files such as `tsconfig.json`, `Cargo.toml` and `.csproj`. Pass parsed
 settings to a native worker through its existing invocation interface.
 
 Settings load when groma.md creates the scanner session. After editing them, run
-a new scan or restart the active viewer or watch session. Plugin watch patterns
-cover native source and project files; they do not reload groma.md settings.
+a new scan or restart the active viewer or watch session. A change to a file the
+scanner's `include` list names triggers a rescan; it does not reload groma.md
+settings.
 
 These settings are groma.md runtime configuration, not OKF knowledge records or
 C4 elements. The scanner module loader owns their delivery; the plugin owns

@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { repositoryFiles } from '../../projects.ts'
 
 const SOURCE = /\.(?:js|mjs|cjs|jsx)$/
 
@@ -9,14 +8,14 @@ export interface JavaScriptSource {
   text: string
 }
 
-/** Tracked and unignored JavaScript files outside `excluded`. */
-export function javaScriptFiles(root: string, excluded: (file: string) => boolean = () => false): Promise<string[]> {
-  return repositoryFiles(root, file => SOURCE.test(file) && !excluded(file))
+/** The JavaScript sources among a scanner's files. */
+export function javaScriptFiles(files: readonly string[]): string[] {
+  return files.filter(file => SOURCE.test(file))
 }
 
-/** The text of each JavaScript file outside `excluded`. */
-export async function javaScriptSources(root: string, excluded: (file: string) => boolean): Promise<JavaScriptSource[]> {
+/** The text of each JavaScript source among the files. */
+export async function javaScriptSources(root: string, files: readonly string[]): Promise<JavaScriptSource[]> {
   const sources: JavaScriptSource[] = []
-  for (const file of await javaScriptFiles(root, excluded)) sources.push({ file, text: await readFile(path.join(root, file), 'utf8') })
+  for (const file of javaScriptFiles(files)) sources.push({ file, text: await readFile(path.join(root, file), 'utf8') })
   return sources
 }

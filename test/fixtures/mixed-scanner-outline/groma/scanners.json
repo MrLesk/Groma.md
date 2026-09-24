@@ -1,6 +1,6 @@
 {
   "scanners": [
-    { "id": "alpha", "source": "./plugins/alpha" },
-    { "id": "beta", "source": "./plugins/beta" }
+    { "id": "alpha", "source": "./plugins/alpha", "include": ["**/*.alpha"] },
+    { "id": "beta", "source": "./plugins/beta", "include": ["**/*.beta"] }
   ]
 }

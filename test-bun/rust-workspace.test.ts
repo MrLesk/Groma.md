@@ -5,7 +5,13 @@ import path from 'node:path'
 import rustPackage from '../plugins/scanners/rust/package.json'
 import rust from '../plugins/scanners/rust/src/index.ts'
 import { execute, readRustProject, rustProjects } from '../plugins/scanners/rust/src/project.ts'
-import { exclusion } from '../src/scanner/modules/config.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+const { include, exclude } = rustPackage.groma.scanner
+/** The files Groma hands the Rust scanner in this repository, under the package's default lists. */
+const rustFiles = (root: string) => scannerFiles(root, { include, exclude })
+/** The files the package's include list names, before exclusions: what the source listing narrows. */
+const candidates = (root: string) => scannerFiles(root, { include })
 
 async function fixture(action: (root: string) => Promise<void>) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-rust-workspace-'))
@@ -22,8 +28,8 @@ async function fixture(action: (root: string) => Promise<void>) {
 
 test.concurrent('implicit path members inherit editions only when declared and retain local dependencies', async () => {
   await fixture(async root => {
-    expect(await rustProjects(root, {})).toEqual([path.join(root, 'Cargo.toml')])
-    const input = await readRustProject(root, {})
+    expect(await rustProjects(root, {}, await rustFiles(root))).toEqual([path.join(root, 'Cargo.toml')])
+    const input = await readRustProject(root, {}, await rustFiles(root))
     expect(input.crates).toHaveLength(3)
     expect(Object.fromEntries(input.crates.map(crate => [crate.display_name, crate.edition])))
       .toEqual({ app: '2024', service: '2024', support: '2015' })
@@ -37,7 +43,7 @@ test.concurrent('implicit path members inherit editions only when declared and r
 
 test.concurrent('selecting a workspace member keeps its inherited edition and local dependency', async () => {
   await fixture(async root => {
-    const input = await readRustProject(root, { manifest: 'app/Cargo.toml' })
+    const input = await readRustProject(root, { manifest: 'app/Cargo.toml' }, await rustFiles(root))
     const app = input.crates.find(crate => crate.display_name === 'app')!
     expect(app.edition).toBe('2024')
     expect(app.deps.map(dependency => input.crates[dependency.crate]!.display_name)).toContain('service')
@@ -50,7 +56,7 @@ test.concurrent('explicit binaries without paths use Cargo source conventions ev
     await mkdir(path.join(root, 'app/src/bin/tool'), { recursive: true })
     await writeFile(path.join(root, 'app/src/main.rs'), 'fn main() {}\n')
     await writeFile(path.join(root, 'app/src/bin/tool/main.rs'), 'fn main() {}\n')
-    const input = await readRustProject(root, { manifest: 'app/Cargo.toml' })
+    const input = await readRustProject(root, { manifest: 'app/Cargo.toml' }, await rustFiles(root))
     expect(input.executables.map(entry => path.relative(root, entry.file).split(path.sep).join('/'))).toEqual(['app/src/main.rs', 'app/src/bin/tool/main.rs'])
   })
 })
@@ -61,23 +67,23 @@ test.concurrent('binary targets require their declared features to be active', a
     await mkdir(path.join(root, 'app/src/bin'), { recursive: true })
     await writeFile(path.join(root, 'app/src/bin/ready.rs'), 'fn main() {}\n')
     await writeFile(path.join(root, 'app/src/bin/gated.rs'), 'fn main() {}\n')
-    const input = await readRustProject(root, { manifest: 'app/Cargo.toml' })
+    const input = await readRustProject(root, { manifest: 'app/Cargo.toml' }, await rustFiles(root))
     expect(input.executables.map(entry => entry.name)).toEqual(['ready'])
   })
 })
 
 test.concurrent('Rust source listing includes shared path modules outside target directories', async () => {
   await fixture(async root => {
-    expect(await rust.listSourceFiles(root)).toContain('shared.rs')
+    expect(await rust.listSourceFiles(root, {}, await candidates(root))).toContain('shared.rs')
   })
 })
 
 const nativeTest = process.env.GROMA_TEST_RUST ? test.concurrent : test.skip
 nativeTest('Rust reads shared path modules and resolves calls across inherited workspace members', async () => {
   await fixture(async root => {
-    const observation = (await rust.scan(root))!
+    const observation = (await rust.scan(root, {}, await rustFiles(root)))!
     expect(observation.files).toHaveLength(4)
-    expect(await rust.listSourceFiles(root)).toEqual(observation.files.map(file => file.file).sort())
+    expect(await rust.listSourceFiles(root, {}, await candidates(root))).toEqual(observation.files.map(file => file.file).sort())
     expect(observation.files.filter(file => file.file === 'shared.rs')).toHaveLength(1)
     expect(observation.diagnostics.some(item => item.code === 'rust-unsupported-compilation-contexts'
       && item.file === 'shared.rs')).toBe(true)
@@ -91,7 +97,7 @@ nativeTest('Rust reads shared path modules and resolves calls across inherited w
   })
 }, 60000)
 
-nativeTest('Rust lists vendored source, reads no manifest or module its exclusions name, and reads a restored file', async () => {
+nativeTest('Rust lists vendored source, reads no manifest or module outside its files, and reads a restored file', async () => {
   await fixture(async root => {
     // Each vendored input fails the scan if read: a crate and a module with invalid syntax.
     const files = {
@@ -106,10 +112,10 @@ nativeTest('Rust lists vendored source, reads no manifest or module its exclusio
       await writeFile(path.join(root, file), source)
     }
     // Vendoring is a default exclusion rather than a rule in code, so the listing still names vendored source.
-    expect(await rust.listSourceFiles(root)).toContain('vendor/broken/src/lib.rs')
+    expect(await rust.listSourceFiles(root, {}, await candidates(root))).toContain('vendor/broken/src/lib.rs')
     // A global pattern hides generated files, and a `!` pattern in the scanner's own list restores one.
-    const excluded = exclusion(['*_generated.rs', ...rustPackage.groma.scanner.exclude, '!service/src/routes_generated.rs'])
-    expect((await rust.scan(root, {}, excluded))!.files.map(file => file.file).sort()).toEqual([
+    const selected = await scannerFiles(root, { include, exclude: ['*_generated.rs', ...exclude, '!service/src/routes_generated.rs'] })
+    expect((await rust.scan(root, {}, selected))!.files.map(file => file.file).sort()).toEqual([
       'app/src/lib.rs', 'service/src/lib.rs', 'service/src/routes_generated.rs', 'shared.rs', 'support/src/lib.rs',
     ])
   })
@@ -121,7 +127,7 @@ nativeTest('a default feature activates a local dependency feature and its sourc
     await writeFile(path.join(root, 'service/Cargo.toml'), '[package]\nname = "service"\nversion = "0.1.0"\nedition.workspace = true\n[features]\nextra = []\n')
     await writeFile(path.join(root, 'service/src/lib.rs'), 'pub fn run() {}\n#[cfg(feature = "extra")] mod extra;\n')
     await writeFile(path.join(root, 'service/src/extra.rs'), 'pub fn enabled() {}\n')
-    const observation = (await rust.scan(root))!
+    const observation = (await rust.scan(root, {}, await rustFiles(root)))!
     expect(observation.files.map(file => file.file)).toContain('service/src/extra.rs')
   })
 }, 60000)

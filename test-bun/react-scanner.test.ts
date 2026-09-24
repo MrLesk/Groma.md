@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { ScanObservation, ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/react/build.ts'
 import manifest from '../plugins/scanners/react/package.json'
+import typescriptManifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
@@ -12,9 +13,13 @@ import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
-import { exclusion } from '../src/scanner/modules/config.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
+
+/** The files Groma hands each scanner with its package defaults. */
+const reactFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
+const typescriptFiles = (root: string) => scannerFiles(root, typescriptManifest.groma.scanner)
 
 async function setup() {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-react-test-'))
@@ -61,9 +66,9 @@ function expectCallbackRow(react: ScanObservation, target = 'host.tsx') {
 test.concurrent('React supplies a JSX callback beyond TypeScript with original source positions', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const react = (await scanner.scan(root))!
-    expect(await scanner.scan(root)).toEqual(react)
-    const typescript = (await scanTypeScriptSource(root))!
+    const react = (await scanner.scan(root, {}, await reactFiles(root)))!
+    expect(await scanner.scan(root, {}, await reactFiles(root))).toEqual(react)
+    const typescript = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const owners = new Map(react.files.map(file => [file.file, file.file]))
     expect(inferRelationships([typescript], owners)).toEqual([])
     expect(inferRelationships([typescript, react], owners)).toEqual([
@@ -106,7 +111,7 @@ for (const [layout, configs, codes] of freshCheckoutConfigs) {
       for (const [file, text] of Object.entries(configs)) await writeFile(path.join(root, file), text)
       const host = path.join(root, 'host.tsx')
       await writeFile(host, (await readFile(host, 'utf8')).replace("'./editor'", "'@/editor'"))
-      const react = (await scanner.scan(root))!
+      const react = (await scanner.scan(root, {}, await reactFiles(root)))!
       expectCallbackRow(react)
       expect(react.diagnostics.map(item => item.code)).toEqual(codes)
     } finally { await rm(temporary, { recursive: true, force: true }) }
@@ -122,7 +127,7 @@ test.concurrent('React binds a handler a TypeScript module defines', async () =>
     await writeFile(host, (await readFile(host, 'utf8'))
       .replace('  const receive = (value: string) => { console.log(value) }', '')
       .replace("import { Editor } from './editor'", "import { Editor } from './editor'\nimport { receive } from './handlers'"))
-    expectCallbackRow((await scanner.scan(root))!, 'handlers.ts')
+    expectCallbackRow((await scanner.scan(root, {}, await reactFiles(root)))!, 'handlers.ts')
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -145,7 +150,7 @@ for (const [shape, file, edit] of callbackShapes) {
     try {
       const source = path.join(root, file)
       await writeFile(source, edit(await readFile(source, 'utf8')))
-      expectCallbackRow((await scanner.scan(root))!)
+      expectCallbackRow((await scanner.scan(root, {}, await reactFiles(root)))!)
     } finally { await rm(temporary, { recursive: true, force: true }) }
   })
 }
@@ -156,7 +161,7 @@ test.concurrent('React binds no platform file to a component variant another pla
     // host.web.tsx imports './editor', which the compiler resolves to the shared file while the web build loads editor.web.tsx.
     await writeFile(path.join(root, 'tsconfig.json'), '{"compilerOptions":{"jsx":"react-jsx","moduleSuffixes":[".native",""]},"include":["*.tsx"]}')
     for (const name of ['editor', 'host']) await cp(path.join(root, `${name}.tsx`), path.join(root, `${name}.web.tsx`))
-    const react = (await scanner.scan(root))!
+    const react = (await scanner.scan(root, {}, await reactFiles(root)))!
     expect(react.invocations!.map(call => call.binding?.file)).toEqual(['host.tsx'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
@@ -181,7 +186,7 @@ test.concurrent('a React package compiled by an ancestor config scans once besid
       await mkdir(path.dirname(path.join(root, file)), { recursive: true })
       await writeFile(path.join(root, file), text)
     }
-    const react = (await scanner.scan(root))!
+    const react = (await scanner.scan(root, {}, await reactFiles(root)))!
     expect(react.invocations!.map(call => call.binding?.file)).toEqual(['app/host.tsx'])
     expect(react.httpRequests).toHaveLength(1)
     // The library's component stays in the library's source root although the app's binding touches it.
@@ -206,9 +211,9 @@ test.concurrent('React reads no source its exclusions name, whatever its syntax,
     await writeFile(path.join(root, 'node_modules/widget/package.json'), '{"name":"widget","dependencies":{"react":"19.2.7"}}')
     await writeFile(path.join(root, 'node_modules/widget/tsconfig.json'), '{')
     await writeFile(path.join(root, 'node_modules/widget/widget.tsx'), 'export const Widget = () => <div />\n')
-    const excluded = exclusion([...manifest.groma.scanner.exclude, '!panel.test.tsx'])
-    await scanner.checkReadiness!(root, {}, excluded)
-    const react = (await scanner.scan(root, {}, excluded))!
+    const files = await scannerFiles(root, { include: manifest.groma.scanner.include, exclude: [...manifest.groma.scanner.exclude, '!panel.test.tsx'] })
+    await scanner.checkReadiness!(root, {}, files)
+    const react = (await scanner.scan(root, {}, files))!
     expect(react.files.map(file => file.file)).toEqual(['editor.tsx', 'host.tsx', 'panel.test.tsx'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
@@ -219,7 +224,7 @@ test.concurrent('React rejects a reassigned callback parameter instead of inferr
     const file = path.join(root, 'editor.tsx')
     const original = await readFile(file, 'utf8')
     await writeFile(file, original.replace('const finish =', 'saved = () => {};\n  const finish ='))
-    const react = (await scanner.scan(root))!
+    const react = (await scanner.scan(root, {}, await reactFiles(root)))!
     const owners = new Map(react.files.map(file => [file.file, file.file]))
     expect(inferRelationships([react], owners)).toEqual([])
     expect(react.invocations).toEqual([])
@@ -234,7 +239,7 @@ for (const assignment of ['[saved] = [() => {}]', '({ saved } = { saved: () => {
       const file = path.join(root, 'editor.tsx')
       const original = await readFile(file, 'utf8')
       await writeFile(file, original.replace('const finish =', `${assignment};\n  const finish =`))
-      const react = (await scanner.scan(root))!
+      const react = (await scanner.scan(root, {}, await reactFiles(root)))!
       const owners = new Map(react.files.map(file => [file.file, file.file]))
       expect(inferRelationships([react], owners)).toEqual([])
       expect(react.invocations).toEqual([])
@@ -256,7 +261,7 @@ test.concurrent('React preserves callback reads and assignments to another symbo
       for (const other of [saved]) { void other; }
       for (let saved of [other]) { saved = other; }
       const finish =`))
-    const react = (await scanner.scan(root))!
+    const react = (await scanner.scan(root, {}, await reactFiles(root)))!
     const owners = new Map(react.files.map(file => [file.file, file.file]))
     expect(inferRelationships([react], owners)).toEqual([
       expect.objectContaining({ source: 'editor.tsx', target: 'host.tsx', technology: 'react' }),
@@ -271,11 +276,11 @@ test.concurrent('React abstains on conditional handlers and JSX spreads', async 
     const file = path.join(root, 'host.tsx')
     const original = await readFile(file, 'utf8')
     await writeFile(file, original.replace('saved={receive}', 'saved={Math.random() ? receive : (value: string) => console.log(value)}'))
-    const conditional = (await scanner.scan(root))!
+    const conditional = (await scanner.scan(root, {}, await reactFiles(root)))!
     expect(conditional.invocations).toEqual([])
     expect(conditional.diagnostics.some(item => item.code === 'unsupported-react-binding')).toBe(true)
     await writeFile(file, original.replace('saved={receive}', '{...{saved: receive}}'))
-    const spread = (await scanner.scan(root))!
+    const spread = (await scanner.scan(root, {}, await reactFiles(root)))!
     expect(spread.invocations).toEqual([])
     expect(spread.diagnostics.some(item => item.code === 'unsupported-react-binding')).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
@@ -284,11 +289,11 @@ test.concurrent('React abstains on conditional handlers and JSX spreads', async 
 test.concurrent('React overlapping scans retain curated ownership in either observation order', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const typescript = (await scanTypeScriptSource(root))!
+    const typescript = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     await reconcileScanObservations(root, [typescript])
     const source = owner(await loadAnnotatedArchitecture(root), 'editor.tsx')
     await editArchitecture(root, { id: source.id, overview: 'Publishes a completed edit.' })
-    const react = (await scanner.scan(root))!
+    const react = (await scanner.scan(root, {}, await reactFiles(root)))!
     await reconcileScanObservations(root, [typescript, react])
     const snapshot = await storedArchitecture(root)
     await reconcileScanObservations(root, [react, typescript])
@@ -333,8 +338,8 @@ test.concurrent('a file React and TypeScript both own shows one outline', async 
   const { temporary, root, artifact, scanner } = await outlineSetup()
   try {
     await writeFile(path.join(root, 'groma/scanners.json'), JSON.stringify({ scanners: [
-      { id: 'typescript', source: path.resolve(import.meta.dir, '../plugins/scanners/typescript') },
-      { id: 'react', source: artifact },
+      { id: 'typescript', source: path.resolve(import.meta.dir, '../plugins/scanners/typescript'), include: typescriptManifest.groma.scanner.include },
+      { id: 'react', source: artifact, include: manifest.groma.scanner.include },
     ] }))
     const world = await loadAnnotatedArchitecture(root)
     const component = world.elements.find(element => element.kind === 'component')!

@@ -8,6 +8,10 @@
     "scanner": {
       "id": "go",
       "entry": "./src/index.ts",
+      "include": [
+        "**/*.go",
+        "**/go.mod"
+      ],
       "exclude": [
         "vendor/"
       ],

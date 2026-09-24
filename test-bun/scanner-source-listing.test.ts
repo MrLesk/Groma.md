@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
@@ -16,8 +16,16 @@ import rust from '../plugins/scanners/rust/src/index.ts'
 import swift from '../plugins/scanners/swift/src/index.ts'
 import typescript from '../plugins/scanners/typescript/src/index.ts'
 import vue from '../plugins/scanners/vue/src/index.ts'
+import { repositoryListing } from '../src/repository-listing.ts'
+import { inclusion } from '../src/scanner/modules/config.ts'
 
-/** Each official scanner lists the sources its own scan selects, without running a project tool. */
+/** The files a scanner's package include list names in a repository, before exclusions: the listing's candidates. */
+async function candidates(root: string, scanner: ScannerPlugin): Promise<string[]> {
+  const manifest = JSON.parse(await readFile(path.resolve(import.meta.dir, `../plugins/scanners/${scanner.id}/package.json`), 'utf8'))
+  return (await repositoryListing(root)).filter(inclusion(manifest.groma.scanner.include))
+}
+
+/** Each official scanner lists the candidates its own scan compiles, without running a project tool. */
 const listings: [ScannerPlugin, string, string[]][] = [
   [typescript, 'operation-wiring', ['api.ts', 'caller.ts', 'provider.ts', 'worker.ts', 'wrapper.ts']],
   [go, 'go-module', ['caller.go', 'provider/provider.go']],
@@ -81,14 +89,14 @@ for (const [scanner, fixture, expected] of listings) {
   test.concurrent(`the ${scanner.id} scanner lists the files it would analyze`, async () => {
     const root = await repository(fixture)
     try {
-      const files = await scanner.listSourceFiles?.(root)
+      const files = await scanner.listSourceFiles?.(root, {}, await candidates(root, scanner))
       expect(files?.sort()).toEqual(expected)
     } finally { await rm(root, { recursive: true, force: true }) }
   })
 }
 
 // Creating symlinks needs developer mode or administrator rights on Windows.
-test.skipIf(process.platform === 'win32').concurrent('a symlink to another listed source is listed once, through the file it points to', async () => {
+test.skipIf(process.platform === 'win32').concurrent('the repository listing names a symlink to another listed file once, through the file it points to', async () => {
   const root = await repository('swift-source')
   const outside = await mkdtemp(path.join(os.tmpdir(), 'groma-listing-outside-'))
   try {
@@ -96,10 +104,8 @@ test.skipIf(process.platform === 'win32').concurrent('a symlink to another liste
     await symlink('../Ledger.swift', path.join(root, 'Sources/Ledger.swift'))
     await writeFile(path.join(outside, 'Shared.swift'), 'struct Shared {}\n')
     await symlink(path.join(outside, 'Shared.swift'), path.join(root, 'Shared.swift'))
-    expect(await swift.listSourceFiles?.(root)).toEqual(['Ledger.swift', 'Other.swift', 'Shared.swift'])
-    await writeFile(path.join(root, 'Real.ts'), 'export const real = 1\n')
-    await symlink('../Real.ts', path.join(root, 'Sources/Real.ts'))
-    expect(await typescript.listSourceFiles?.(root)).toEqual(['Real.ts'])
+    const listed = await repositoryListing(root)
+    expect(listed.filter(file => file.endsWith('.swift'))).toEqual(['Ledger.swift', 'Other.swift', 'Shared.swift'])
   } finally { await Promise.all([root, outside].map(directory => rm(directory, { recursive: true, force: true }))) }
 })
 
@@ -107,8 +113,8 @@ test.concurrent('a stylesheet is listed only by a scanner that reads component s
   const [angularRoot, reactRoot] = await Promise.all([repository('angular-output'), repository('react-http')])
   try {
     await writeFile(path.join(reactRoot, 'globals.css'), 'body { color: black }\n')
-    expect(await angular.listSourceFiles?.(angularRoot)).toContain('emitter.css')
-    expect(await react.listSourceFiles?.(reactRoot)).not.toContain('globals.css')
+    expect(await angular.listSourceFiles?.(angularRoot, {}, await candidates(angularRoot, angular))).toContain('emitter.css')
+    expect(await react.listSourceFiles?.(reactRoot, {}, await candidates(reactRoot, react))).not.toContain('globals.css')
   } finally {
     await Promise.all([angularRoot, reactRoot].map(root => rm(root, { recursive: true, force: true })))
   }

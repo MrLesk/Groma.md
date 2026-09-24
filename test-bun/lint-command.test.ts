@@ -49,8 +49,8 @@ test.concurrent('lint checks fresh scanner evidence and reports failures without
 
     const plugin = path.join(root, 'broken')
     await mkdir(plugin)
-    await writeFile(path.join(plugin, 'package.json'), JSON.stringify({ name: 'broken', version: '1.0.0', groma: { scanner: { id: 'broken', entry: './index.js' } } }))
-    await writeFile(path.join(plugin, 'index.js'), `export default { id: 'broken', watch: { include: [], exclude: [] }, scan() { throw new Error('lint-fixture-failure') } }`)
+    await writeFile(path.join(plugin, 'package.json'), JSON.stringify({ name: 'broken', version: '1.0.0', groma: { scanner: { id: 'broken', entry: './index.js', include: ['**/*.ts'] } } }))
+    await writeFile(path.join(plugin, 'index.js'), `export default { id: 'broken', scan() { throw new Error('lint-fixture-failure') } }`)
     await addScanner(root, plugin)
     const withFailure = await snapshot(path.join(root, 'groma'))
     const failed = await command(root, 'lint')

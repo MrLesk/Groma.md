@@ -3,9 +3,9 @@ using System.Text.Json;
 namespace Groma.CSharpScanner;
 
 /// <summary>
-/// One scan of a repository. The adapter supplies the repository's tracked, unignored and not excluded C# files, so
-/// the worker never loads a project or analyzes a source the host left out, and every input among them, so each
-/// project loads once.
+/// One scan of a repository. The adapter supplies the scanner's files, the repository files Groma hands the C#
+/// scanner, so the worker never loads a project or analyzes a source outside them, and every input among them, so
+/// each project loads once.
 /// </summary>
 public sealed record ScanRequest(
     string Root,

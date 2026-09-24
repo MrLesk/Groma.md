@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, write
 import os from 'node:os'
 import path from 'node:path'
 import type { ScanObservation } from '@groma/scanner'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 const packages = process.env.GROMA_TEST_PACKAGES
 const packageTest = packages ? test.concurrent : test.skip
@@ -81,13 +82,14 @@ for (const [id, fixture] of Object.entries(examples)) {
       if (process.platform !== 'win32') await symlink(git, path.join(bin, 'git'))
       const executablePath = process.platform === 'win32' ? path.dirname(git) : bin
       const manifest = JSON.parse(await readFile(path.join(artifact, 'package.json'), 'utf8'))
+      const files = JSON.stringify(await scannerFiles(root, manifest.groma.scanner))
       const runner = path.join(temporary, 'scan.mjs')
       await writeFile(runner, `
         globalThis.fetch = () => { throw new Error('Scanning must not use the network') };
         const scanner = (await import(${JSON.stringify(path.join(artifact, manifest.groma.scanner.entry))})).default;
-        await scanner.checkReadiness?.(${JSON.stringify(root)}, {});
-        const first = await scanner.scan(${JSON.stringify(root)}, {});
-        const second = await scanner.scan(${JSON.stringify(root)}, {});
+        await scanner.checkReadiness?.(${JSON.stringify(root)}, {}, ${files});
+        const first = await scanner.scan(${JSON.stringify(root)}, {}, ${files});
+        const second = await scanner.scan(${JSON.stringify(root)}, {}, ${files});
         if (JSON.stringify(first) !== JSON.stringify(second)) throw new Error('Scan evidence changed on repetition');
         console.log(JSON.stringify(first));
       `)

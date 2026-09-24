@@ -27,13 +27,13 @@ async function plugin(root: string, id: string, fail = false) {
   const directory = path.join(root, 'plugins', id)
   await mkdir(directory, { recursive: true })
   await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: id, version: '1.0.0',
-    groma: { scanner: { id, entry: './index.ts' } } }))
+    groma: { scanner: { id, entry: './index.ts', include: ['**/*.fixture'] } } }))
   await writeFile(path.join(directory, 'index.ts'), `import { writeFile } from 'node:fs/promises'
-export default { id: '${id}', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+export default { id: '${id}', async scan(root) {
   await writeFile(root + '/${id}.called', 'scanned')
   ${fail ? "throw new Error('Project tooling failed')" : 'return undefined'}
 } }`)
-  return { id, source: directory }
+  return { id, source: directory, include: ['**/*.fixture'] }
 }
 
 for (const missing of [false, true]) {
@@ -41,7 +41,7 @@ for (const missing of [false, true]) {
     const root = await setup()
     try {
       const other = await plugin(root, 'other')
-      await writeScannerConfig(root, { scanners: [other, ...(missing ? [{ id: 'typescript', source: path.join(root, 'missing') }] : [])] })
+      await writeScannerConfig(root, { scanners: [other, ...(missing ? [{ id: 'typescript', source: path.join(root, 'missing'), include: ['**/*.ts'] }] : [])] })
       const records = await snapshot(root)
       const before = await loadAnnotatedArchitecture(root)
       expect(before.relationships.length).toBeGreaterThan(0)

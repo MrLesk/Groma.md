@@ -2,8 +2,10 @@ import { pathToFileURL } from 'node:url'
 
 import type { ScannerPlugin, ScannerSettings, ScanObservation } from '@groma/scanner'
 
-import { exclusion, exclusionPatterns, readScannerConfig, stringArray, type ScannerConfig } from './modules/config.ts'
+import { repositoryListing } from '../repository-listing.ts'
+import { exclusion, readScannerConfig, type ScannerConfig } from './modules/config.ts'
 import { configuredScannerModules } from './modules/inventory.ts'
+import { configuredSelection, selectedFiles, type ScannerSelection } from './modules/selection.ts'
 import type {
   FoundScannerModule,
   ScannerResolutionOptions,
@@ -22,9 +24,11 @@ export class ScannerFailure extends Error {
 
 export interface ScannerRegistry {
   readonly scannerIds: readonly string[]
+  /** Whether files Git ignores stay out of every scan. */
+  readonly useGitignore: boolean
   collectObservations(repositoryRoot: string, changedFiles?: readonly string[], onScan?: (event: ScanEvent) => void): Promise<ScanBatch>
   watchesFile(relativePath: string): boolean
-  /** In scanner id order, the scanners whose listing selects this file, before their exclusions, and those whose listing failed. */
+  /** In scanner id order, the scanners whose listing reads this file before their exclusions, and those whose listing failed. */
   readersOfFile(repositoryRoot: string, file: string): Promise<FileReaders>
 }
 
@@ -46,12 +50,13 @@ export interface ScanBatch {
   failures: ScannerFailure[]
 }
 
-/** A configured scanner as the host runs it: its plugin with this project's settings and exclusions for it. */
-export interface ConfiguredPlugin {
+/**
+ * A configured scanner as the host runs it: its plugin with this project's settings, and its selection, the files its
+ * include list names less the ones the global exclusions and then its own name.
+ */
+export interface ConfiguredPlugin extends ScannerSelection {
   plugin: ScannerPlugin
   settings?: ScannerSettings
-  /** Whether a repository-relative path is excluded for this scanner: the global list, then the scanner's own. */
-  excluded: (file: string) => boolean
 }
 
 
@@ -63,10 +68,7 @@ function scannerPlugin(value: unknown, expectedId: string): ScannerPlugin {
   if (candidate.id !== expectedId) {
     throw new Error(`scanner ${expectedId} default export has id ${String(candidate.id)}`)
   }
-  if (!stringArray(candidate.watch?.include) || !stringArray(candidate.watch?.exclude)
-    || typeof candidate.scan !== 'function') {
-    throw new Error(`scanner ${expectedId} must export watch.include and watch.exclude string arrays and a scan function`)
-  }
+  if (typeof candidate.scan !== 'function') throw new Error(`scanner ${expectedId} must export a scan function`)
   return candidate as ScannerPlugin
 }
 
@@ -81,14 +83,14 @@ export async function configuredPlugin(module: FoundScannerModule, config: Scann
   return {
     plugin: await importScanner(module.entry, module.id),
     ...(module.settings === undefined ? {} : { settings: module.settings }),
-    excluded: exclusion(exclusionPatterns(config, module.id)),
+    ...configuredSelection(config, module.id),
   }
 }
 
-/** Skip analysis only when a nonempty source listing is fully outside the scanner's exclusions. */
-export async function scannerSourcesExcluded({ plugin, settings, excluded }: ConfiguredPlugin, root: string): Promise<boolean> {
-  const files = await plugin.listSourceFiles?.(root, settings)
-  return files !== undefined && files.length > 0 && files.every(excluded)
+/** Whether a scanner has nothing to read: its include list names repository files and its exclusions name all of them. */
+export function allExcluded(listing: readonly string[], scanner: ScannerSelection): boolean {
+  const candidates = listing.filter(scanner.included)
+  return candidates.length > 0 && candidates.every(scanner.excluded)
 }
 
 function excludeEvidence(
@@ -147,15 +149,15 @@ export async function loadScannerRegistry(
   const blocked = new Set(proposal?.recommendations.filter(item => item.status === 'incompatible').map(item => item.id))
   const scanners = await Promise.all(found.filter(module => !blocked.has(module.id)).map(module =>
     configuredPlugin(module, config).catch((error: unknown): ConfiguredPlugin => ({
-      // Failed imports have no source subscription. Retry/settings reload the registry.
-      plugin: { id: module.id, watch: { include: [], exclude: [] }, async scan() { throw error } },
-      excluded: () => false,
+      // A failed import reads no file, so no change triggers it. Retry/settings reload the registry.
+      plugin: { id: module.id, async scan() { throw error } },
+      included: () => false, excluded: () => false,
     }))))
-  const registry = createScannerRegistry(scanners)
-  const discovery = compileWatchPatterns({ include: [
+  const registry = createScannerRegistry(scanners, config.useGitignore ?? true)
+  const discovery = compileWatchPatterns([
     ...officialScannerCatalog.flatMap(scanner => scanner.rules.flatMap(rule => rule.files)),
     ...found.flatMap(module => module.discovery?.rules.flatMap(rule => rule.files) ?? []),
-  ], exclude: [] })
+  ])
   return { ...registry, watchesFile: file => registry.watchesFile(file) || (!globallyExcluded(file) && discovery(file)) }
 }
 
@@ -164,22 +166,22 @@ function firstLine(error: unknown): string {
 }
 
 /**
- * One source session retains complete evidence between selective rescans. Each scanner reads, watches and
- * reports within its own exclusions.
+ * One source session retains complete evidence between selective rescans. Each scanner reads, is triggered by and
+ * reports only the files of its selection.
  */
-export function createScannerRegistry(scanners: readonly ConfiguredPlugin[]): ScannerRegistry {
+export function createScannerRegistry(scanners: readonly ConfiguredPlugin[], useGitignore = true): ScannerRegistry {
   const observations = new Map<ConfiguredPlugin, ScanObservation>()
   const pending = new Set(scanners)
-  const watches = new Map(scanners.map(scanner => {
-    const watched = compileWatchPatterns(scanner.plugin.watch)
-    return [scanner, (file: string) => !scanner.excluded(file) && watched(file)] as const
-  }))
+  const reads = (scanner: ConfiguredPlugin) => (file: string) => scanner.included(file) && !scanner.excluded(file)
   return {
     scannerIds: scanners.map(({ plugin }) => plugin.id),
+    useGitignore,
     async readersOfFile(root, file) {
       const answer: FileReaders = { readers: [], failures: [] }
       const byId = [...scanners].sort((left, right) => (left.plugin.id < right.plugin.id ? -1 : 1))
-      const listings = await Promise.allSettled(byId.map(async ({ plugin, settings }) => await plugin.listSourceFiles?.(root, settings)))
+      const listing = await repositoryListing(root, useGitignore)
+      const listings = await Promise.allSettled(byId.map(async ({ plugin, settings = {}, included }) =>
+        await plugin.listSourceFiles?.(root, settings, listing.filter(included))))
       for (const [index, listing] of listings.entries()) {
         const scanner = byId[index]!.plugin.id
         if (listing.status === 'rejected') answer.failures.push({ scanner, message: firstLine(listing.reason) })
@@ -188,21 +190,22 @@ export function createScannerRegistry(scanners: readonly ConfiguredPlugin[]): Sc
       return answer
     },
     watchesFile(relativePath) {
-      return [...watches.values()].some(matches => matches(relativePath))
+      return scanners.some(scanner => reads(scanner)(relativePath))
     },
     async collectObservations(root, changedFiles, onScan) {
-      for (const [scanner, matches] of watches) {
-        if (!changedFiles || changedFiles.some(matches)) pending.add(scanner)
+      for (const scanner of scanners) {
+        if (!changedFiles || changedFiles.some(reads(scanner))) pending.add(scanner)
       }
       const selected = [...pending]
+      const listing = await repositoryListing(root, useGitignore)
       // Every scanner finishes before a failure surfaces, so none keeps a child process in the repository.
       const results = await Promise.allSettled(selected.map(async scanner => {
-        const { plugin, settings, excluded } = scanner
+        const { plugin, settings = {}, excluded } = scanner
         let result: ScanObservation | undefined
-        if (!await scannerSourcesExcluded(scanner, root)) {
+        if (!allExcluded(listing, scanner)) {
           try {
             onScan?.({ scanner: plugin.id, type: 'start' })
-            result = await plugin.scan(root, settings, excluded)
+            result = await plugin.scan(root, settings, selectedFiles(listing, scanner))
           } finally {
             onScan?.({ scanner: plugin.id, type: 'end' })
           }

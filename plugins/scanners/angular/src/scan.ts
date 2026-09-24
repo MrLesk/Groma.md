@@ -13,24 +13,23 @@ import { angularHttpRequests } from './http.ts'
 import { angularPrograms, angularProjects, projectConfigs, relative, type AngularProgram } from './project.ts'
 import { Templates } from './template.ts'
 
-/** Readiness reads the configs of every Angular project the exclusions leave in; source syntax is the scan's to check. */
-export async function checkAngularReadiness(root: string, _settings?: unknown,
-  excluded: (file: string) => boolean = () => false): Promise<void> {
-  await projectConfigs(root, [...(await angularProjects(root, excluded)).keys()], excluded)
+/** Readiness reads the configs of every Angular project among the scanner's files; source syntax is the scan's to check. */
+export async function checkAngularReadiness(root: string, _settings: unknown, files: readonly string[]): Promise<void> {
+  projectConfigs(root, [...(await angularProjects(root, files)).keys()], files)
 }
 
-export async function scanAngular(root: string, _settings?: unknown,
-  excluded: (file: string) => boolean = () => false): Promise<ScanObservation | undefined> {
-  const projects = await angularProjects(root, excluded)
-  const { configs, diagnostics } = await projectConfigs(root, [...projects.keys()], excluded)
+export async function scanAngular(root: string, _settings: unknown, files: readonly string[]): Promise<ScanObservation | undefined> {
+  const projects = await angularProjects(root, files)
+  const { configs, diagnostics } = projectConfigs(root, [...projects.keys()], files)
   const inputs: EntrySources = { imports: new Map(), entries: [] }
+  const readable = new Set(files)
   const parts = []
-  for (const [directory, files] of projects) {
-    const programs = angularPrograms(root, files, configs)
-    if (programs.length) parts.push({ key: directory, observation: await scanProject(root, directory, programs, inputs) })
+  for (const [directory, sources] of projects) {
+    const programs = angularPrograms(root, sources, configs)
+    if (programs.length) parts.push({ key: directory, observation: await scanProject(root, directory, programs, inputs, readable) })
   }
   const combined = combineObservations(parts)
-  return withJavaScriptEntries(root, combined && { ...combined, diagnostics: [...combined.diagnostics, ...diagnostics] }, inputs, excluded)
+  return withJavaScriptEntries(root, combined && { ...combined, diagnostics: [...combined.diagnostics, ...diagnostics] }, inputs, files)
 }
 
 function mergeInputs(inputs: EntrySources, next: EntrySources): void {
@@ -40,11 +39,13 @@ function mergeInputs(inputs: EntrySources, next: EntrySources): void {
 
 /**
  * One project's evidence across its programs. Each program reports only the sources it owns, while every repository
- * source it compiles, such as an imported library, can supply a child directive or a value.
+ * source it compiles, such as an imported library, can supply a child directive or a value. A component's templates
+ * and stylesheets are read only from the scanner's files, which `readable` holds.
  */
-async function scanProject(root: string, directory: string, programs: readonly AngularProgram[], inputs: EntrySources): Promise<ScanObservation> {
+async function scanProject(root: string, directory: string, programs: readonly AngularProgram[], inputs: EntrySources,
+  readable: ReadonlySet<string>): Promise<ScanObservation> {
   const evidence = new Evidence(root)
-  const templates = new Templates(root, evidence)
+  const templates = new Templates(root, evidence, readable)
   const files: Omit<ScanFile, 'roots'>[] = []
   const sourceUnits: ScanSourceUnit[] = []
   const httpRequests = []

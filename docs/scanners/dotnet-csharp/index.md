@@ -31,13 +31,14 @@ only: scanner evidence, OKF records and C4 boundaries are unchanged.
 
 ## Source inputs
 
-The scanner reads the tracked, unignored and not excluded `.csproj`, `.sln` and
-`.slnx` files and every project they reference, and loads each project once,
+The scanner reads the `.csproj`, `.sln` and `.slnx` files among its files, and
+every project among them that they reference, and loads each project once,
 however many solutions list it. Set `settings.input` on the existing C# scanner
 entry to select one of those projects or solutions, with the projects it
 references, relative to the repository root. To explain a file without an owner,
-the scanner lists every C# file before exclusions: a project may compile any
-repository file, so this never leaves out a file a scan reads.
+the scanner lists every C# source its include list names, before exclusions: a
+project may compile any repository file, so this never leaves out a file a scan
+reads.
 
 An in-memory Roslyn workspace reads project XML and authored C# files. The
 nearest `Directory.Build.props`, the project file, and the files either imports
@@ -56,16 +57,20 @@ other languages are skipped. A C# project that is not SDK-style is skipped with
 a `CSHARP_UNSUPPORTED_PROJECT` warning. Project references follow the SDK: they
 are transitive.
 
-The package declares default [exclusions](../index.md#excluding-source-evidence)
-for build output (`bin` and `obj`, in any letter case), test code (folders named
-`test` or `tests` in either initial case, folders whose names end in `Tests`,
-and `*.Test` folders), and generated files (`*.Designer.cs`, `*.g.cs`,
-`*.g.i.cs` and `*.generated.cs`). Excluded sources, projects and solutions are never
-read, whether a solution, a reference or `settings.input` names them, so a
-declaration that only an excluded file provides is reported as missing where
-code uses it. An included project's nearest `Directory.Build.props` and the
-files it imports are its build context, and are read even when excluded. Which
-files a project compiles stays built in.
+The package declares default [include and exclude lists](../index.md#selecting-source-files).
+The include list names C# sources (`**/*.cs`), projects (`**/*.csproj`),
+solutions (`**/*.sln` and `**/*.slnx`) and MSBuild files (`**/*.props` and
+`**/*.targets`), each extension in any letter case. MSBuild files are only a
+project's build context; the list names them so that a change to one triggers a
+scan. The exclude list names build output (`bin` and `obj`, in any letter case),
+test code (folders named `test` or `tests` in either initial case, folders whose
+names end in `Tests`, and `*.Test` folders), and generated files
+(`*.Designer.cs`, `*.g.cs`, `*.g.i.cs` and `*.generated.cs`). A source, project
+or solution outside the scanner's files is never read, whether a solution, a
+reference or `settings.input` names it, so a declaration that only such a file
+provides is reported as missing where code uses it. An included project's
+nearest `Directory.Build.props` and the files it imports are read as MSBuild
+reads them, even when excluded. Which files a project compiles stays built in.
 
 For executable projects, Roslyn's resolved entry point supplies an execution fact
 with its source file, project declaration, assembly name and the project's own
@@ -93,9 +98,8 @@ This does not associate Razor, XAML, or generated source.
 
 Core creates one component with all member Code references, attaches newly
 discovered unowned partial files, and retains curated ownership on repeat scans.
-Conflicting owners produce review diagnostics.
-The existing C# source watcher includes new partial files. No project restore,
-build, or source-generator execution is needed.
+Conflicting owners produce review diagnostics. No project restore, build, or
+source-generator execution is needed.
 
 Roslyn resolves local overloads, generic methods, extensions, partial
 implementations and direct calls. Virtual dispatch and interface calls retain

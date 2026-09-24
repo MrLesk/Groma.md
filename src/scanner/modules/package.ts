@@ -31,6 +31,8 @@ export type ScannerSource = NpmScannerSource | LocalScannerSource | GitScannerSo
 export interface ResolvedScannerPackage {
   discovery?: ScannerDiscoveryMetadata
   entry: string
+  /** Git ignore patterns naming the files the scanner reads, written into its configuration when it is added. */
+  include: string[]
   /** Default Git ignore patterns, written into the scanner's configuration when it is added. */
   exclude?: string[]
   id: string
@@ -132,8 +134,11 @@ async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPacka
   const manifest = object(JSON.parse(source), 'scanner package.json')
   const groma = object(manifest.groma, 'scanner package.json groma')
   const scanner = object(groma.scanner, 'scanner package.json groma.scanner')
-  if (Object.keys(scanner).some(field => !['id', 'entry', 'discovery', 'exclude'].includes(field))) {
-    throw new Error('scanner package.json groma.scanner may contain only id, entry, discovery and exclude')
+  if (Object.keys(scanner).some(field => !['id', 'entry', 'discovery', 'include', 'exclude'].includes(field))) {
+    throw new Error('scanner package.json groma.scanner may contain only id, entry, discovery, include and exclude')
+  }
+  if (!stringArray(scanner.include) || scanner.include.length === 0) {
+    throw new Error('scanner package.json groma.scanner.include must list the files the scanner reads')
   }
   if (scanner.exclude !== undefined && !stringArray(scanner.exclude)) {
     throw new Error('scanner package.json groma.scanner.exclude must be an array of strings')
@@ -155,6 +160,7 @@ async function scannerPackage(packageRoot: string): Promise<ResolvedScannerPacka
     name: manifest.name,
     version: manifest.version,
     ...(scanner.discovery === undefined ? {} : { discovery: parseScannerDiscovery(scanner.discovery) }),
+    include: scanner.include,
     ...(scanner.exclude === undefined ? {} : { exclude: scanner.exclude }),
   }
 }

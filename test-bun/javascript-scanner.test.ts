@@ -5,19 +5,22 @@ import path from 'node:path'
 import type { CodeSymbol, ScannerPlugin, ScanOperation } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/javascript/build.ts'
 import manifest from '../plugins/scanners/javascript/package.json'
+import typescriptManifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
-import { exclusion } from '../src/scanner/modules/config.ts'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { scannerFiles, scannerSelection } from '../src/scanner/modules/selection.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { loadScannerRegistry } from '../src/scanner/registry.ts'
-import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 import javascript from '../plugins/scanners/javascript/src/index.ts'
 import { readJavaScriptOutline } from '../plugins/scanners/javascript/src/outline.ts'
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
+
+/** The files Groma hands the JavaScript scanner with its package defaults. */
+const javascriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function setup(fixture = 'javascript-source') {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-test-'))
@@ -35,10 +38,10 @@ test.concurrent('packaged JavaScript reads every module format without project t
   const { temporary, root, scanner } = await setup()
   try {
     expect((await discoverScanners(root)).recommendations.some(scanner => scanner.id === 'javascript')).toBe(true)
-    const excluded = exclusion(manifest.groma.scanner.exclude)
-    await scanner.checkReadiness?.(root, {}, excluded)
-    const scan = (await scanner.scan(root, {}, excluded))!
-    expect(await scanner.scan(root, {}, excluded)).toEqual(scan)
+    const files = await javascriptFiles(root)
+    await scanner.checkReadiness?.(root, {}, files)
+    const scan = (await scanner.scan(root, {}, files))!
+    expect(await scanner.scan(root, {}, files)).toEqual(scan)
     // The `.min.js` name the defaults exclude and the TypeScript source next to it contribute nothing.
     expect(scan.files.map(file => file.file)).toEqual(['public/legacy.js', 'src/cart.mjs', 'src/panel.jsx', 'src/totals.cjs'])
     const declared = scan.files.flatMap(file => file.symbols.map(symbol => symbol.name))
@@ -63,7 +66,7 @@ test.concurrent('packaged JavaScript reads every module format without project t
 test.concurrent('a JavaScript file that does not parse contributes no evidence while the rest of the scan proceeds', async () => {
   const { temporary, root, scanner } = await setup('javascript-invalid')
   try {
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await javascriptFiles(root)))!
     // Parsing alone would recover and report the broken function as an ordinary operation.
     expect(scan.operations!.filter(operation => operation.file === 'src/broken.js')).toEqual([])
     expect(scan.files.find(file => file.file === 'src/broken.js')?.symbols).toEqual([])
@@ -77,7 +80,7 @@ test.concurrent('a JavaScript file that does not parse contributes no evidence w
 test.concurrent('a JavaScript scan keeps one owner per file across a rescan of curated architecture', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await javascriptFiles(root)))!
     await reconcileScanObservations(root, [scan])
     const before = await loadAnnotatedArchitecture(root)
     const component = before.elements.find(element => element.code.some(code => code.file === 'src/cart.mjs'))!
@@ -88,8 +91,8 @@ test.concurrent('a JavaScript scan keeps one owner per file across a rescan of c
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-test.concurrent('configured exclusions and watch patterns decide which JavaScript files reach the architecture', async () => {
-  const { temporary, root, artifact, scanner } = await setup()
+test.concurrent('configured exclusions and include patterns decide which JavaScript files reach the architecture', async () => {
+  const { temporary, root, artifact } = await setup()
   try {
     await addScanner(root, artifact)
     const configFile = path.join(root, 'groma/scanners.json')
@@ -102,9 +105,9 @@ test.concurrent('configured exclusions and watch patterns decide which JavaScrip
     expect(batch.failures).toHaveLength(0)
     expect(batch.observations[0]!.files.map(file => file.file)).toEqual(['src/cart.mjs', 'src/panel.jsx', 'src/totals.cjs'])
     expect(registry.watchesFile('src/view.jsx')).toBe(true)
-    const watches = compileWatchPatterns(scanner.watch)
-    expect(['src/loader.mjs', 'tools/build.cjs'].every(watches)).toBe(true)
-    expect(['src/app.ts', 'src/app.tsx'].some(watches)).toBe(false)
+    const { included } = scannerSelection(manifest.groma.scanner)
+    expect(['src/loader.mjs', 'tools/build.cjs'].every(included)).toBe(true)
+    expect(['src/app.ts', 'src/app.tsx'].some(included)).toBe(false)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -115,8 +118,8 @@ test.concurrent('the scan reads a minified name a later pattern restores', async
     await writeFile(path.join(root, 'widget.min.js'), 'export function widget() { return 2 }\n')
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
     // A `.min` name is a default exclusion rather than a rule in code, so a `!` pattern restores it.
-    const excluded = exclusion([...manifest.groma.scanner.exclude, '!widget.min.js'])
-    expect((await javascript.scan(root, {}, excluded))!.files.map(file => file.file)).toEqual(['app.js', 'widget.min.js'])
+    const restored = { include: manifest.groma.scanner.include, exclude: [...manifest.groma.scanner.exclude, '!widget.min.js'] }
+    expect((await javascript.scan(root, {}, await scannerFiles(root, restored)))!.files.map(file => file.file)).toEqual(['app.js', 'widget.min.js'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -126,8 +129,8 @@ test.concurrent('one body carries the same tokens whether it is written in JavaS
     const compared = (operations: ScanOperation[], file: string) => operations
       .filter(operation => operation.file === file && operation.tokens)
       .sort((left, right) => left.startLine! - right.startLine!)
-    const javascript = compared((await scanner.scan(root))!.operations!, 'pick.js')
-    const typescript = compared((await scanTypeScriptSource(root))!.operations!, 'pick.ts')
+    const javascript = compared((await scanner.scan(root, {}, await javascriptFiles(root)))!.operations!, 'pick.js')
+    const typescript = compared((await scanTypeScriptSource(root, await scannerFiles(root, typescriptManifest.groma.scanner)))!.operations!, 'pick.ts')
     // The bodies use postfix `++`, parentheses, `typeof`, `else`, an index and a constructor.
     expect(javascript.map(operation => operation.name)).toEqual(['pick', 'constructor'])
     // The two scanners tokenize with different compilers, so core can only compare bodies that agree.
@@ -164,7 +167,7 @@ test.concurrent('a component outlines its JavaScript files with module, CommonJS
     const world = await loadAnnotatedArchitecture(root)
     const component = world.elements.find(element => element.kind === 'component')!
     // The fixture's Code symbols are names the scan reports, so entries follow the scan's naming.
-    const scanned = (await scanner.scan(root))!.files.flatMap(file => file.symbols.map(symbol => symbol.name))
+    const scanned = (await scanner.scan(root, {}, await javascriptFiles(root)))!.files.flatMap(file => file.symbols.map(symbol => symbol.name))
     const named = component.code.flatMap(reference => reference.symbol ? [reference.symbol] : [])
     expect(scanned).toEqual(expect.arrayContaining(named))
     const files = await readCodeStructure(root, world, null, component.representationId) ?? []
@@ -212,7 +215,7 @@ test.concurrent('CommonJS publication and module use give declarations their rea
     await writeFile(path.join(root, 'require.js'), "const fs = require('node:fs')\nfunction helper() {}\n")
     await writeFile(path.join(root, 'class.cjs'), 'module.exports = class Application { constructor() {} use() {} }\n')
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
-    const scan = (await javascript.scan(root))!
+    const scan = (await javascript.scan(root, {}, await javascriptFiles(root)))!
     expect(scan.files.find(file => file.file === 'class.cjs')?.symbols.map(symbol => symbol.name)).toContain('Application')
     const files = await readJavaScriptOutline(root, ['chain.cjs', 'require.js', 'class.cjs'].map(file => ({ file, symbols: [] })))
     const declaration = (file: string) => files.find(item => item.file === file)!.declarations
@@ -229,7 +232,7 @@ test.concurrent('calls inside accessors belong to the accessor without entering 
     const source = 'class Request { get url() { return formatUrl() } }\nfunction formatUrl() { return "/" }\n'
     await writeFile(path.join(root, 'request.js'), source)
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
-    const scan = (await javascript.scan(root))!
+    const scan = (await javascript.scan(root, {}, await javascriptFiles(root)))!
     const call = scan.invocations!.find(invocation => invocation.member === undefined)!
     const owner = scan.operations!.find(operation => operation.id === call.source)!
     expect(owner.position).toBe(source.indexOf('get url'))

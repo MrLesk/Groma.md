@@ -1,8 +1,8 @@
 # PHP scanner
 
-The PHP scanner reads tracked and unignored `.php` files, including PHP embedded
-in HTML. It also reads extensionless PHP commands named by a Composer `bin` or
-direct `php` script when the file contains a PHP opening tag. It does not require
+The PHP scanner reads `.php` files, including PHP embedded in HTML. It also
+reads extensionless PHP commands named by a Composer `bin` or direct `php`
+script when the file contains a PHP opening tag. It does not require
 Composer, PHP, WordPress, project dependencies, or application execution.
 Discovery matches PHP source directly, even without a package manifest.
 
@@ -43,16 +43,18 @@ joins them into relationships. An import or include does not associate files
 into a component. Ordinary OKF Code links
 expose file ownership without adding a new architecture level or stored graph.
 
-PHP edits and new files use the shared scanner watcher. Repeated scans preserve
-one physical owner and authored architecture. What counts as PHP source is built
-in. The package declares default
-[exclusion](../index.md#excluding-source-evidence) for Composer's `vendor/`
-folder. The readiness check and scan read no source, Composer manifest or
-command that the scanner's exclusions name. The source listing names files
-before exclusions, and a `composer.json` that is not JSON names no command. Test
-source is treated like other PHP source; projects can exclude it explicitly. The
-live scanner also rescans after other unexcluded repository changes so it can
-catch extensionless Composer commands at any declared path.
+Repeated scans preserve one physical owner and authored architecture. The
+package's default [include and exclude lists](../index.md#selecting-source-files)
+decide which files the scanner reads. The include list names PHP source and
+Composer manifests, `**/*.php` and `**/composer.json`, and the paths where
+Composer projects keep their commands, `**/bin/*` and `**/artisan`, such as a
+package `bin`, Symfony's `bin/console` and Laravel's `artisan`. A command that a
+manifest names elsewhere is read only after its path is added to the include
+list. The exclude list names Composer's `vendor/` folder. Excluded files are
+never read, so an excluded file cannot fail the scan. The source listing runs
+before exclusions, so there a `composer.json` that is not JSON names no
+command. Test source is treated like other PHP source; projects can exclude it
+explicitly.
 
 ## Source outline
 

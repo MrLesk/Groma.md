@@ -1,5 +1,4 @@
 import path from 'node:path'
-import { repositoryFiles } from '../../projects.ts'
 
 /** The go command leaves out test files, testdata, and each directory or file whose name starts with "." or "_". */
 function ignoredByGo(file: string): boolean {
@@ -7,13 +6,12 @@ function ignoredByGo(file: string): boolean {
     part === 'testdata' || part.startsWith('.') || part.startsWith('_'))
 }
 
-/** The tracked or unignored module declarations and Go files under root that the go command reads, relative to root. */
-async function candidates(root: string): Promise<{ modules: string[]; files: string[] }> {
-  const found = await repositoryFiles(root, file =>
-    (file.endsWith('.go') || path.posix.basename(file) === 'go.mod') && !ignoredByGo(file))
+/** The module directories and Go files among `files` that the go command reads, relative to the same folder. */
+function goFiles(files: readonly string[]): { modules: string[]; sources: string[] } {
+  const read = files.filter(file => !ignoredByGo(file))
   return {
-    modules: found.filter(file => path.posix.basename(file) === 'go.mod').map(file => path.posix.dirname(file)),
-    files: found.filter(file => file.endsWith('.go')),
+    modules: read.filter(file => path.posix.basename(file) === 'go.mod').map(file => path.posix.dirname(file)),
+    sources: read.filter(file => file.endsWith('.go')),
   }
 }
 
@@ -23,22 +21,19 @@ function moduleOf(file: string, modules: string[]): string | undefined {
     .sort((left, right) => right.length - left.length)[0]
 }
 
-/** Each module directory under root, relative to it, whose go.mod `excluded` does not name. */
-export async function goModules(root: string, excluded: (file: string) => boolean): Promise<string[]> {
-  return (await candidates(root)).modules.filter(module => !excluded(path.posix.join(module, 'go.mod')))
+/** The directory of each module among `files`, relative to the same folder. */
+export function goModules(files: readonly string[]): string[] {
+  return goFiles(files).modules
 }
 
-/** The Go source of every module under root, before exclusions: the scanner's listing. */
-export async function goSources(root: string): Promise<string[]> {
-  const { modules, files } = await candidates(root)
-  return files.filter(file => moduleOf(file, modules) !== undefined)
+/** The Go source of every module among `candidates`, before exclusions: the scanner's listing. */
+export function goSources(candidates: readonly string[]): string[] {
+  const { modules, sources } = goFiles(candidates)
+  return sources.filter(file => moduleOf(file, modules) !== undefined)
 }
 
-/**
- * The Go source one module compiles, relative to its directory, less the files `excluded` names. Files of a module
- * nested in it stay out even when that module's go.mod is excluded, because the go command never compiles them here.
- */
-export async function moduleSources(module: string, excluded: (file: string) => boolean): Promise<string[]> {
-  const { modules, files } = await candidates(module)
-  return files.filter(file => moduleOf(file, modules) === '.' && !excluded(file))
+/** The Go source one module compiles among its files, relative to its directory, without a nested module's files. */
+export function moduleSources(files: readonly string[]): string[] {
+  const { modules, sources } = goFiles(files)
+  return sources.filter(file => moduleOf(file, modules) === '.')
 }

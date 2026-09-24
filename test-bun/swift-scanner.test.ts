@@ -1,16 +1,21 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/swift/build.ts'
+import manifest from '../plugins/scanners/swift/package.json'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import { loadScannerRegistry } from '../src/scanner/registry.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import { copiesOf, detectDuplicatedLogic } from '../src/architecture-findings.ts'
+
+/** The files Groma hands the scanner: those its package's include list names, less its default exclusions. */
+const swiftFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function setup(fixture = 'swift-source') {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-swift-test-'))
@@ -29,10 +34,11 @@ test.concurrent('Swift package preserves uncertainty, closure ownership and UTF-
   const { temporary, root, scanner } = await setup()
   try {
     expect((await discoverScanners(root)).recommendations.some(scanner => scanner.id === 'swift')).toBe(true)
-    await scanner.checkReadiness?.(root)
-    const scan = (await scanner.scan(root))!
+    const files = await swiftFiles(root)
+    await scanner.checkReadiness?.(root, {}, files)
+    const scan = (await scanner.scan(root, {}, files))!
     expect(scan.files.map(file => file.file)).toEqual(['Ledger.swift', 'Other.swift'])
-    expect(await scanner.scan(root)).toEqual(scan)
+    expect(await scanner.scan(root, {}, files)).toEqual(scan)
     const source = await readFile(path.join(root, 'Ledger.swift'), 'utf8')
     const adjusted = scan.operations!.find(operation => operation.name === 'Ledger.adjusted')!
     expect(adjusted.position).toBe(source.indexOf('public func adjusted'))
@@ -66,7 +72,7 @@ test.concurrent('Swift package preserves uncertainty, closure ownership and UTF-
 test.concurrent('Swift comparable bodies normalize bindings while retaining member and literal differences', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await swiftFiles(root)))!
     const tokens = (name: string) => scan.operations!.find(operation => operation.name === name)!.tokens!
     expect(tokens('Ledger.adjusted')).toEqual(tokens('duplicate'))
     expect(tokens('duplicate')).toEqual(tokens('transform'))
@@ -95,7 +101,7 @@ test.concurrent('Swift comparable bodies normalize bindings while retaining memb
 test.concurrent('Swift outlines follow namespaces and nested extensions, and entries follow their executables', async () => {
   const { temporary, root, scanner } = await setup('swift-shapes')
   try {
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await swiftFiles(root)))!
     expect(scan.files.map(file => file.file)).toEqual(['Future.swift', 'Legacy/AppDelegate.swift', 'Namespaces.swift',
       'Sources/Echo/main.swift', 'Sources/TCPClient/Client.swift'])
     expect(scan.entryPoints!.map(entry => `${entry.file}=${entry.name}`)).toEqual(['Legacy/AppDelegate.swift=AppDelegate',
@@ -119,23 +125,21 @@ test.concurrent('installed Swift package runs without SDKs and excludes source t
     const home = path.join(temporary, 'home'), bin = path.join(temporary, 'bin')
     await mkdir(home)
     await mkdir(bin)
-    const git = Bun.which('git')!
-    if (process.platform !== 'win32') await symlink(git, path.join(bin, 'git'))
-    const scanPath = process.platform === 'win32' ? path.dirname(git) : bin
     const before = await readFile(path.join(root, 'Ledger.swift'), 'utf8')
+    const files = JSON.stringify(await swiftFiles(root))
     const runner = path.join(temporary, 'run.mjs')
     await writeFile(runner, `
       globalThis.fetch = () => { throw new Error('Unexpected scan network access') };
       if (Bun.which('swift') || Bun.which('swiftc')) throw new Error('Swift SDK must not be on PATH');
       const scanner = (await import(${JSON.stringify(path.join(artifact, 'src/index.js'))})).default;
-      await scanner.checkReadiness(${JSON.stringify(root)});
-      const first = await scanner.scan(${JSON.stringify(root)});
-      const next = await scanner.scan(${JSON.stringify(root)});
+      await scanner.checkReadiness(${JSON.stringify(root)}, {}, ${files});
+      const first = await scanner.scan(${JSON.stringify(root)}, {}, ${files});
+      const next = await scanner.scan(${JSON.stringify(root)}, {}, ${files});
       if (JSON.stringify(first) !== JSON.stringify(next)) throw new Error('Unstable evidence');
       console.log(first.files.length);
     `)
     const child = Bun.spawn([process.execPath, runner], { stdout: 'pipe', stderr: 'pipe',
-      env: { PATH: scanPath, HOME: home, USERPROFILE: home, SystemRoot: process.env.SystemRoot ?? '',
+      env: { PATH: bin, HOME: home, USERPROFILE: home, SystemRoot: process.env.SystemRoot ?? '',
         TMPDIR: temporary, TEMP: temporary, TMP: temporary, DYLD_PRINT_LIBRARIES: '1' } })
     const [output, errors, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
     expect(code, errors).toBe(0)
@@ -162,9 +166,9 @@ test.concurrent('installed Swift package runs without SDKs and excludes source t
     expect(batch.observations[0]!.files.map(file => file.file)).toEqual(['Carthage/Restored.swift', 'Ledger.swift'])
     expect(registry.watchesFile('New.swift')).toBe(true)
     await writeFile(path.join(root, 'Ledger.swift'), 'func broken(')
-    await expect(scanner.scan(root)).rejects.toThrow('SWIFT_SOURCE_INVALID')
+    await expect(scanner.scan(root, {}, ['Ledger.swift'])).rejects.toThrow('SWIFT_SOURCE_INVALID')
     await writeFile(path.join(root, 'Ledger.swift'), new Uint8Array([0x2f, 0x2f, 0xe9, 0x0a]))
-    await expect(scanner.scan(root)).rejects.toThrow(/SWIFT_SOURCE_INVALID[\s\S]*Ledger\.swift/)
+    await expect(scanner.scan(root, {}, ['Ledger.swift'])).rejects.toThrow(/SWIFT_SOURCE_INVALID[\s\S]*Ledger\.swift/)
     const failed = await registry.collectObservations(root)
     expect(failed.observations).toHaveLength(0)
     expect(failed.failures).toHaveLength(1)

@@ -7,8 +7,9 @@ import manifest from '../plugins/scanners/go/package.json'
 import { readGoCodeStructure, run, scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
 import plugin from '../plugins/scanners/go/src/index.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { exclusion, readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
+import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 import type { CodeType, ScanObservation } from '@groma/scanner'
@@ -17,7 +18,10 @@ const go = process.env.GROMA_TEST_GO
 const goTest = go ? test.concurrent : test.skip
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 
-/** A Git working tree, because the scanner reads the tracked and unignored files, as the go command would. */
+/** The files Groma hands the Go scanner under the package's include and exclude defaults. */
+const goFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
+
+/** A Git working tree, because Groma lists the scanner's files from it. */
 async function fixture(name = 'go-module') {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-go-test-'))
   await cp(path.join(fixtures, name), root, { recursive: true })
@@ -51,8 +55,8 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
   try {
     await buildWorker(worker, go)
     const options = { worker }
-    const first = await scanGoSource(root, options)
-    expect(await scanGoSource(root, options)).toEqual(first)
+    const first = await scanGoSource(root, options, await goFiles(root))
+    expect(await scanGoSource(root, options, await goFiles(root))).toEqual(first)
     const source = await readFile(path.join(root, 'caller.go'), 'utf8')
     const evidence = calls(first)
     const at = (text: string) => evidence.find(call => call.position === source.indexOf(text))!
@@ -72,7 +76,7 @@ goTest('Go resolves imported functions and concrete methods while preserving wra
     expect(first.files.every(file => file.roots.every(id => byId.get(id)?.kind === 'package'))).toBeTrue()
     expect(first.roots.filter(root => root.parent).every(root => byId.get(root.parent!)?.kind === 'module')).toBeTrue()
     await writeFile(path.join(root, 'caller.go'), source.replaceAll('alias', 'renamed'))
-    const renamed = calls(await scanGoSource(root, options))
+    const renamed = calls(await scanGoSource(root, options, await goFiles(root)))
     expect(renamed.filter(call => call.member === 'Build').map(call => call.targets))
       .toEqual(evidence.filter(call => call.member === 'Build').map(call => call.targets))
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -83,7 +87,7 @@ goTest('Go scans source without its dependencies and fails only on invalid synta
   try {
     await buildWorker(worker, go)
     await writeFile(path.join(root, 'caller.go'), 'package dispatch\nimport "example.org/absent"\nfunc Broken() { absent.Call() }\n')
-    const observation = await scanGoSource(root, { worker })
+    const observation = await scanGoSource(root, { worker }, await goFiles(root))
     expect(observation.invocations).toEqual([expect.objectContaining({ targets: [], unresolved: true })])
     // Type errors follow from what the scan does not load, so they are one summary located by file and line.
     expect(observation.diagnostics.filter(item => item.code !== 'GO_ANALYSIS_SCOPE'))
@@ -91,13 +95,13 @@ goTest('Go scans source without its dependencies and fails only on invalid synta
     expect(JSON.stringify(observation.diagnostics)).not.toContain(root)
     // Source that does not type-check, such as a redeclared function, still scans; invalid syntax does not.
     await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken() {}\nfunc Broken() {}\n')
-    expect((await scanGoSource(root, { worker })).files.map(file => file.file)).toContain('caller.go')
+    expect((await scanGoSource(root, { worker }, await goFiles(root))).files.map(file => file.file)).toContain('caller.go')
     await writeFile(path.join(root, 'caller.go'), 'package dispatch\nfunc Broken( {\n')
-    await expect(scanGoSource(root, { worker })).rejects.toThrow()
+    await expect(scanGoSource(root, { worker }, await goFiles(root))).rejects.toThrow()
     // A module whose files all sit behind build constraints, such as a tools module, adds no evidence.
     await rm(path.join(root, 'provider'), { recursive: true })
     await writeFile(path.join(root, 'caller.go'), '//go:build tools\n\npackage dispatch\n')
-    expect((await scanGoSource(root, { worker })).files).toEqual([])
+    expect((await scanGoSource(root, { worker }, await goFiles(root))).files).toEqual([])
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
@@ -120,25 +124,25 @@ goTest('Go scans every machine alike, in one linux/amd64 build context with cgo'
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
-goTest('Go reads and lists the tracked, unignored files the go command reads', async () => {
+goTest('Go reads and lists the files the go command reads', async () => {
   const { root, worker } = await fixture()
   try {
     await buildWorker(worker, go)
     await writeFiles(root, {
       'build/output.go': 'package build\n', 'generated/api.go': 'package generated\n',
       '_examples/demo.go': 'package main\nfunc main() {}\n', '.hidden/hidden.go': 'package hidden\n',
-      'testdata/case.go': 'package fixture\n', 'ignored/local.go': 'package ignored\n', '.gitignore': 'ignored/\n',
+      'testdata/case.go': 'package fixture\n',
       'tools/go.mod': 'module example.test/tools\n\ngo 1.22\n', 'tools/tools.go': 'package tools\n',
     })
-    const listed = await plugin.listSourceFiles!(root, {})
-    // Build and generated folders hold source; ignored, underscore, dot and testdata paths do not.
+    const listed = await plugin.listSourceFiles!(root, {}, await scannerFiles(root, { include: manifest.groma.scanner.include }))
+    // Build and generated folders hold source; underscore, dot and testdata paths do not.
     expect(listed).toEqual(['build/output.go', 'caller.go', 'generated/api.go', 'provider/provider.go', 'tools/tools.go'])
     // Each module scans on its own, and together they read exactly what the listing names.
-    expect((await plugin.scan(root, { worker }))!.files.map(file => file.file).sort()).toEqual(listed)
+    expect((await plugin.scan(root, { worker }, await goFiles(root)))!.files.map(file => file.file).sort()).toEqual(listed)
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
 
-goTest('Go lists vendored source, and reads only the go.mod and .go files its exclusions keep', async () => {
+goTest('Go lists vendored source, and reads only the go.mod and .go files it is handed', async () => {
   const { root, worker } = await fixture()
   try {
     await buildWorker(worker, go)
@@ -147,11 +151,12 @@ goTest('Go lists vendored source, and reads only the go.mod and .go files its ex
       'vendor/example.org/dep/dep.go': 'package dep\nfunc Broken( {\n', 'vendor/example.org/tool/go.mod': 'go 1.22\n',
       'api.pb.go': 'package dispatch\n',
     })
+    const { include, exclude } = manifest.groma.scanner
     // Vendoring is a default exclusion rather than a rule in code, so the listing still names vendored source.
-    expect(await plugin.listSourceFiles!(root, {})).toContain('vendor/example.org/dep/dep.go')
+    expect(await plugin.listSourceFiles!(root, {}, await scannerFiles(root, { include }))).toContain('vendor/example.org/dep/dep.go')
     // A global pattern hides generated files, and a `!` pattern in the scanner's own list restores one.
-    const excluded = exclusion(['*.pb.go', ...manifest.groma.scanner.exclude, '!api.pb.go'])
-    expect((await plugin.scan(root, { worker }, excluded))!.files.map(file => file.file).sort())
+    const files = await scannerFiles(root, { include, exclude: ['*.pb.go', ...exclude, '!api.pb.go'] })
+    expect((await plugin.scan(root, { worker }, files))!.files.map(file => file.file).sort())
       .toEqual(['api.pb.go', 'caller.go', 'provider/provider.go'])
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 60000)
@@ -160,7 +165,7 @@ goTest('Go attaches source ranges and binding-normalized tokens only to named op
   const { root, worker } = await fixture('go-duplicates')
   try {
     await buildWorker(worker, go)
-    const operations = (await scanGoSource(root, { worker })).operations!
+    const operations = (await scanGoSource(root, { worker }, await goFiles(root))).operations!
     const named = (name: string) => operations.find(operation => operation.name.endsWith(name))!
     // Anonymous literals, including fields of a literal passed as a call argument in or out of parentheses,
     // blank functions, generated code and initializer code.
@@ -301,7 +306,7 @@ goTest('Go reports HTTP endpoints from every supported router with their group p
   const { root, worker } = await fixture('go-http')
   try {
     await buildWorker(worker, go)
-    const { endpoints } = httpFacts(await scanGoSource(root, { worker }))
+    const { endpoints } = httpFacts(await scanGoSource(root, { worker }, await goFiles(root)))
     // Each endpoint names the operation that answers it, so a handler in another file owns the fact.
     // Only a catch-all at the root serves an empty remainder. A chi regular expression and text beside
     // a parameter in one segment constrain it; a chi regular expression that may match a slash stands
@@ -379,7 +384,7 @@ goTest('Go reports what each net/http request proves and leaves the rest unknown
   const { root, worker } = await fixture('go-http')
   try {
     await buildWorker(worker, go)
-    const { requests } = httpFacts(await scanGoSource(root, { worker }))
+    const { requests } = httpFacts(await scanGoSource(root, { worker }, await goFiles(root)))
     // A formatted value fills one segment, a percent stays literal text and an unproven method is omitted.
     // A setting, a field or a flag before a path is a configured base. A literal host, an unresolved value,
     // partly known text, a local variable, a parameter and text that continues a setting's last segment

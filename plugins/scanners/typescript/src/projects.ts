@@ -2,7 +2,6 @@ import path from 'node:path'
 import { stat } from 'node:fs/promises'
 import type { ScanDiagnostic } from '@groma/scanner'
 import type { API, ParsedCommandLine } from 'typescript/unstable/async'
-import { repositoryFiles } from '../../projects.ts'
 import type { BuildOutput } from '../../workspace-packages.ts'
 
 export interface TypeScriptProject { key: string; config?: ParsedCommandLine; files: string[] }
@@ -31,10 +30,10 @@ export function buildOutputs(root: string, projects: readonly TypeScriptProject[
 }
 
 /**
- * A nested config owns its included files before an enclosing config does. Every `tsconfig.json` the exclusions leave
- * in is read, with each config it references.
+ * A nested config owns its included `sources` before an enclosing config does. Every `tsconfig.json` among the scanner's
+ * `files` is read, with each config it references or extends as the compiler follows them.
  */
-export async function typescriptProjects(api: API, root: string, files: string[], excluded: (file: string) => boolean): Promise<{
+export async function typescriptProjects(api: API, root: string, sources: string[], files: readonly string[]): Promise<{
   projects: TypeScriptProject[]
   diagnostics: ScanDiagnostic[]
 }> {
@@ -58,10 +57,8 @@ export async function typescriptProjects(api: API, root: string, files: string[]
       await read(target)
     }
   }
-  for (const file of await repositoryFiles(root, file => path.posix.basename(file) === 'tsconfig.json' && !excluded(file))) {
-    await read(path.join(root, file))
-  }
-  const selected = new Set(files.map(file => path.resolve(root, file)))
+  for (const file of files.filter(file => path.posix.basename(file) === 'tsconfig.json')) await read(path.join(root, file))
+  const selected = new Set(sources.map(file => path.resolve(root, file)))
   const projects = [...configurations].map(([key, config]) => ({ key, config,
     files: config.fileNames.filter(file => selected.has(path.resolve(file))) }))
   const owners = new Map<string, TypeScriptProject>()

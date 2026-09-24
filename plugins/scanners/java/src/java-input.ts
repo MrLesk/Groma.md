@@ -1,5 +1,6 @@
-import { access, readFile, readdir, realpath } from 'node:fs/promises'
+import { access, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
+import { isUnder } from '../../projects.ts'
 import { readGradleProject } from './gradle.ts'
 import { readMavenProject } from './maven.ts'
 
@@ -27,46 +28,30 @@ export async function exists(file: string): Promise<boolean> {
   }
 }
 
-async function collect(root: string, directory: string): Promise<string[]> {
-  const files: string[] = []
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const file = path.join(directory, entry.name)
-    if (entry.isDirectory()) files.push(...await collect(root, file))
-    else if (entry.isFile() && file.endsWith('.java')) files.push(path.relative(root, file).split(path.sep).join('/'))
-  }
-  return files.sort()
-}
-
 /**
- * A directory with a pom.xml that `excluded` leaves in is a Maven project and every other selected directory a Gradle
- * project; the scan and the source listing both read its declarations here. Undefined for a Maven aggregator.
- * `excluded` takes paths relative to the directory.
+ * A project whose files, relative to its directory, include a pom.xml is a Maven project, and any other a Gradle
+ * project. Undefined for a Maven aggregator.
  */
-export async function readJavaProject(
-  directory: string, excluded: (file: string) => boolean = () => false,
-): Promise<JavaProject | undefined> {
-  const pom = path.join(directory, 'pom.xml')
-  if (excluded('pom.xml') || !await exists(pom)) {
-    return { release: '', ...await readGradleProject(directory, excluded), encoding: 'UTF-8', kind: 'gradle-project' }
+async function readJavaProject(directory: string, files: readonly string[]): Promise<JavaProject | undefined> {
+  if (!files.includes('pom.xml')) {
+    return { release: '', ...await readGradleProject(directory, files), encoding: 'UTF-8', kind: 'gradle-project' }
   }
-  const maven = readMavenProject(directory, await readFile(pom, 'utf8'))
+  const maven = readMavenProject(directory, await readFile(path.join(directory, 'pom.xml'), 'utf8'))
   return maven && { ...maven, kind: 'maven-project', file: 'pom.xml' }
 }
 
-/** The project's declarations and the sources under its main source roots that `excluded` leaves in. */
-export async function readJavaInput(
-  projectRoot: string, excluded: (file: string) => boolean = () => false,
-): Promise<JavaInput | undefined> {
+/**
+ * The project's declarations and the Java files among its files, which are relative to its directory, that lie under
+ * its main source roots. The scan and the source listing both read a project here.
+ */
+export async function readJavaInput(projectRoot: string, files: readonly string[]): Promise<JavaInput | undefined> {
   const root = await realpath(projectRoot)
-  const project = await readJavaProject(root, excluded)
+  const project = await readJavaProject(root, files)
   if (!project) return undefined
   const { sourceRoots, ...input } = project
-  const found = await Promise.all(sourceRoots.map(async sourceRoot => {
-    const directory = path.resolve(root, sourceRoot)
-    return await exists(directory) ? collect(root, directory) : []
-  }))
-  // Exclusions apply inside a declared root too, such as a generated root in a build directory.
-  const files = [...new Set(found.flat())].filter(file => !excluded(file)).sort()
-  if (!files.length) return undefined
-  return { ...input, root, files }
+  // Each root as a folder of the project, where '' is the project directory itself.
+  const folders = sourceRoots.map(sourceRoot => path.relative(root, path.resolve(root, sourceRoot)).split(path.sep).join('/'))
+  const sources = files.filter(file => file.endsWith('.java') && folders.some(folder => isUnder(file, folder)))
+  if (!sources.length) return undefined
+  return { ...input, root, files: sources }
 }

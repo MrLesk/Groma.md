@@ -24,13 +24,14 @@ lives one directory above it. Run `groma view --plain` to inspect the resulting
 architecture. The two source files should be inventoried without an inferred
 relationship between them: the example has not supplied call evidence.
 
-To try a change, extend the filter in `index.ts` to accept `.mjs` files too:
-`entry.name.endsWith('.js') || entry.name.endsWith('.mjs')`. Add `src/*.mjs` to
-`watch.include` as well. Run `bun run build` in the plugin folder, then
-`groma scan` again in the project. The supplied `extra.mjs` now enters the map
-without reinstalling the plugin. To observe a source inventory change, add a `.js` file
-under `project/src` and rerun the scan. Restart an existing watch session after
-changing plugin implementation; source watches do not reload plugin code.
+The scanner reads exactly the files its include list names, and the package's
+`groma.scanner.include` is the default that `groma scanner add` writes into the
+project. To try a change, add `src/*.mjs` to the scanner's `include` list in
+`project/groma/scanners.json`, then run `groma scan` again: the supplied
+`extra.mjs` enters the map with no change to the plugin. To observe a source
+inventory change, add a `.js` file under `project/src` and rerun the scan.
+Restart an existing watch session after changing plugin implementation; source
+watches do not reload plugin code.
 
 Before sharing, choose your own package name and scanner ID, keep the manifest
 ID and exported ID equal, and update the package description and version. List
@@ -46,7 +47,7 @@ your package to appear in the official catalog before installing it.
 
 The optional discovery metadata describes a marker file in this example.
 It does not create an automatic recommendation for an unlisted package, and it
-is separate from the source watch patterns. A supported version cannot be
+is separate from the include list. A supported version cannot be
 inferred from a marker file alone.
 
 The project is a teaching fixture for manual use. It is not an automated package

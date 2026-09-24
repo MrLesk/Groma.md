@@ -6,12 +6,11 @@ import { goModules, goSources } from './sources.ts'
 
 const scanner = {
   id: 'go',
-  watch: { include: ['**/*.go', '**/go.mod', '**/go.sum', '**/go.work'], exclude: [] },
-  listSourceFiles: goSources,
+  listSourceFiles: async (_root, _settings, candidates) => goSources(candidates),
   checkReadiness: async root => { await checkGoReadiness(root) },
   readCodeStructure: readGoCodeStructure,
   scan: scanGoSource,
 } satisfies ScannerPlugin
 
-export default projectScanner(scanner, async (root, _settings, excluded) =>
-  (await goModules(root, excluded)).map(module => path.join(root, module)))
+export default projectScanner(scanner, async (root, _settings, files) =>
+  goModules(files).map(module => path.join(root, module)))

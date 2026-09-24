@@ -1,55 +1,46 @@
 import path from 'node:path'
-import { isUnder, repositoryFiles } from '../../projects.ts'
-import { projectScanner } from '../../project-scanner.ts'
-import type { ScannerPlugin } from '@groma/scanner'
+import { projectScanner, within } from '../../project-scanner.ts'
+import type { ScannerPlugin, ScannerSettings } from '@groma/scanner'
 import { checkJavaReadiness, readJavaOutline, scanJavaSource } from './adapter.ts'
-import { buildScripts, gradleProjects, settingsScripts, withGradleDiagnostics } from './gradle.ts'
-import { readJavaProject } from './java-input.ts'
+import { gradleProjects, withGradleDiagnostics } from './gradle.ts'
+import { readJavaInput } from './java-input.ts'
 import { summarizeMissingTypes } from './missing-types.ts'
 
 const scanner = {
   id: 'java',
-  watch: {
-    include: ['**/*.java', '**/pom.xml', '**/.mvn/**', ...[...buildScripts, ...settingsScripts].map(file => `**/${file}`)],
-    exclude: [],
-  },
-  checkReadiness: async (root, _settings, excluded) => { await checkJavaReadiness(root, {}, excluded) },
+  checkReadiness: async (root, _settings, files) => { await checkJavaReadiness(root, {}, files) },
   readCodeStructure: readJavaOutline,
   scan: scanJavaSource,
 } satisfies ScannerPlugin
 
-/**
- * Maven and Gradle project directories whose declarations `excluded` leaves in, with the Gradle declarations only a
- * Gradle run could resolve.
- */
-async function javaProjects(root: string, excluded: (file: string) => boolean = () => false) {
-  const maven = await repositoryFiles(root, file => path.posix.basename(file) === 'pom.xml' && !excluded(file))
-  const gradle = await gradleProjects(root, excluded)
+/** Maven and Gradle project directories among the files, with the Gradle declarations only a Gradle run could resolve. */
+async function javaProjects(root: string, files: readonly string[]) {
+  const maven = files.filter(file => path.posix.basename(file) === 'pom.xml')
+  const gradle = await gradleProjects(root, files)
   const directories = new Set([...maven.map(file => path.dirname(path.join(root, file))), ...gradle.directories])
   return { directories: [...directories].sort(), diagnostics: gradle.diagnostics }
 }
 
 /**
- * The files the build compiles, before exclusions: every file under each project's main source roots, never its test
- * sources.
+ * The files the build compiles, before exclusions: the candidates under each project's main source roots, never its
+ * test sources, read the way the scan reads them.
  */
-async function javaSources(root: string): Promise<string[]> {
-  const { directories } = await javaProjects(root)
-  const roots: string[] = []
-  for (const directory of directories) {
-    for (const source of (await readJavaProject(directory))?.sourceRoots ?? []) {
-      roots.push(path.relative(root, path.resolve(directory, source)).split(path.sep).join('/'))
-    }
+async function javaSources(root: string, _settings: ScannerSettings, candidates: readonly string[]): Promise<string[]> {
+  const sources = new Set<string>()
+  for (const directory of (await javaProjects(root, candidates)).directories) {
+    const project = within(root, directory, candidates)
+    const input = await readJavaInput(directory, project.files)
+    for (const file of input?.files ?? []) sources.add(path.posix.join(project.key, file))
   }
-  return repositoryFiles(root, file => file.endsWith('.java') && roots.some(source => isUnder(file, source)))
+  return [...sources].sort()
 }
 
 export default {
-  ...projectScanner(scanner, async (root, _settings, excluded) => (await javaProjects(root, excluded)).directories),
+  ...projectScanner(scanner, async (root, _settings, files) => (await javaProjects(root, files)).directories),
   listSourceFiles: javaSources,
-  scan: async (root, settings, excluded) => {
-    const projects = await javaProjects(root, excluded)
-    const observation = await projectScanner(scanner, async () => projects.directories).scan(root, settings, excluded)
+  scan: async (root, settings, files) => {
+    const projects = await javaProjects(root, files)
+    const observation = await projectScanner(scanner, async () => projects.directories).scan(root, settings, files)
     return withGradleDiagnostics(summarizeMissingTypes(observation), projects.diagnostics)
   },
 } satisfies ScannerPlugin

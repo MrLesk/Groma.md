@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { ASTWithSource, Call, CssSelector, ImplicitReceiver, PropertyRead, RecursiveAstVisitor, SelectorMatcher, ThisReceiver,
   TmplAstRecursiveVisitor, parseTemplate, tmplAstVisitAll, type AST, type TmplAstBoundEvent, type TmplAstElement, type TmplAstNode } from '@angular/compiler'
@@ -18,12 +18,15 @@ function componentResource(root: string, directive: SourceDirective, resource: s
   return file.startsWith('../') ? undefined : file
 }
 
-/** A named resource the checkout lacks leaves the component without it rather than failing the scan. */
+/**
+ * A named resource outside the scanner's files, such as one the checkout lacks, leaves the component without it rather
+ * than failing the scan.
+ */
 function missingResource(evidence: Evidence, root: string, directive: SourceDirective, resource: string): void {
   const source = directive.declaration.getSourceFile()
   evidence.diagnostics.push({ severity: 'warning', code: 'angular-missing-resource', file: relative(root, source.fileName),
     line: source.getLineAndCharacterOfPosition(directive.metadata.getStart()).line + 1,
-    message: `${resource} does not exist; the component is scanned without it.` })
+    message: `${resource} is not among the files the scanner reads; the component is scanned without it.` })
 }
 
 function nodes(text: string, file: string, options: Parameters<typeof parseTemplate>[2] = {}): TmplAstNode[] {
@@ -63,22 +66,23 @@ interface Send { operation: string; line: number; position: number }
 
 /**
  * Every component's template, parsed once, with the source unit and output bindings it establishes. Inline templates
- * are read in place, so their offsets are class file offsets.
+ * are read in place, so their offsets are class file offsets; a template or stylesheet file is read only from `files`.
  */
 export class Templates {
   private readonly templates = new Map<SourceDirective, ParsedTemplate | undefined>()
   private readonly root: string
   private readonly evidence: Evidence
-  constructor(root: string, evidence: Evidence) { this.root = root; this.evidence = evidence }
+  private readonly files: ReadonlySet<string>
+  constructor(root: string, evidence: Evidence, files: ReadonlySet<string>) { this.root = root; this.evidence = evidence; this.files = files }
 
-  /** A component's class with the template and stylesheets it names that exist in the checkout. */
+  /** A component's class with the template and stylesheets it names among the scanner's files. */
   unit(component: SourceDirective): ScanSourceUnit {
     const primary = relative(this.root, component.declaration.getSourceFile().fileName)
     const template = component.view?.templateUrl === undefined ? undefined : this.parsed(component)?.file
     const styles = (component.view?.styles ?? []).flatMap(resource => {
       const file = componentResource(this.root, component, resource)
       if (file === undefined) return []
-      if (existsSync(path.join(this.root, file))) return [file]
+      if (this.files.has(file)) return [file]
       missingResource(this.evidence, this.root, component, resource)
       return []
     })
@@ -102,7 +106,7 @@ export class Templates {
     const url = directive.view?.templateUrl
     const file = url === undefined ? undefined : componentResource(this.root, directive, url)
     if (url === undefined || file === undefined) return undefined
-    if (!existsSync(path.join(this.root, file))) {
+    if (!this.files.has(file)) {
       missingResource(this.evidence, this.root, directive, url)
       return undefined
     }

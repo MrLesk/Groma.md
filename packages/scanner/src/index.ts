@@ -150,28 +150,25 @@ export interface SourceReference {
   symbols: string[]
 }
 
+/**
+ * A scanner reads only the files Groma hands it: the repository files its `include` list matches, less the ones its
+ * exclusions name and, by default, the ones Git ignores. Paths are repository-relative with `/` separators. The
+ * scanner applies only the language's own build rules within them, such as which source roots a project compiles.
+ */
 export interface ScannerPlugin {
   id: string
-  /** Repository-relative patterns for source and configuration changes that trigger analysis. */
-  watch: { include: string[]; exclude: string[] }
-  /**
-   * Check source inputs and scanner-owned tools, skipping inputs `excluded` names, as `scan` does. Project dependency
-   * installation or builds must not be prerequisites.
-   */
-  checkReadiness?(repositoryRoot: string, settings?: ScannerSettings, excluded?: (file: string) => boolean): Promise<void>
+  /** Check the source inputs among `files` and scanner-owned tools; project dependency installation or builds must not be prerequisites. */
+  checkReadiness?(repositoryRoot: string, settings: ScannerSettings, files: readonly string[]): Promise<void>
   /** Source outline for Code references, required of official scanners; this data is never architecture persistence. */
   readCodeStructure?(repositoryRoot: string, references: readonly SourceReference[], settings?: ScannerSettings): Promise<CodeFile[]>
   /**
-   * Repository-relative files this scanner would analyze for these settings, required of official
-   * scanners. It selects files the way `scan` does, without analyzing them or running project tools,
-   * so Groma can explain why a file has no architecture owner.
+   * The files among `candidates`, the repository files the scanner's `include` list matches before exclusions, that the
+   * language's build compiles, required of official scanners. It analyzes nothing and runs no project tool, so Groma
+   * can explain why a file has no architecture owner.
    */
-  listSourceFiles?(repositoryRoot: string, settings?: ScannerSettings): Promise<string[]>
-  /**
-   * `excluded` tests a repository-relative path against this scanner's exclusions, so the scan can skip that source
-   * before parsing; the host also filters returned evidence.
-   */
-  scan(repositoryRoot: string, settings?: ScannerSettings, excluded?: (file: string) => boolean): Promise<ScanObservation | undefined>
+  listSourceFiles?(repositoryRoot: string, settings: ScannerSettings, candidates: readonly string[]): Promise<string[]>
+  /** Analyze `files`; the host also filters the returned evidence by the scanner's exclusions. */
+  scan(repositoryRoot: string, settings: ScannerSettings, files: readonly string[]): Promise<ScanObservation | undefined>
 }
 
 type ObservationInput = Omit<ScanObservation, 'schemaVersion'>

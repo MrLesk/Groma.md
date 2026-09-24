@@ -45,9 +45,13 @@ async function project(output: string, name: string, packages: string): Promise<
   const git = Bun.spawn(['git', 'init', '--quiet', root], { stderr: 'pipe' })
   const [code, error] = await Promise.all([git.exited, new Response(git.stderr).text()])
   if (code !== 0) throw new Error(error)
-  await writeScannerConfig(root, { scanners: Object.keys(examples).map(id => ({
-    id, source: path.join(packages, id),
-  })) })
+  const scanners = []
+  for (const id of Object.keys(examples)) {
+    const manifest = JSON.parse(await readFile(path.join(packages, id, 'package.json'), 'utf8'))
+    scanners.push({ id, source: path.join(packages, id), ...manifest.groma.scanner.exclude && { exclude: manifest.groma.scanner.exclude },
+      include: manifest.groma.scanner.include })
+  }
+  await writeScannerConfig(root, { scanners })
   return root
 }
 

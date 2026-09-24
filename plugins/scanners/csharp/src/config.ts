@@ -1,5 +1,3 @@
-import { stat } from 'node:fs/promises'
-import path from 'node:path'
 import type { ScannerSettings } from '@groma/scanner'
 
 export interface CSharpConfig {
@@ -38,12 +36,4 @@ export function parseCSharpSettings(config: ScannerSettings = {}): CSharpConfig 
     maxFiles: positiveInteger(config.maxFiles, 'maxFiles', defaults.maxFiles),
     timeoutSeconds: positiveInteger(config.timeoutSeconds, 'timeoutSeconds', defaults.timeoutSeconds),
   }
-}
-
-export async function validateInput(root: string, selected: string): Promise<string> {
-  const full = path.resolve(root, selected)
-  const relative = path.relative(root, full)
-  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('C# scan input must stay inside the repository')
-  if (!/\.(?:csproj|slnx?)$/i.test(full) || !(await stat(full)).isFile()) throw new Error('C# input must be an existing .csproj, .sln, or .slnx file')
-  return full
 }

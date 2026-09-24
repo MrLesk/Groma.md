@@ -12,16 +12,16 @@ async function plugin(root: string, id: string, groma: string, blocked: boolean)
   const source = path.join(root, id)
   await mkdir(source)
   await writeFile(path.join(source, 'package.json'), JSON.stringify({ name: id, version: '1.0.0',
-    groma: { scanner: { id, entry: './index.js', discovery: {
+    groma: { scanner: { id, entry: './index.js', include: ['**/*.fixture'], discovery: {
       technologies: ['react'], rules: [{ type: 'dependency', files: ['**/package.json'], technology: 'react', kind: 'framework', package: 'react' }],
       compatibility: { groma },
     } } },
   }))
   await writeFile(path.join(source, 'index.js'), blocked ? 'throw new Error("Incompatible plugin was imported")' : `
     import { appendFile } from 'node:fs/promises';
-    export default { id: '${id}', watch: { include: ['**/*.fixture'], exclude: [] },
+    export default { id: '${id}',
       async scan(root) { await appendFile(root + '/calls.txt', 'x'); return undefined } }`)
-  return { id, source }
+  return { id, source, include: ['**/*.fixture'] }
 }
 
 test.concurrent('a Groma mismatch blocks plugin code while another selection can scan', async () => {

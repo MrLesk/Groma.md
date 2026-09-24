@@ -36,18 +36,14 @@ function parseWarning(source: ts.SourceFile): ScanDiagnostic | undefined {
 
 export default {
   id: 'javascript',
-  watch: {
-    include: ['**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx', '**/*.html', '**/package.json', '**/angular.json'],
-    exclude: [],
-  },
-  listSourceFiles: root => javaScriptFiles(root),
-  async checkReadiness(root, _settings?, excluded?) {
-    if (!(await javaScriptFiles(root, excluded)).length) {
+  listSourceFiles: async (_root, _settings, candidates) => javaScriptFiles(candidates),
+  async checkReadiness(_root, _settings, files) {
+    if (!javaScriptFiles(files).length) {
       throw new Error('javascript: No JavaScript source files were found in the Git repository.')
     }
   },
-  async scan(root, _settings?, excluded = () => false) {
-    const sources = await javaScriptSources(root, excluded)
+  async scan(root, _settings, files) {
+    const sources = await javaScriptSources(root, files)
     if (!sources.length) return undefined
     const parsed = sources.map(parse)
     const warnings = parsed.map(parseWarning)
@@ -70,7 +66,7 @@ export default {
       diagnostics: [{ severity: 'info', code: 'JAVASCRIPT_SOURCE_SCOPE',
         message: 'Source syntax only. Module loading, dynamic dispatch, framework wiring and external symbols remain unresolved.' },
       ...warnings.filter(warning => warning !== undefined)],
-    }), await javaScriptEntries(root, readable), excluded)
+    }), await javaScriptEntries(root, readable), files)
   },
   // Every file this scanner owns is a JavaScript source, so no reference is filtered out here.
   readCodeStructure: readJavaScriptOutline,

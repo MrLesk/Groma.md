@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import type { ScanDiagnostic, ScanHttpEndpoint, ScanHttpRequest, ScanSymbol, ScanOperation, ScanInvocation } from '@groma/scanner'
 
-import { listTypeScriptFiles } from './files.ts'
+import { typeScriptSources } from './files.ts'
 import { displayName, kebabCase } from './naming.ts'
 import { analyzeSourceFiles } from './source-analysis.ts'
 import type { SourceEntry } from '../../entry-points/javascript.ts'
@@ -41,31 +41,31 @@ export function fileLabel(file: string): string {
   return displayName(kebabCase(stem))
 }
 
-export async function packageName(repositoryRoot: string): Promise<string> {
-  try {
-    const source = await readFile(path.join(repositoryRoot, 'package.json'), 'utf8')
-    const name = (JSON.parse(source) as { name?: unknown }).name
-    if (typeof name === 'string' && kebabCase(name) !== '') {
-      return displayName(kebabCase(name))
+/** The name of the root package, when the scanner reads its manifest, else of the repository directory. */
+export async function packageName(repositoryRoot: string, files: readonly string[]): Promise<string> {
+  if (files.includes('package.json')) {
+    try {
+      const source = await readFile(path.join(repositoryRoot, 'package.json'), 'utf8')
+      const name = (JSON.parse(source) as { name?: unknown }).name
+      if (typeof name === 'string' && kebabCase(name) !== '') {
+        return displayName(kebabCase(name))
+      }
+    } catch {
+      // The repository directory remains the deterministic name.
     }
-  } catch {
-    // The repository directory remains the deterministic name.
   }
   return displayName(kebabCase(path.basename(repositoryRoot)))
 }
 
-/** The graph of the sources `excluded` leaves in, compiled with the configs and workspace manifests it leaves in. */
-export async function buildImportGraph(
-  repositoryRoot: string,
-  excluded: (file: string) => boolean = () => false,
-): Promise<ImportGraph> {
-  const paths = (await listTypeScriptFiles(repositoryRoot)).filter(file => !excluded(file))
-  const files = new Set(paths)
-  const { files: analyses, operations, invocations, httpEndpoints, httpRequests, entries, diagnostics, buildOutputs } = await analyzeSourceFiles(repositoryRoot, paths, excluded)
+/** The graph of the TypeScript sources among `files`, compiled with the configs and workspace manifests among them. */
+export async function buildImportGraph(repositoryRoot: string, files: readonly string[]): Promise<ImportGraph> {
+  const paths = typeScriptSources(files)
+  const sources = new Set(paths)
+  const { files: analyses, operations, invocations, httpEndpoints, httpRequests, entries, diagnostics, buildOutputs } = await analyzeSourceFiles(repositoryRoot, paths, files)
   const nodes = new Map<string, ImportGraphNode>()
   for (const analysis of analyses) {
     const node = nodes.get(analysis.file) ?? { file: analysis.file, imports: [], importedBy: [], symbols: [] }
-    node.imports = [...new Set([...node.imports, ...analysis.imports.filter(file => files.has(file))])].sort()
+    node.imports = [...new Set([...node.imports, ...analysis.imports.filter(file => sources.has(file))])].sort()
     node.symbols = [...new Map([...node.symbols, ...analysis.symbols].map(symbol => [symbol.id, symbol])).values()]
     nodes.set(node.file, node)
   }

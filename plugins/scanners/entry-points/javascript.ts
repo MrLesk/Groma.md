@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createScanObservation, type ScanEntryPoint, type ScanObservation } from '@groma/scanner'
-import { repositoryFiles } from '../projects.ts'
 import type { EntrySources } from './source.ts'
 import { sourceOf, type BuildOutput } from '../workspace-packages.ts'
 
@@ -146,21 +145,21 @@ async function declaredEntries(root: string, declarations: readonly string[], pa
 }
 
 /** A declared entry on the source file it stands for, such as the source a `bin` under a build's `outDir` comes from. */
-function sourced(entry: SourceEntry, root: string, outputs: readonly BuildOutput[] = []): SourceEntry {
-  const file = sourceOf(root, entry.file, outputs)
+function sourced(entry: SourceEntry, files: ReadonlySet<string>, outputs: readonly BuildOutput[] = []): SourceEntry {
+  const file = sourceOf(entry.file, outputs, files)
   return file === undefined ? entry : { ...entry, file }
 }
 
 /**
- * Shared source facts for JS/TS and framework observers; each contributes only the files it analyzed, and reads no
- * manifest, workspace file or page its exclusions name.
+ * Shared source facts for JS/TS and framework observers; each contributes only the files it analyzed, and reads only the
+ * manifests, workspace files and pages among its `files`.
  */
 export async function withJavaScriptEntries(
-  root: string, observation: ScanObservation | undefined, inputs: EntrySources, excluded: (file: string) => boolean,
+  root: string, observation: ScanObservation | undefined, inputs: EntrySources, files: readonly string[],
 ): Promise<ScanObservation | undefined> {
   if (!observation) return undefined
-  const inventory = await repositoryFiles(root, file => !excluded(file)
-    && (['package.json', 'angular.json', 'project.json', 'nx.json'].includes(path.posix.basename(file)) || file.endsWith('.html')))
+  const inventory = files.filter(file =>
+    ['package.json', 'angular.json', 'project.json', 'nx.json'].includes(path.posix.basename(file)) || file.endsWith('.html'))
   const workspaces = new Set(inventory.filter(file => path.posix.basename(file) === 'nx.json').map(file => path.posix.dirname(file)))
   const packages = new Set(inventory.filter(file => path.posix.basename(file) === 'package.json').map(file => path.posix.dirname(file)))
   const active = new Set(observation.files.map(file => packageFor(file.file, packages)))
@@ -168,7 +167,8 @@ export async function withJavaScriptEntries(
   const entries = [...inputs.entries, ...await declaredEntries(root, declarations, packages, workspaces)]
   const inventoryFiles = [...observation.files]
   const visible = new Set(inventoryFiles.map(file => file.file))
-  const entryPoints = entries.map(entry => sourced(entry, root, inputs.buildOutputs)).flatMap(({ compiled = [], ...entry }) => {
+  const readable = new Set(files)
+  const entryPoints = entries.map(entry => sourced(entry, readable, inputs.buildOutputs)).flatMap(({ compiled = [], ...entry }) => {
     if (!inputs.imports.has(entry.file)) return []
     const reached = reachedFiles(entry.file, compiled, inputs.imports, packages, observation.sourceUnits ?? [])
     const members = observation.files.filter(file => reached.has(file.file))

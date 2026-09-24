@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ScanDiagnostic } from '@groma/scanner'
 import ts from 'typescript'
-import { hasDependency, isUnder } from '../../projects.ts'
+import { isUnder } from '../../projects.ts'
+import { hasDependency } from '../../typescript-project.ts'
 import { nextRouters, routeLocation, type Routers } from './routes.ts'
 
 /** An extended config a fresh checkout lacks: an uninstalled package's (TS6053) or a generated file (TS5083). */
@@ -17,11 +18,11 @@ function failDiagnostics(diagnostics: readonly ts.Diagnostic[]): void {
   if (errors.length) throw new Error(errors.map(item => `${item.file?.fileName ?? 'React'}: ${ts.flattenDiagnosticMessageText(item.messageText, '\n')}`).join('\n'))
 }
 
-/** The `tsconfig.json` that compiles a package: its own, else the nearest one in its repository ancestors. */
-function packageConfig(directory: string, repositoryRoot: string): string {
+/** The `tsconfig.json` among `configs` that compiles a package: its own, else the nearest one in its repository ancestors. */
+function packageConfig(directory: string, repositoryRoot: string, configs: ReadonlySet<string>): string {
   for (let current = directory; ; current = path.dirname(current)) {
     const file = path.join(current, 'tsconfig.json')
-    if (existsSync(file)) return file
+    if (configs.has(relative(repositoryRoot, file))) return file
     if (current === repositoryRoot) throw new Error(`${directory}: no TypeScript config in the package or its repository ancestors`)
   }
 }
@@ -68,16 +69,16 @@ export interface ReactProject {
 }
 
 /**
- * A React package's program. `typescriptSources` holds the repository's TypeScript sources less this scanner's
- * exclusions, so declaration files and the tests its defaults exclude are not React sources. A file belongs
- * to the nearest of the React `packages`, listed deepest first, so a package whose config also compiles a
- * nested package leaves that package's files to it. A package without components of its own, such as one
- * holding only excluded tests, has nothing to report.
+ * A React package's program. `typescriptSources` holds the TypeScript sources among the scanner's files, so
+ * declaration files and the tests its defaults exclude are not React sources, and `configs` the `tsconfig.json`
+ * files among them. A file belongs to the nearest of the React `packages`, listed deepest first, so a package
+ * whose config also compiles a nested package leaves that package's files to it. A package without components
+ * of its own, such as one holding only excluded tests, has nothing to report.
  */
 export function reactProject(directory: string, repositoryRoot: string, typescriptSources: ReadonlySet<string>,
-  packages: readonly string[]): ReactProject | undefined {
+  configs: ReadonlySet<string>, packages: readonly string[]): ReactProject | undefined {
   const manifest = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'))
-  const configFile = packageConfig(directory, repositoryRoot)
+  const configFile = packageConfig(directory, repositoryRoot, configs)
   try {
     const project = relative(repositoryRoot, directory)
     const owner = (file: string) => packages.find(item => isUnder(file, item)) ?? project

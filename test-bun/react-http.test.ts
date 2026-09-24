@@ -4,7 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ScanObservation, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/react/build.ts'
+import manifest from '../plugins/scanners/react/package.json'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the React scanner with its package defaults. */
+const reactFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function setup(fixture = 'react-http') {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-react-http-'))
@@ -47,7 +52,7 @@ function requests(observation: ScanObservation): string[] {
 test.concurrent('the built React package reports fetch and axios requests', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await reactFiles(root)))!
 
     // A project-declared `fetch`, one the project imports from its own module or a package other than
     // `node-fetch`, a `get` on any other object, a reassigned axios instance, and the named axios exports
@@ -140,7 +145,7 @@ test.concurrent('the built React package reports fetch and axios requests', asyn
 test.concurrent('the built React package reports Next.js route handlers and API routes as endpoints', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await reactFiles(root)))!
 
     expect(endpoints(observation)).toEqual([
       // A route group organizes files without serving a segment.
@@ -178,7 +183,7 @@ test.concurrent('the built React package reports Next.js route handlers and API 
 test.concurrent('core derives rows from the React requests to the route files that serve them', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const react = (await scanner.scan(root))!
+    const react = (await scanner.scan(root, {}, await reactFiles(root)))!
     const owners = new Map(react.files.map(file => [file.file, file.file]))
 
     // The fixture's requests and its Next.js route files are both React facts.
@@ -201,7 +206,7 @@ test.concurrent('core derives rows from the React requests to the route files th
 test.concurrent('Next.js routes come from the active routers of a project that declares next', async () => {
   const { temporary, root, scanner } = await setup('react-next-routers')
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await reactFiles(root)))!
 
     // `pages` at the project root wins over `src/pages`, while `src/app` serves when the root has no `app`.
     // A project without `next` reports no endpoint for its `app` directory.
@@ -215,7 +220,7 @@ test.concurrent('Next.js routes come from the active routers of a project that d
 test.concurrent('an axios client is configured by what the project sets on its defaults', async () => {
   const { temporary, root, scanner } = await setup('react-client-defaults')
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await reactFiles(root)))!
 
     expect(requests(observation)).toEqual([
       // The one assignment to the default client's baseURL, in another file that imports the default

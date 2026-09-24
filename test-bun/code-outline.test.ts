@@ -33,7 +33,6 @@ test.concurrent('a scanner that cannot outline, such as one missing its worker, 
     await cp(mixedFixture, root, { recursive: true })
     await writeFile(path.join(root, 'plugins/beta/index.js'), `export default {
   id: 'beta',
-  watch: { include: [], exclude: [] },
   async scan() { return undefined },
   async readCodeStructure() { throw new Error('BETA_WORKER_MISSING') },
 }

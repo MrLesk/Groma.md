@@ -5,14 +5,22 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import type { ScannerPlugin } from '@groma/scanner'
 import { buildPackage as react } from '../plugins/scanners/react/build.ts'
+import reactManifest from '../plugins/scanners/react/package.json'
 import { buildPackage as vue } from '../plugins/scanners/vue/build.ts'
+import vueManifest from '../plugins/scanners/vue/package.json'
 import vueScanner, { scanVue } from '../plugins/scanners/vue/src/index.ts'
 import { buildPackage as angular } from '../plugins/scanners/angular/build.ts'
+import angularManifest from '../plugins/scanners/angular/package.json'
 import { inferRelationships } from '../src/relationship-inference.ts'
 import { buildImportGraph } from '../plugins/scanners/typescript/src/graph.ts'
-import { frameworkProjects } from '../plugins/scanners/projects.ts'
-import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
-import typescript from '../plugins/scanners/typescript/src/index.ts'
+import typescriptManifest from '../plugins/scanners/typescript/package.json'
+import { frameworkProjects } from '../plugins/scanners/typescript-project.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands each scanner with its package defaults. */
+const reactFiles = (root: string) => scannerFiles(root, reactManifest.groma.scanner)
+const vueFiles = (root: string) => scannerFiles(root, vueManifest.groma.scanner)
+const typescriptFiles = (root: string) => scannerFiles(root, typescriptManifest.groma.scanner)
 
 async function repository() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-nested-'))
@@ -21,10 +29,10 @@ async function repository() {
   return root
 }
 
-for (const [id, fixture, build, emitter, receiver] of [
-  ['react', 'react-callback', react, 'editor.tsx', 'host.tsx'],
-  ['vue', 'vue-output', vue, 'Emitter.vue', 'receiver.ts'],
-  ['angular', 'angular-output', angular, 'emitter.ts', 'host.ts'],
+for (const [id, fixture, build, manifest, emitter, receiver] of [
+  ['react', 'react-callback', react, reactManifest, 'editor.tsx', 'host.tsx'],
+  ['vue', 'vue-output', vue, vueManifest, 'Emitter.vue', 'receiver.ts'],
+  ['angular', 'angular-output', angular, angularManifest, 'emitter.ts', 'host.ts'],
 ] as const) {
   test.concurrent(`${id} scans sibling nested projects without mixing callback targets`, async () => {
     const root = await repository()
@@ -56,8 +64,9 @@ for (const [id, fixture, build, emitter, receiver] of [
       }
       await build(artifact)
       const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
-      await scanner.checkReadiness?.(root)
-      const observation = (await scanner.scan(root))!
+      const files = () => scannerFiles(root, manifest.groma.scanner)
+      await scanner.checkReadiness?.(root, {}, await files())
+      const observation = (await scanner.scan(root, {}, await files()))!
       const owners = new Map(observation.files.map(file => [file.file, file.file]))
       const relationships = inferRelationships([observation], owners)
       for (const app of ['apps/one', 'apps/two']) {
@@ -66,13 +75,14 @@ for (const [id, fixture, build, emitter, receiver] of [
       expect(relationships.every(relation => relation.source.split('/')[1] === relation.target.split('/')[1])).toBe(true)
       expect(observation.invocations!.every(call => call.binding?.file.startsWith('apps/'))).toBe(true)
       expect(observation.files.every(file => file.file.startsWith('apps/'))).toBe(true)
-      expect(compileWatchPatterns(scanner.watch)('apps/two/tsconfig.json')).toBe(true)
+      // A nested project's config is one of the scanner's files, so changing it triggers the scanner.
+      expect(await files()).toContain('apps/two/tsconfig.json')
       await writeFile(path.join(root, 'apps/two/tsconfig.json'), '{ invalid')
-      await expect(scanner.checkReadiness!(root)).rejects.toThrow()
-      await expect(scanner.scan(root)).rejects.toThrow()
+      await expect(scanner.checkReadiness!(root, {}, await files())).rejects.toThrow()
+      await expect(scanner.scan(root, {}, await files())).rejects.toThrow()
       await rm(path.join(root, 'apps'), { recursive: true })
-      await scanner.checkReadiness?.(root)
-      expect(await scanner.scan(root)).toBeUndefined()
+      await scanner.checkReadiness?.(root, {}, await files())
+      expect(await scanner.scan(root, {}, await files())).toBeUndefined()
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(artifact, { recursive: true, force: true })
@@ -92,7 +102,7 @@ test.concurrent('project discovery includes peer dependencies but excludes ignor
     }
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ dependencies: { react: '*' } }))
     await writeFile(path.join(root, 'tsconfig.json'), '{}')
-    expect(await frameworkProjects(root, 'react', ['.tsx'])).toEqual([path.join(root, 'packages/ui')])
+    expect(await frameworkProjects(root, await reactFiles(root), 'react', ['.tsx'])).toEqual([path.join(root, 'packages/ui')])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -104,7 +114,7 @@ test.concurrent('an export-only package manifest does not hide its parent framew
     await mkdir(path.join(root, 'src/widget'), { recursive: true })
     await writeFile(path.join(root, 'src/widget/package.json'), JSON.stringify({ exports: './Widget.vue' }))
     await writeFile(path.join(root, 'src/widget/Widget.vue'), '<template><p>Widget</p></template>')
-    expect(await frameworkProjects(root, 'vue', ['.vue'])).toEqual([root])
+    expect(await frameworkProjects(root, await vueFiles(root), 'vue', ['.vue'])).toEqual([root])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -116,10 +126,12 @@ test.concurrent('a Vue package uses an ancestor TypeScript config that includes 
     await mkdir(path.join(root, 'packages/client'), { recursive: true })
     await writeFile(path.join(root, 'packages/client/package.json'), JSON.stringify({ name: 'client', dependencies: { vue: '*' } }))
     await writeFile(path.join(root, 'packages/client/App.vue'), '<script setup lang="ts">const title = "App"</script><template>{{ title }}</template>')
-    expect(await frameworkProjects(root, 'vue', ['.vue'])).toEqual([])
-    expect(await frameworkProjects(root, 'vue', ['.vue'], { inheritConfig: true })).toEqual([path.join(root, 'packages/client')])
-    expect((await scanVue(root))?.files.map(file => file.file)).toContain('packages/client/App.vue')
-    expect(await vueScanner.listSourceFiles(root)).toContain('packages/client/App.vue')
+    const files = await vueFiles(root)
+    expect(await frameworkProjects(root, files, 'vue', ['.vue'])).toEqual([])
+    expect(await frameworkProjects(root, files, 'vue', ['.vue'], { inheritConfig: true })).toEqual([path.join(root, 'packages/client')])
+    expect((await scanVue(root, {}, files))?.files.map(file => file.file)).toContain('packages/client/App.vue')
+    const candidates = await scannerFiles(root, { include: vueManifest.groma.scanner.include })
+    expect(await vueScanner.listSourceFiles(root, {}, candidates)).toContain('packages/client/App.vue')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -135,7 +147,7 @@ test.concurrent('a nested Vue package owns its components once when the parent c
     await writeFile(path.join(child, 'package.json'), JSON.stringify({ name: 'child', dependencies: { vue: '*' } }))
     await writeFile(path.join(child, 'tsconfig.json'), JSON.stringify({ include: ['*.vue'] }))
     await writeFile(path.join(child, 'Child.vue'), '<script setup lang="ts">function wave() { return 42 }</script><template>Child</template>')
-    const observation = (await scanVue(root))!
+    const observation = (await scanVue(root, {}, await vueFiles(root)))!
     expect(observation.files.find(file => file.file === 'packages/child/Child.vue')?.roots).toHaveLength(1)
     expect(observation.operations?.filter(operation => operation.file === 'packages/child/Child.vue' && operation.name === 'wave')).toHaveLength(1)
     expect(observation.files.find(file => file.file === 'helper.ts')?.roots).toHaveLength(1)
@@ -156,7 +168,7 @@ test.concurrent('TypeScript uses nested config aliases and refreshes resolution 
       await writeFile(path.join(directory, 'target.ts'), 'export function work() { return 1 }')
       await writeFile(path.join(directory, 'other.ts'), 'export function work() { return 2 }')
     }
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await typescriptFiles(root))
     for (const app of ['one', 'two']) expect(graph.files.find(file => file.file === `apps/${app}/entry.ts`)!.imports).toEqual([`apps/${app}/target.ts`])
     const operations = new Map(graph.operations.map(operation => [operation.id, operation]))
     const calls = graph.invocations.filter(call => operations.get(call.source)?.name === 'run')
@@ -168,10 +180,12 @@ test.concurrent('TypeScript uses nested config aliases and refreshes resolution 
     await writeFile(path.join(root, 'apps/one/tsconfig.json'), JSON.stringify({ compilerOptions: {
       module: 'preserve', moduleResolution: 'bundler', paths: { '@local': ['./other.ts'] },
     } }))
-    const after = await buildImportGraph(root)
+    const files = await typescriptFiles(root)
+    const after = await buildImportGraph(root, files)
     expect(after.files.find(file => file.file === 'apps/one/entry.ts')!.imports).toEqual(['apps/one/other.ts'])
     expect(after.files.find(file => file.file === 'apps/two/entry.ts')!.imports).toEqual(['apps/two/target.ts'])
-    expect(compileWatchPatterns(typescript.watch)('apps/one/tsconfig.json')).toBe(true)
+    // A nested config is one of the scanner's files, so changing it triggers the scanner.
+    expect(files).toContain('apps/one/tsconfig.json')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -188,7 +202,7 @@ test.concurrent('the config whose directory contains a file owns it, not a deepe
     }))
     await writeFile(path.join(root, 'app/entry.ts'), "import { work } from '@local'; export function run() { return work() }")
     await writeFile(path.join(root, 'app/target.ts'), 'export function work() { return 1 }')
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await typescriptFiles(root))
     expect(graph.files.find(file => file.file === 'app/entry.ts')!.imports).toEqual(['app/target.ts'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
@@ -209,13 +223,13 @@ test.concurrent('TypeScript configs with no inputs or an absent base keep valid 
     const emptyConfig = path.join(root, 'test/fixture/tsconfig.json')
     await writeFile(emptyConfig, JSON.stringify({ include: ['*.tsx'] }))
     await writeFile(path.join(root, 'test/fixture/view.tsx.fixture'), 'export const view = <div />')
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await typescriptFiles(root))
     expect(graph.files.map(file => file.file).sort()).toEqual(['app/entry.ts', 'app/target.ts'])
     expect(graph.files.find(file => file.file === 'app/entry.ts')!.imports).toEqual(['app/target.ts'])
     expect(graph.operations.some(operation => operation.file === 'app/entry.ts' && operation.name === 'run')).toBe(true)
     expect(graph.diagnostics.map(item => [item.severity, item.file])).toEqual([['warning', 'app/tsconfig.json'], ['warning', 'app/tsconfig.json']])
     await writeFile(emptyConfig, JSON.stringify({ compilerOptions: { target: 'invalid' }, include: ['*.tsx'] }))
-    await expect(buildImportGraph(root)).rejects.toThrow('target')
+    await expect(buildImportGraph(root, await typescriptFiles(root))).rejects.toThrow('target')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -234,7 +248,7 @@ test.concurrent('shared TypeScript operations keep one physical identity and all
       await writeFile(path.join(directory, 'entry.ts'), "import { run } from '../../shared/run'; export function start() { return run() }")
       await writeFile(path.join(directory, 'target.ts'), 'export function target() { return 1 }')
     }
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await typescriptFiles(root))
     const shared = graph.operations.filter(operation => operation.file === 'shared/run.ts' && operation.name === 'run')
     expect(shared).toHaveLength(1)
     const operations = new Map(graph.operations.map(operation => [operation.id, operation]))

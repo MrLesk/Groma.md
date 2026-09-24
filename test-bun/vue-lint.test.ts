@@ -4,12 +4,19 @@ import { cp, mkdtemp, readFile, rename, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
+import manifest from '../plugins/scanners/vue/package.json'
 import { VueEvidence } from '../plugins/scanners/vue/src/evidence.ts'
 import { scanVue } from '../plugins/scanners/vue/src/index.ts'
 import { addComparedOperations } from '../plugins/scanners/vue/src/operations.ts'
 import { vueProject } from '../plugins/scanners/vue/src/project.ts'
+import typescriptManifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands each scanner with its package defaults. */
+const vueFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
+const typescriptFiles = (root: string) => scannerFiles(root, typescriptManifest.groma.scanner)
 
 const cli = path.resolve(import.meta.dir, '../src/cli.ts')
 
@@ -56,8 +63,8 @@ test.concurrent('groma lint reports identical and near-duplicate Vue bodies, but
 test.concurrent('the Vue scanner and the TypeScript scanner report the same tokens for one body', async () => {
   const { temporary, root } = await fixture()
   try {
-    const vue = (await scanVue(root))!
-    const typescript = (await scanTypeScriptSource(root))!
+    const vue = (await scanVue(root, {}, await vueFiles(root)))!
+    const typescript = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const compared = (operations: ScanOperation[], file: string) => operations
       .filter(operation => operation.file === file && operation.tokens)
       .sort((left, right) => left.startLine! - right.startLine!)
@@ -81,7 +88,7 @@ test.concurrent('a template binding keeps the compared body of the function it n
     await rename(path.join(root, 'logic.ts.fixture'), path.join(root, 'logic.ts'))
     const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
     expect(await git.exited, await new Response(git.stderr).text()).toBe(0)
-    const { project } = vueProject(root)!
+    const { project } = vueProject(root, root, await vueFiles(root))!
     const evidence = new VueEvidence(project)
     // The compared bodies are recorded before the template bindings name the same functions.
     addComparedOperations(project, evidence.operations)

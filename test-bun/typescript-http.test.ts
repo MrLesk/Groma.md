@@ -4,7 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 import type { HttpEndpointSegment, HttpRequestSegment, ScanObservation } from '@groma/scanner'
 
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function scanFixture(fixture = 'typescript-http'): Promise<{ scan: ScanObservation; clean: () => Promise<void> }> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-ts-http-'))
@@ -17,7 +22,7 @@ async function scanFixture(fixture = 'typescript-http'): Promise<{ scan: ScanObs
     const child = Bun.spawn(command, { cwd: root, stdout: 'ignore', stderr: 'pipe' })
     expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
   }
-  const scan = await scanTypeScriptSource(root)
+  const scan = await scanTypeScriptSource(root, await typescriptFiles(root))
   expect(scan).toBeDefined()
   return { scan: scan!, clean: () => rm(root, { recursive: true, force: true }) }
 }

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import type { ScannerPlugin } from '@groma/scanner'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 const execute = promisify(execFile)
 const [source, packageDirectory] = process.argv.slice(2)
@@ -37,12 +38,13 @@ for (const file of sources) {
 const before = await fingerprint()
 const manifest = JSON.parse(await readFile(path.join(artifact, 'package.json'), 'utf8'))
 const scanner: ScannerPlugin = (await import(pathToFileURL(path.join(artifact, manifest.groma.scanner.entry)).href)).default
-await scanner.checkReadiness?.(root)
+const files = await scannerFiles(root, manifest.groma.scanner)
+await scanner.checkReadiness?.(root, {}, files)
 const observations = []
 const seconds = []
 for (let run = 0; run < 2; run++) {
   const start = performance.now()
-  observations.push((await scanner.scan(root))!)
+  observations.push((await scanner.scan(root, {}, files))!)
   seconds.push(Number(((performance.now() - start) / 1000).toFixed(3)))
 }
 const [first, second] = observations

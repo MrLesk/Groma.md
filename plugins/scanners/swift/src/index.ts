@@ -4,7 +4,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createScanObservation, type CodeDeclaration, type CodeFile, type CodeVisibility, type ScannerPlugin,
   type ScanInvocation, type ScanOperation, type ScanSymbol, type SourceReference } from '@groma/scanner'
-import { repositoryFiles } from '../../projects.ts'
 
 interface FileEvidence {
   file: string
@@ -23,9 +22,9 @@ const catalog = new Bun.Glob('**/*.docc/**')
 // SwiftPM reads Package.swift and its version-specific Package@swift-<version>.swift variants.
 const manifest = /^Package(@swift-[\d.]+)?\.swift$/
 
-async function files(root: string, excluded?: (file: string) => boolean) {
-  return repositoryFiles(root, file => file.endsWith('.swift') && !manifest.test(path.posix.basename(file))
-    && !catalog.match(file) && !excluded?.(file))
+/** The files among `files` that a Swift build compiles: neither package manifests nor DocC catalog snippets. */
+function sources(files: readonly string[]): string[] {
+  return files.filter(file => !manifest.test(path.posix.basename(file)) && !catalog.match(file))
 }
 
 function readEvidence(root: string, files: string[]): Promise<FileEvidence[]> {
@@ -66,14 +65,13 @@ function outline(file: FileEvidence, symbols: string[]): CodeFile {
 
 export default {
   id: 'swift',
-  watch: { include: ['**/*.swift'], exclude: [] },
-  listSourceFiles: root => files(root),
-  async checkReadiness(root, _settings, excluded) {
-    if (!(await files(root, excluded)).length) throw new Error('swift: No Swift source files were found in the Git repository.')
+  listSourceFiles: async (_root, _settings, candidates) => sources(candidates),
+  async checkReadiness(_root, _settings, files) {
+    if (!sources(files).length) throw new Error('swift: No Swift source files were found in the Git repository.')
     await access(worker)
   },
-  async scan(root, _settings, excluded) {
-    const inventory = await files(root, excluded)
+  async scan(root, _settings, files) {
+    const inventory = sources(files)
     if (!inventory.length) return undefined
     const evidence = await readEvidence(root, inventory)
     const engine = JSON.parse(await readFile(path.join(assets, `${process.platform}-${process.arch}`, 'engine.json'), 'utf8'))

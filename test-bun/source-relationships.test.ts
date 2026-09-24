@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
@@ -11,6 +12,10 @@ import { addRelation, acceptRelation, editRelation, removeRelation } from '../sr
 import { inferRelationships } from '../src/relationship-inference.ts'
 import { scanRepository } from '../src/scanner.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function repository(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-operation-relations-'))
@@ -46,7 +51,7 @@ export function run(actions) {
   actions.error('result'); actions.merged('again');
 }
 `)
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const reversed = { ...observation, invocations: [...observation.invocations!].reverse() }
     const owners = new Map(observation.files.map(file => [file.file, file.file]))
     const rows = inferRelationships([observation, reversed], owners)
@@ -66,7 +71,7 @@ export function run(actions) {
 test.concurrent('operation resolution follows aliases but preserves executable wrappers and concrete callback bindings', async () => {
   const root = await repository()
   try {
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const operations = new Map(observation.operations!.map(operation => [operation.id, operation]))
     const resolved = observation.invocations!.map(invocation => ({
       ...invocation,
@@ -88,7 +93,7 @@ test.concurrent('operation resolution follows aliases but preserves executable w
     owners.set(ends.target, owners.get(ends.source)!)
     expect(inferRelationships([observation], owners)).toEqual([])
     await writeFile(path.join(root, 'src/api.ts'), "export { wrap as send } from './wrapper.ts'\n")
-    const wrapped = (await scanTypeScriptSource(root))!
+    const wrapped = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const wrappedFiles = new Map(wrapped.operations!.map(operation => [operation.id, operation.file]))
     const callerTargets = wrapped.invocations!.filter(invocation => wrappedFiles.get(invocation.source) === 'src/caller.ts')
       .flatMap(invocation => invocation.targets.map(id => wrappedFiles.get(id)))
@@ -107,7 +112,7 @@ export function run(actions: { deliver(value: string): string }): string {
   return actions.deliver('result')
 }
 `)
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const operations = new Map(observation.operations!.map(operation => [operation.id, operation.file]))
     const callback = observation.invocations!.find(invocation => invocation.member === 'deliver')!
     expect(callback.targets.map(id => operations.get(id))).toEqual(['src/provider.ts'])
@@ -125,7 +130,7 @@ declare const unknown: (value: string) => string
 declare const choose: boolean
 run({ deliver: choose ? send : unknown })
 `)
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const callback = observation.invocations!.find(invocation => invocation.member === 'deliver')!
     expect(callback.targets).toHaveLength(1)
     expect(callback.unresolved).toBeTrue()
@@ -150,7 +155,7 @@ forward5({ deliver: send })
 forward5({ deliver: wrap })
 forward5({ deliver: unknown })
 `)
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const operations = new Map(observation.operations!.map(operation => [operation.id, operation.file]))
     const callbacks = observation.invocations!.filter(invocation => invocation.member === 'deliver')
     expect(callbacks).toHaveLength(3)
@@ -232,7 +237,7 @@ export function run(actions: { deliver(value: string): string }): string {
   return actions.deliver('result')
 }
 `)
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     expect(observation.invocations!.find(invocation => invocation.member === 'deliver')?.unresolved).toBeTrue()
     expect(inferRelationships([observation], new Map(observation.files.map(file => [file.file, file.file])))).toEqual([])
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -248,7 +253,7 @@ const actions = { deliver: send }
 actions.deliver = value => value
 run(actions)
 `)
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     expect(observation.invocations!.find(invocation => invocation.member === 'deliver')?.unresolved).toBeTrue()
     expect(inferRelationships([observation], new Map(observation.files.map(file => [file.file, file.file])))).toEqual([])
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -264,7 +269,7 @@ import { run } from './worker.ts'
 declare const choose: boolean
 run({ deliver: choose ? send : wrap })
 `)
-    const observation = (await scanTypeScriptSource(root))!
+    const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const callback = observation.invocations!.find(invocation => invocation.member === 'deliver')!
     expect(callback.targets).toHaveLength(2)
     expect(callback.unresolved).toBeFalse()

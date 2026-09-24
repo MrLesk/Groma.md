@@ -36,7 +36,7 @@ mistyped name from a coverage gap:
 
 | Reason | Meaning |
 | --- | --- |
-| `unknown target: <target>; not a repository file` | Neither a stored ID nor a tracked, unignored repository file: usually a typo. |
+| `unknown target: <target>; not a repository file` | Neither a stored ID nor a repository file, which is tracked or, unless `useGitignore` is false, untracked and not ignored: usually a typo. |
 | `no owner: <file>; excluded by scanners.json pattern <pattern>` | That global pattern hides the file from every scanner, and no scanner's own list restores it. |
 | `no owner: <file>; excluded for <scanner> by scanners.json pattern <pattern>` | That scanner selects the file, but that pattern in its exclusions, the global list followed by its own, hides it from that scanner. |
 | `no owner: <file>; no enabled scanner reads it` | No enabled scanner selects the file for analysis, so no scan can own it. |

@@ -15,7 +15,7 @@ Scanner consumers do not build the worker or install a separate language runtime
 
 ## Project inputs
 
-The adapter reads tracked and unignored `Cargo.toml` files with a TOML parser.
+The adapter reads the `Cargo.toml` files among its files with a TOML parser.
 Workspace `members` and `exclude` lists, package names, editions, library/binary paths,
 local workspace dependencies and declared default features supply a source
 crate graph. It passes that graph directly to rust-analyzer's `ProjectJson`
@@ -46,19 +46,21 @@ and follows literal `#[path = "..."]` references to shared files outside them.
 Module declarations still select the analyzed files; making a file reachable
 does not create a source owner by itself.
 
-## Exclusions
+## Include and exclude lists
 
-The package declares `target/` and `vendor/` as default
-[exclusions](../index.md#excluding-source-evidence). The scan and
-readiness check read no `Cargo.toml` the exclusions name, so an excluded
-manifest is not a project, workspace member, path dependency or enclosing
-workspace. The worker reads no module file they name: the file reports nothing
-and cannot fail the scan, a call into it stays unresolved, and an excluded
-binary root declares no entry point. The source listing names files before
-exclusions, and none of a project Cargo cannot build: one with a manifest that
-is not TOML, or with no library or binary target. Selecting library and binary
-targets and leaving out `#[test]` functions and `cfg(test)` items stay built in,
-because they are Cargo build rules.
+The package declares the default [include and exclude lists](../index.md#selecting-source-files):
+the include list names Rust sources (`**/*.rs`) and Cargo manifests
+(`**/Cargo.toml`), and the exclude list names `target/` and `vendor/`. A
+`Cargo.toml` outside the scanner's files is not a project, workspace member or
+path dependency, and a library or binary root module outside them is not a
+target. A member's enclosing workspace is its build context, read as Cargo reads
+it even when excluded. The worker reads no module file outside the scanner's
+files: the file reports nothing and cannot fail the scan, and a call into it
+stays unresolved. The source listing names files before exclusions, and none of
+a project Cargo cannot build: one with a manifest that is not TOML, or with no
+library or binary target. Selecting library and binary targets and leaving out
+`#[test]` functions and `cfg(test)` items stay built in, because they are Cargo
+build rules.
 
 ## Evidence and uncertainty
 

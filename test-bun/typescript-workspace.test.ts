@@ -7,7 +7,7 @@ import manifest from '../plugins/scanners/typescript/package.json'
 import typescript from '../plugins/scanners/typescript/src/index.ts'
 import { buildImportGraph } from '../plugins/scanners/typescript/src/graph.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
-import { exclusion } from '../src/scanner/modules/config.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 /** A monorepo as a fresh checkout has it: no node_modules and no build output. */
 async function monorepo(files: Record<string, string>): Promise<string> {
@@ -19,6 +19,9 @@ async function monorepo(files: Record<string, string>): Promise<string> {
   expect(await Bun.spawn(['git', 'init', '--quiet'], { cwd: root }).exited).toBe(0)
   return root
 }
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 const json = (value: unknown) => JSON.stringify(value)
 const built = json({ compilerOptions: { outDir: 'dist', rootDir: 'src', module: 'ESNext', moduleResolution: 'Bundler' }, include: ['src'] })
@@ -50,7 +53,7 @@ test.concurrent('a bare import of a repository package resolves to its source th
     ].join('\n'),
   })
   try {
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await typescriptFiles(root))
     expect(graph.files.find(node => node.file === 'apps/web/src/page.ts')?.imports.sort())
       .toEqual(['packages/api/src/index.ts', 'packages/ui/src/button.ts'])
     const files = new Map(graph.operations.map(operation => [operation.id, operation.file]))
@@ -72,7 +75,7 @@ test.concurrent('a package file reads its imports with its own config, not the a
     'server/src/main.ts': "import type { Asset } from '@acme/sdk'\nexport function main(asset: Asset): string { return asset.id }\n",
   })
   try {
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await typescriptFiles(root))
     const imports = (file: string) => graph.files.find(node => node.file === file)?.imports
     expect(imports('server/src/main.ts')).toEqual(['packages/sdk/src/index.ts'])
     expect(imports('packages/sdk/src/index.ts')).toEqual(['packages/sdk/src/types.ts'])
@@ -91,7 +94,8 @@ test.concurrent('the scan reads no source, config or manifest its exclusions nam
     'apps/web/src/page.spec.ts': "import { page } from './page'\nexport const specified = page\n",
   })
   try {
-    const scan = (await typescript.scan(root, {}, exclusion([...manifest.groma.scanner.exclude, '!page.test.ts'])))!
+    const restored = { include: manifest.groma.scanner.include, exclude: [...manifest.groma.scanner.exclude, '!page.test.ts'] }
+    const scan = (await typescript.scan(root, {}, await scannerFiles(root, restored)))!
     expect(scan.files.map(file => file.file)).toEqual(['apps/web/src/page.test.ts', 'apps/web/src/page.ts', 'packages/api/src/index.ts'])
     const files = new Map(scan.operations!.map(operation => [operation.id, operation.file]))
     expect(scan.invocations!.flatMap(call => call.targets.map(target => files.get(target)))).toEqual(['packages/api/src/index.ts'])
@@ -107,7 +111,7 @@ test.concurrent('a package bin and a script that run build output become entries
     'packages/cli/src/run.ts': 'export function run(): void {}\n',
   })
   try {
-    const scan = (await scanTypeScriptSource(root))!
+    const scan = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     expect(scan.entryPoints?.map(entry => entry.file).sort()).toEqual(['packages/cli/src/cli.ts', 'packages/cli/src/main.ts'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })

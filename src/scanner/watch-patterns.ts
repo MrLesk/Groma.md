@@ -1,12 +1,7 @@
 import ignore from 'ignore'
-import type { ScannerPlugin } from '@groma/scanner'
 
-/** Compile scanner subscriptions once; plugins supply data, not path-matching code. */
-export function compileWatchPatterns(watch: ScannerPlugin['watch']): (file: string) => boolean {
-  const include = ignore({ ignorecase: false }).add(watch.include.map(pattern => `/${pattern}`))
-  const exclude = ignore({ ignorecase: false }).add(watch.exclude.map(pattern => `/${pattern}`))
-  return file => {
-    const normalized = file.replaceAll('\\', '/')
-    return include.ignores(normalized) && !exclude.ignores(normalized)
-  }
+/** Compile discovery rules' file patterns once, anchored at the repository root; rules supply data, not matching code. */
+export function compileWatchPatterns(include: readonly string[]): (file: string) => boolean {
+  const matcher = ignore({ ignorecase: false }).add(include.map(pattern => `/${pattern}`))
+  return file => matcher.ignores(file.replaceAll('\\', '/'))
 }

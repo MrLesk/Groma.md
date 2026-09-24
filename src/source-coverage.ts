@@ -18,8 +18,10 @@ function excludingPattern(patterns: readonly string[], file: string): string | u
  * with its error, beside the other scanners' answer.
  */
 export async function missingOwnerReason(repositoryRoot: string, file: string): Promise<string> {
-  if (!(await repositoryListing(repositoryRoot)).includes(file)) return `unknown target: ${file}; not a repository file`
   const config = await readScannerConfig(repositoryRoot)
+  if (!(await repositoryListing(repositoryRoot, config.useGitignore ?? true)).includes(file)) {
+    return `unknown target: ${file}; not a repository file`
+  }
   const hidingPattern = (scanner: string) => excludingPattern(exclusionPatterns(config, scanner), file)
   const globalPattern = excludingPattern(config.exclude ?? [], file)
   // A scanner's own `!pattern` can restore the file, so the global pattern answers only when no scanner keeps it.

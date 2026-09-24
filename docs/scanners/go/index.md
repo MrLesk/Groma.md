@@ -15,16 +15,15 @@ the adapter, native worker and upstream licenses, with no installation scripts.
 
 ## Source and evidence
 
-Each tracked or unignored `go.mod` identifies a module, and each module is
-scanned on its own. The scanner selects a module's tracked or unignored `.go`
-files the way the `go` command selects packages: test files, `testdata`, nested
-modules, and every directory or file whose name starts with `.` or `_` are left
-out. The listing names this selection.
+The package declares the default
+[include and exclude lists](../index.md#selecting-source-files): it includes
+`**/*.go` and `**/go.mod`, and excludes `vendor/` for vendored dependencies.
 
-The package declares one default
-[exclusion](../index.md#excluding-source-evidence), `vendor/`, for vendored
-dependencies. The scan reads no `go.mod` or `.go` file the scanner's exclusions
-name, and a module whose `go.mod` is excluded is skipped whole.
+Each `go.mod` among the scanner's files identifies a module, and each module is
+scanned on its own. The scanner selects a module's `.go` files the way the `go`
+command selects packages: test files, `testdata`, nested modules, and every
+directory or file whose name starts with `.` or `_` are left out. The listing
+names this selection before exclusions.
 
 One build context then decides which files build: linux/amd64 with cgo, as in a
 native Linux build, so every machine scans the same files whatever its platform

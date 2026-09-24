@@ -8,9 +8,8 @@ export { scanAngular } from './scan.ts'
 
 export default {
   id: 'angular',
-  watch: { include: ['**/*.ts', '**/*.html', '**/*.css', '**/*.scss', '**/*.sass', '**/*.less', '**/*.styl', '**/tsconfig*.json', '**/package.json', '**/angular.json', '**/project.json'], exclude: [] },
   checkReadiness: checkAngularReadiness,
-  listSourceFiles: angularSourceFiles,
+  listSourceFiles: (root, _settings, candidates) => angularSourceFiles(root, candidates),
   // Templates and stylesheets in a component's Code declare nothing.
   readCodeStructure: (root, references) => readTypeScriptOutline(ts, root, references.filter(reference => reference.file.endsWith('.ts'))),
   scan: scanAngular,

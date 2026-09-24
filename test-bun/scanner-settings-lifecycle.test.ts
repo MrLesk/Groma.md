@@ -18,12 +18,12 @@ async function project() {
   const source = path.join(root, 'plugin')
   await mkdir(source)
   await writeFile(path.join(source, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0',
-    groma: { scanner: { id: 'fixture', entry: './index.ts', discovery: {
+    groma: { scanner: { id: 'fixture', entry: './index.ts', include: ['**/*.fixture'], discovery: {
       technologies: ['react'], rules: [{ type: 'dependency', files: ['**/package.json'], technology: 'react', kind: 'framework', package: 'react' }],
     } } },
   }))
   await writeFile(path.join(source, 'index.ts'), `import { readFile, stat } from 'node:fs/promises'
-export default { id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+export default { id: 'fixture', async scan(root) {
   if (await stat(root + '/tool-missing').then(() => true, () => false)) throw new Error('Install the project tool.')
   return { scanner: { id: 'fixture', technology: 'react', engine: 'fixture', engineVersion: '1' }, diagnostics: [],
     roots: [{ id: 'root', name: 'Fixture', kind: 'package', file: 'ui/package.json' }, { id: 'ui', name: 'UI', kind: 'project', parent: 'root' }],
@@ -53,7 +53,7 @@ test.concurrent('settings changes reconfigure live scanning and keep saved evide
     expect(scanned.elements.flatMap(element => element.code).some(code => code.symbol === 'second')).toBe(true)
     nextFold = undefined
     const config = await readScannerConfig(root)
-    await writeScannerConfig(root, { ...config, scanners: [...config.scanners, { id: 'absent', source: path.join(root, 'absent') }] })
+    await writeScannerConfig(root, { ...config, scanners: [...config.scanners, { id: 'absent', source: path.join(root, 'absent'), include: ['**/*.fixture'] }] })
     await session.reconfigure()
     const beforeCheck = folds
     await session.change({ action: 'retry' })
@@ -94,10 +94,10 @@ test.concurrent('live scanning updates healthy evidence, reports every failure a
     const directory = path.join(root, id)
     await mkdir(directory)
     await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: id, version: '1.0.0',
-      groma: { scanner: { id, entry: './index.ts' } } }))
+      groma: { scanner: { id, entry: './index.ts', include: ['**/*.fixture'] } } }))
     await writeFile(path.join(directory, 'index.ts'), id === 'broken' ? 'export default {}' : `
       import { stat } from 'node:fs/promises'
-      export default { id: 'tool', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+      export default { id: 'tool', async scan(root) {
         if (await stat(root + '/tool.fail').then(() => true, () => false)) throw new Error('Tool failed')
         return undefined
       } }
@@ -105,7 +105,8 @@ test.concurrent('live scanning updates healthy evidence, reports every failure a
   }
   await writeFile(path.join(root, 'tool.fail'), '')
   await writeScannerConfig(root, { scanners: [
-    { id: 'fixture', source }, { id: 'broken', source: './broken' }, { id: 'tool', source: './tool' },
+    { id: 'fixture', source, include: ['**/*.fixture'] }, { id: 'broken', source: './broken', include: ['**/*.fixture'] },
+    { id: 'tool', source: './tool', include: ['**/*.fixture'] },
   ] })
   let nextFold: (() => void) | undefined
   const session = await createScannerSession(root, { onFold() { nextFold?.() } })

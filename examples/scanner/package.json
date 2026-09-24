@@ -16,6 +16,9 @@
     "scanner": {
       "id": "example-inventory",
       "entry": "./dist/index.js",
+      "include": [
+        "src/*.js"
+      ],
       "discovery": {
         "technologies": [
           "example-inventory"

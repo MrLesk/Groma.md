@@ -7,7 +7,12 @@ import {
   type HttpEndpointSegment, type ScanHttpEndpoint, type ScanObservation, type ScannerPlugin,
 } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/angular/build.ts'
+import manifest from '../plugins/scanners/angular/package.json'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the Angular scanner with its package defaults. */
+const angularFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 const served = 'server/talks.ts'
 const users = 'server/users.ts'
@@ -66,7 +71,7 @@ function server(): ScanObservation {
 test.concurrent('the built Angular package reports HttpClient requests and serves no endpoint', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await angularFiles(root)))!
 
     expect(requests(observation).sort()).toEqual([
       // Every supported client method, with the URL read at the call.
@@ -121,7 +126,7 @@ test.concurrent('the built Angular package reports HttpClient requests and serve
 test.concurrent('core derives one row from the Angular requests to the file that serves them', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const angular = (await scanner.scan(root))!
+    const angular = (await scanner.scan(root, {}, await angularFiles(root)))!
     const owners = new Map([...angular.files.map(file => [file.file, file.file] as const), [served, served], [users, users]])
 
     // `/api/speakers/users` below a configured base is no request to `/api/users`.

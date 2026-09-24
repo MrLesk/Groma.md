@@ -8,6 +8,7 @@ import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/cor
 import { editArchitecture } from '../src/edit.ts'
 import { addRelation } from '../src/relation.ts'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
+import vue from '../plugins/scanners/vue/package.json'
 import { loadScannerRegistry } from '../src/scanner/registry.ts'
 import { readScannerConfig, writeScannerConfig } from '../src/scanner/modules/config.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
@@ -44,7 +45,7 @@ test.concurrent('fully excluded Vue sources skip readiness and scanning until th
   try {
     await cp(path.resolve(import.meta.dir, '../test/fixtures/vue-output'), path.join(root, 'fixtures/vue'), { recursive: true })
     await buildPackage(artifact)
-    const scanners = [{ id: 'vue', source: artifact }]
+    const scanners = [{ id: 'vue', source: artifact, include: vue.groma.scanner.include }]
     await writeScannerConfig(root, { scanners, exclude: ['/fixtures/'] })
     const readiness = await checkScannerReadiness(root)
     expect(readiness.map(item => item.project)).toEqual(['ready'])
@@ -64,15 +65,15 @@ test.concurrent('global and scanner exclusions keep readiness and scan hooks off
   try {
     await write(root, 'hidden/source.fixture', 'source')
     await write(root, 'plugin/package.json', JSON.stringify({ name: 'fixture-scanner', version: '1.0.0',
-      groma: { scanner: { id: 'fixture', entry: './index.ts' } },
+      groma: { scanner: { id: 'fixture', entry: './index.ts', include: ['**/*.fixture'] } },
     }))
     await write(root, 'plugin/index.ts', `export default {
-      id: 'fixture', watch: { include: ['**/*.fixture'], exclude: [] },
-      async listSourceFiles(root, settings) { return [settings.input] },
+      id: 'fixture',
       async checkReadiness() { throw new Error('fixture readiness failed') },
       async scan() { throw new Error('fixture scan failed') },
     }`)
-    const scanners = [{ id: 'fixture', source: './plugin', settings: { input: 'hidden/source.fixture' } }]
+    // The scanner's only candidate is excluded, so Groma calls neither hook.
+    const scanners = [{ id: 'fixture', source: './plugin', include: ['**/*.fixture'], settings: { input: 'hidden/source.fixture' } }]
     await writeScannerConfig(root, { scanners, exclude: ['/hidden/'] })
     expect((await checkScannerReadiness(root)).map(item => item.project)).toEqual(['ready'])
     expect((await (await loadScannerRegistry(root)).collectObservations(root)).failures).toEqual([])
@@ -86,6 +87,33 @@ test.concurrent('global and scanner exclusions keep readiness and scan hooks off
     await writeScannerConfig(root, { scanners: [{ ...scanners[0]!, exclude: ['/hidden/'] }] })
     expect((await checkScannerReadiness(root)).map(item => item.project)).toEqual(['ready'])
     expect((await (await loadScannerRegistry(root)).collectObservations(root)).failures).toEqual([])
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test.concurrent('a scanner receives the files its include list names, less excluded ones and, unless useGitignore is false, ignored ones', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-selection-'))
+  try {
+    await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
+    await write(root, '.gitignore', 'node_modules/\n')
+    for (const file of ['src/app.ts', 'src/notes.md', 'excluded/old.ts', 'node_modules/lib/index.ts']) await write(root, file, 'export {}\n')
+    const child = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stdout: 'ignore', stderr: 'pipe' })
+    expect(await child.exited, await new Response(child.stderr).text()).toBe(0)
+    await write(root, 'plugin/package.json', JSON.stringify({ name: 'fixture-reader', version: '1.0.0', type: 'module',
+      groma: { scanner: { id: 'reader', entry: './index.js', include: ['**/*.ts'], exclude: ['/excluded/'] } } }))
+    // The plugin reports the files it is handed in a diagnostic, which the host's evidence filter leaves alone.
+    await write(root, 'plugin/index.js', `export default { id: 'reader', async scan(root, settings, files) {
+      return { scanner: { id: 'reader', technology: 'fixture', engine: 'fixture', engineVersion: '1' },
+        diagnostics: [{ severity: 'info', code: 'READ', message: JSON.stringify(files) }],
+        roots: [{ id: 'source', kind: 'package', name: 'Fixture', file: 'package.json' }],
+        files: files.map(file => ({ file, roots: ['source'], symbols: [] })) }
+    } }`)
+    await addScanner(root, './plugin')
+    const read = async () => JSON.parse((await (await loadScannerRegistry(root)).collectObservations(root)).observations[0]!.diagnostics[0]!.message)
+    expect(await read()).toEqual(['src/app.ts'])
+    const registry = await loadScannerRegistry(root)
+    expect(['src/new.ts', 'src/notes.md', 'excluded/new.ts'].map(file => registry.watchesFile(file))).toEqual([true, false, false])
+    await writeScannerConfig(root, { ...await readScannerConfig(root), useGitignore: false })
+    expect(await read()).toEqual(['node_modules/lib/index.ts', 'src/app.ts'])
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -124,10 +152,11 @@ function observation(language: string): ScanObservation {
 async function plugin(root: string, id: string, scan = observation(id), exclude?: string[]): Promise<string> {
   const source = `./plugins/${id}`
   await write(root, `${source}/package.json`, JSON.stringify({
-    name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js', ...(exclude && { exclude }) } },
+    name: `fixture-${id}`, version: '1.0.0', type: 'module',
+    groma: { scanner: { id, entry: './index.js', include: ['**/*.ts', '**/*.html'], ...(exclude && { exclude }) } },
   }))
   await write(root, `${source}/index.js`, `export default {
-    id: ${JSON.stringify(id)}, watch: { include: ['**/*.html'], exclude: [] },
+    id: ${JSON.stringify(id)},
     async scan() { return ${JSON.stringify(scan)} },
   }`)
   return source
@@ -167,14 +196,14 @@ test.concurrent('every scanner filters complete evidence without narrowing invoc
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test.concurrent('a scanner list, written from its install defaults, follows the global list for that scanner alone', async () => {
+test.concurrent('the lists of a scanner, written from its install defaults, follow the global list for that scanner alone', async () => {
   const root = await repository()
   try {
     for (const file of observation('fixture').files) await write(root, file.file, 'export const value = 1\n')
     await addScanner(root, await plugin(root, 'first'))
     await addScanner(root, await plugin(root, 'second', undefined, ['/src/other.ts']))
     const config = await readScannerConfig(root)
-    expect(config.scanners.find(scanner => scanner.id === 'second')?.exclude).toEqual(['/src/other.ts'])
+    expect(config.scanners.find(scanner => scanner.id === 'second')).toMatchObject({ include: ['**/*.ts', '**/*.html'], exclude: ['/src/other.ts'] })
     await writeScannerConfig(root, { exclude: ['/scripts/'], scanners: config.scanners.map(scanner =>
       scanner.id === 'first' ? { ...scanner, exclude: ['!/scripts/'] } : scanner) })
     const registry = await loadScannerRegistry(root)

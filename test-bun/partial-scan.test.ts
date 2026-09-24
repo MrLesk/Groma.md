@@ -3,7 +3,12 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 for (const mixed of [false, true]) {
   test.concurrent(`partial scans retain ${mixed ? 'mixed' : 'unavailable'} scanner relationships and Code until a complete refresh`, async () => {
@@ -15,7 +20,7 @@ for (const mixed of [false, true]) {
       await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'fixture', bin: 'src/caller.ts' }))
       const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
       expect(await git.exited).toBe(0)
-      const observation = (await scanTypeScriptSource(root))!
+      const observation = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
       const second = { ...observation, scanner: { ...observation.scanner, id: 'second' } }
       await reconcileScanObservations(root, mixed ? [observation, second] : [second])
       const before = await loadAnnotatedArchitecture(root)

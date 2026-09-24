@@ -3,7 +3,9 @@ import { cp, mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScannerPlugin } from '@groma/scanner'
+import manifest from '../plugins/scanners/csharp/package.json'
 import { httpRelationships } from '../src/http-relationships.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 const artifact = process.env.GROMA_TEST_CSHARP_PACKAGE
 const packaged = artifact ? test.concurrent : test.skip
@@ -16,7 +18,7 @@ packaged('C# HTTP facts reach core, which derives a row for the paths it can com
     expect(await git.exited).toBe(0)
     const scanner: ScannerPlugin = (await import(path.join(artifact!, 'dist/index.js'))).default
     // The contract validates the facts while parsing.
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await scannerFiles(root, manifest.groma.scanner)))!
     const operations = new Map(scan.operations!.map(operation => [operation.id, operation.file]))
     expect(scan.httpEndpoints!.every(endpoint => operations.has(endpoint.operation))).toBe(true)
     expect(scan.httpRequests!.every(request => operations.has(request.operation))).toBe(true)

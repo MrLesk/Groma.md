@@ -9,6 +9,16 @@
     "scanner": {
       "id": "javascript",
       "entry": "./dist/package/dist/index.js",
+      "include": [
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.cjs",
+        "**/*.jsx",
+        "**/package.json",
+        "**/*.html",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "*.min.js",
         "*.min.mjs",

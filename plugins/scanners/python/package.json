@@ -9,6 +9,12 @@
     "scanner": {
       "id": "python",
       "entry": "./src/index.ts",
+      "include": [
+        "**/*.py",
+        "**/pyproject.toml",
+        "**/setup.cfg",
+        "**/requirements.txt"
+      ],
       "exclude": [
         ".venv/",
         "venv/",

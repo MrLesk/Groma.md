@@ -4,7 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ScanObservation, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/vue/build.ts'
+import manifest from '../plugins/scanners/vue/package.json'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the Vue scanner with its package defaults. */
+const vueFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function setup() {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-vue-http-'))
@@ -52,7 +57,7 @@ function endpoints(observation: ScanObservation): string[] {
 test.concurrent('the built Vue package reports Nuxt and axios requests, including from a component script', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await vueFiles(root)))!
 
     // A `get` on another object, a reassigned axios instance, a helper's caller, a project's own
     // `useFetch` composable, and the named axios exports `isAxiosError` and `post` report nothing,
@@ -110,7 +115,7 @@ test.concurrent('the built Vue package reports Nuxt and axios requests, includin
 test.concurrent('the built Vue package reports Nuxt server routes as endpoints', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await vueFiles(root)))!
 
     expect(endpoints(observation)).toEqual([
       // A method suffix names the method; a route without one answers every method.
@@ -158,7 +163,7 @@ test.concurrent('the built Vue package reports Nuxt server routes as endpoints',
 test.concurrent('core derives rows from the Vue requests to the server routes that serve them', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const vue = (await scanner.scan(root))!
+    const vue = (await scanner.scan(root, {}, await vueFiles(root)))!
     const owners = new Map(vue.files.map(file => [file.file, file.file]))
 
     const rows = inferRelationships([vue], owners)

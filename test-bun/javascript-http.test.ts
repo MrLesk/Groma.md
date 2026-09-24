@@ -4,8 +4,13 @@ import os from 'node:os'
 import path from 'node:path'
 import type { HttpEndpointSegment, HttpRequestSegment, ScanObservation, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/javascript/build.ts'
+import manifest from '../plugins/scanners/javascript/package.json'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import javascript from '../plugins/scanners/javascript/src/index.ts'
+
+/** The files Groma hands the JavaScript scanner with its package defaults. */
+const javascriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function scanFixture(): Promise<{ temporary: string; scan: ScanObservation }> {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-javascript-http-'))
@@ -16,7 +21,7 @@ async function scanFixture(): Promise<{ temporary: string; scan: ScanObservation
   expect(await git.exited).toBe(0)
   await buildPackage(artifact)
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
-  return { temporary, scan: (await scanner.scan(root))! }
+  return { temporary, scan: (await scanner.scan(root, {}, await javascriptFiles(root)))! }
 }
 
 /** `?`, `*` and `+` mark an optional parameter and a catch-all; `!` marks a constrained segment. */
@@ -149,7 +154,7 @@ function first() { const app = express(); app.get('/first', () => {}) }
 function second() { const app = express(); app.get('/second', () => {}) }
 `)
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
-    const endpoints = (await javascript.scan(root))!.httpEndpoints!.filter(endpoint => endpoint.method === 'GET')
+    const endpoints = (await javascript.scan(root, {}, await javascriptFiles(root)))!.httpEndpoints!.filter(endpoint => endpoint.method === 'GET')
     expect(endpoints).toHaveLength(2)
     expect(new Set(endpoints.map(endpoint => endpoint.order?.application)).size).toBe(2)
     expect(endpoints.map(endpoint => endpoint.order?.position)).toEqual([0, 0])
@@ -161,7 +166,7 @@ test.concurrent('a named undici fetch import reports the request it sends', asyn
   try {
     await writeFile(path.join(root, 'client.mjs'), "import { fetch as send } from 'undici'\nexport function load() { return send('/items', { method: 'POST' }) }\n")
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
-    const requests = (await javascript.scan(root))!.httpRequests!
+    const requests = (await javascript.scan(root, {}, await javascriptFiles(root)))!.httpRequests!
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ method: 'POST', path: [{ kind: 'literal', value: 'items' }] })
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -176,7 +181,7 @@ client.putForm('/second', {})
 client.patchForm('/third', {})
 `)
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
-    const requests = (await javascript.scan(root))!.httpRequests!
+    const requests = (await javascript.scan(root, {}, await javascriptFiles(root)))!.httpRequests!
     expect(requests.map(request => [request.method, request.path.map(segment => segment.kind === 'literal' ? segment.value : '?')]))
       .toEqual([['POST', ['first']], ['PUT', ['second']], ['PATCH', ['third']]])
   } finally { await rm(root, { recursive: true, force: true }) }

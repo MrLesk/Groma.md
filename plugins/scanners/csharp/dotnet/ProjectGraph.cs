@@ -81,8 +81,8 @@ internal sealed partial class ProjectGraph
 
     /// <summary>
     /// Loads a project once, after the projects it references, so each reference's own list is already complete. Only a
-    /// project in the repository's inventory loads, so a project the host excluded is never read, whether an input, a
-    /// solution entry or a reference names it.
+    /// project among the scanner's files loads, so a project outside them is never read, whether an input, a solution
+    /// entry or a reference names it.
     /// </summary>
     private ProjectNode? Visit(string project)
     {
@@ -113,8 +113,8 @@ internal sealed partial class ProjectGraph
 
     /// <summary>
     /// The files a project compiles, as MSBuild orders its Compile items: the default glob over the project directory,
-    /// then each Include and Remove in document order. Repository files come from the inventory; an explicit file outside
-    /// the repository is compilation context only.
+    /// then each Include and Remove in document order. Repository files come from the scanner's files; an explicit file
+    /// outside the repository is compilation context only.
     /// </summary>
     private List<string> CompileSources(ProjectFile file)
     {

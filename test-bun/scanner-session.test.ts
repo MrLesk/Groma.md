@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { createScanObservation, type ScannerPlugin, type ScanObservation } from '@groma/scanner'
 import { createScannerRegistry, type ScanEvent } from '../src/scanner/registry.ts'
+import { scannerSelection } from '../src/scanner/modules/selection.ts'
 
 function scanner(id: string) {
   let calls = 0
@@ -8,7 +12,6 @@ function scanner(id: string) {
   let supported = true
   const plugin: ScannerPlugin = {
     id,
-    watch: { include: [`**/*.${id}`, 'shared.config'], exclude: [] },
     async scan() {
       calls++
       if (failure) throw new Error(`${id} failed`)
@@ -27,9 +30,9 @@ function scanner(id: string) {
   return { plugin, calls: () => calls, fail: (value: boolean) => { failure = value }, unsupported: () => { supported = false } }
 }
 
-/** Plugins as the host runs them, sharing one exclusion predicate and no settings. */
-function configured(excluded: (file: string) => boolean, ...plugins: ScannerPlugin[]) {
-  return plugins.map(plugin => ({ plugin, excluded }))
+/** Plugins as the host runs them: each reads its own extension and the shared config, less one exclusion list. */
+function configured(exclude: string[], ...plugins: ScannerPlugin[]) {
+  return plugins.map(plugin => ({ plugin, ...scannerSelection({ include: [`**/*.${plugin.id}`, 'shared.config'], exclude }) }))
 }
 
 function revision(observations: ScanObservation[], id: string) {
@@ -38,7 +41,7 @@ function revision(observations: ScanObservation[], id: string) {
 
 test.concurrent('a source session runs matching subscriptions and keeps unaffected evidence', async () => {
   const first = scanner('first'), second = scanner('second')
-  const registry = createScannerRegistry(configured(file => file.startsWith('excluded/'), first.plugin, second.plugin))
+  const registry = createScannerRegistry(configured(['/excluded/'], first.plugin, second.plugin))
   const baseline = (await registry.collectObservations('.')).observations
   const changed = (await registry.collectObservations('.', ['new.first'])).observations
   expect([first.calls(), second.calls()]).toEqual([2, 1])
@@ -53,7 +56,7 @@ test.concurrent('a source session runs matching subscriptions and keeps unaffect
 
 test.concurrent('a failed scanner leaves healthy evidence available and recovers on a later scan', async () => {
   const first = scanner('first'), second = scanner('second')
-  const registry = createScannerRegistry(configured(() => false, first.plugin, second.plugin))
+  const registry = createScannerRegistry(configured([], first.plugin, second.plugin))
   await registry.collectObservations('.')
   second.fail(true)
   const failed = await registry.collectObservations('.', ['shared.config'])
@@ -72,7 +75,7 @@ test.concurrent('a failed scanner leaves healthy evidence available and recovers
 
 test.concurrent('a scanner that stops supporting a project removes its previous observation', async () => {
   const first = scanner('first'), second = scanner('second')
-  const registry = createScannerRegistry(configured(() => false, first.plugin, second.plugin))
+  const registry = createScannerRegistry(configured([], first.plugin, second.plugin))
   await registry.collectObservations('.')
   first.unsupported()
   const result = await registry.collectObservations('.', ['shared.config'])
@@ -80,23 +83,27 @@ test.concurrent('a scanner that stops supporting a project removes its previous 
 })
 
 test.concurrent('a mixed batch waits for every invocation and emits its start and end events', async () => {
+  // The skipped scanner's include list names one file, which its exclusions name too.
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-session-'))
+  await mkdir(path.join(root, 'excluded'))
+  await writeFile(path.join(root, 'excluded/source.skipped'), '')
+  expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
   const failed = scanner('failed')
   failed.fail(true)
   const skipped = scanner('skipped')
-  skipped.plugin.listSourceFiles = async () => ['excluded/source.skipped']
   const started = Promise.withResolvers<void>()
   const finish = Promise.withResolvers<void>()
   const events: ScanEvent[] = []
   let completed = false
   const slow: ScannerPlugin = {
-    id: 'slow', watch: { include: ['**'], exclude: [] },
+    id: 'slow',
     async scan() { started.resolve(); await finish.promise; completed = true; return undefined },
   }
-  const registry = createScannerRegistry(configured(file => file.startsWith('excluded/'), failed.plugin, slow, skipped.plugin))
-  const result = registry.collectObservations('.', undefined, event => events.push(event)).then(batch => {
+  const registry = createScannerRegistry(configured(['/excluded/'], failed.plugin, slow, skipped.plugin))
+  const result = registry.collectObservations(root, undefined, event => events.push(event)).then(batch => {
     expect(completed).toBe(true)
     return batch
-  })
+  }).finally(() => rm(root, { recursive: true, force: true }))
   await started.promise
   const beforeFinish = events.filter(event => event.scanner === 'slow')
   finish.resolve()

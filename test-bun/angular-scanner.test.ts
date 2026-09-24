@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { ScannerPlugin, SourceReference } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/angular/build.ts'
 import manifest from '../plugins/scanners/angular/package.json'
+import typescriptManifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { readCodeStructure as readReferenceOutline } from '../plugins/scanners/typescript/src/structure.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
@@ -12,10 +13,15 @@ import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
-import { exclusion } from '../src/scanner/modules/config.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
+
+/** The files Groma hands each scanner with its package defaults, and the Angular candidates a listing selects from. */
+const angularFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
+const angularCandidates = (root: string) => scannerFiles(root, { include: manifest.groma.scanner.include })
+const typescriptFiles = (root: string) => scannerFiles(root, typescriptManifest.groma.scanner)
 
 const fixture = path.resolve(import.meta.dir, '../test/fixtures/angular-output')
 const outlineFixture = path.resolve(import.meta.dir, '../test/fixtures/angular-outline')
@@ -63,9 +69,9 @@ async function storedArchitecture(root: string) {
 test.concurrent('Angular resolves an output callback beyond TypeScript and preserves source positions', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const angular = (await scanner.scan(root))!
-    expect(await scanner.scan(root)).toEqual(angular)
-    const typescript = (await scanTypeScriptSource(root))!
+    const angular = (await scanner.scan(root, {}, await angularFiles(root)))!
+    expect(await scanner.scan(root, {}, await angularFiles(root))).toEqual(angular)
+    const typescript = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const owners = new Map(angular.files.map(file => [file.file, file.file]))
     expect(inferRelationships([typescript], owners)).toEqual([])
     expect(inferRelationships([typescript, angular], owners)).toEqual([
@@ -84,7 +90,7 @@ test.concurrent('Angular resolves an output callback beyond TypeScript and prese
     expect(typescript.operations!.some(operation => operation.file === caller.file && operation.position === caller.position)).toBe(true)
     expect(angular.diagnostics.some(item => item.code === 'unsupported-angular-binding')).toBe(true)
     await writeFile(path.join(root, 'host.html'), '<sample-editor (saved)="receive($event); receive($event)" />\n')
-    const unsupported = (await scanner.scan(root))!
+    const unsupported = (await scanner.scan(root, {}, await angularFiles(root)))!
     expect(unsupported.invocations).toEqual([])
     expect(unsupported.diagnostics.some(item => item.code === 'unsupported-angular-binding' && item.file === 'host.html' && Number.isInteger(item.line))).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
@@ -93,12 +99,12 @@ test.concurrent('Angular resolves an output callback beyond TypeScript and prese
 test.concurrent('Angular overlap and repeat scans retain a curated source owner', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const typescript = (await scanTypeScriptSource(root))!
+    const typescript = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     await reconcileScanObservations(root, [typescript])
     const before = await loadAnnotatedArchitecture(root)
     const source = owner(before, 'emitter.ts')
     await editArchitecture(root, { id: source.id, overview: 'Publishes the completed result.' })
-    const angular = (await scanner.scan(root))!
+    const angular = (await scanner.scan(root, {}, await angularFiles(root)))!
     await reconcileScanObservations(root, [typescript, angular])
     const snapshot = await storedArchitecture(root)
     await reconcileScanObservations(root, [angular, typescript])
@@ -112,11 +118,11 @@ test.concurrent('Angular overlap and repeat scans retain a curated source owner'
 test.concurrent('Angular preserves external parent bindings to an output provider with an inline template', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const before = (await scanner.scan(root))!
+    const before = (await scanner.scan(root, {}, await angularFiles(root)))!
     const file = path.join(root, 'emitter.ts')
     await writeFile(file, (await readFile(file, 'utf8')).replace("templateUrl: './emitter.html'", "template: ''"))
     await rm(path.join(root, 'emitter.html'))
-    const after = (await scanner.scan(root))!
+    const after = (await scanner.scan(root, {}, await angularFiles(root)))!
     const targets = (observation: typeof before) => observation.invocations!.map(call => ({
       member: call.member,
       files: call.targets.map(id => observation.operations!.find(operation => operation.id === id)!.file),
@@ -131,8 +137,8 @@ test.concurrent('Angular preserves external parent bindings to an output provide
 test.concurrent('Angular packages class, template and declared styles as one source unit without dependencies', async () => {
   const { temporary, root, scanner } = await setup()
   try {
-    const angular = (await scanner.scan(root))!
-    const typescript = (await scanTypeScriptSource(root))!
+    const angular = (await scanner.scan(root, {}, await angularFiles(root)))!
+    const typescript = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     expect(angular.files.some(file => file.file === 'shared.css')).toBe(false)
     await reconcileScanObservations(root, [typescript, angular])
     const model = await loadAnnotatedArchitecture(root)
@@ -203,8 +209,8 @@ test.concurrent('a file Angular and TypeScript both own shows one outline', asyn
   const { temporary, root, artifact, scanner } = await outlineSetup()
   try {
     await writeFile(path.join(root, 'groma/scanners.json'), JSON.stringify({ scanners: [
-      { id: 'typescript', source: path.resolve(import.meta.dir, '../plugins/scanners/typescript') },
-      { id: 'angular', source: artifact },
+      { id: 'typescript', source: path.resolve(import.meta.dir, '../plugins/scanners/typescript'), include: typescriptManifest.groma.scanner.include },
+      { id: 'angular', source: artifact, include: manifest.groma.scanner.include },
     ] }))
     const world = await loadAnnotatedArchitecture(root)
     const component = world.elements.find(element => element.kind === 'component')!
@@ -241,15 +247,15 @@ test.concurrent('Angular scans an Nx application through its solution config wit
     [`${shop}/shop.spec.ts`]: "import { Shop } from './shop'\nexport const spec = Shop\n",
   })
   try {
-    const excluded = exclusion(manifest.groma.scanner.exclude)
-    await scanner.checkReadiness!(root, {}, excluded)
-    const observation = (await scanner.scan(root, {}, excluded))!
+    const files = await angularFiles(root)
+    await scanner.checkReadiness!(root, {}, files)
+    const observation = (await scanner.scan(root, {}, files))!
     const observed = observation.files.map(file => file.file)
     // The absent stylesheet is left out of the component's source unit.
     expect(observation.sourceUnits?.find(unit => unit.primary === `${shop}/shop.ts`)?.files.toSorted()).toEqual([`${shop}/shop.html`, `${shop}/shop.ts`])
     for (const file of [`${shop}/shop.spec.ts`, `${shop}/data.json`]) expect(observed).not.toContain(file)
     // The listing comes before exclusions, so it names the spec the defaults leave out.
-    expect(await scanner.listSourceFiles!(root)).toContain(`${shop}/shop.spec.ts`)
+    expect(await scanner.listSourceFiles!(root, {}, await angularCandidates(root))).toContain(`${shop}/shop.spec.ts`)
     expect(observation.diagnostics.map(item => item.code)).toEqual(expect.arrayContaining(['angular-unreadable-config', 'angular-missing-resource']))
     expect(observation.entryPoints).toEqual([expect.objectContaining({ name: 'shop', file: `${shop}/main.ts`,
       files: expect.arrayContaining([`${shop}/polyfills.ts`, `${shop}/env.prod.ts`, `${shop}/shop.html`]) })])
@@ -274,7 +280,7 @@ test.concurrent('Angular binds directive outputs and template emits from inline 
       + '  <app-remove (removed)="remove()" />` })\nexport class List {\n  sort(key: string) { return key }\n  remove() { return true }\n}\n',
   })
   try {
-    const observation = (await scanner.scan(root))!
+    const observation = (await scanner.scan(root, {}, await angularFiles(root)))!
     const owners = new Map(observation.files.map(file => [file.file, file.file]))
     expect(inferRelationships([observation], owners).map(row => [row.source, row.target]).sort()).toEqual([
       ['remove.ts', 'list.ts'],
@@ -304,9 +310,9 @@ test.concurrent('Angular reads no project, config, source or entry declaration i
   })
   try {
     // The listing comes before exclusions: it names installed source, and a package.json that is not JSON names no project.
-    expect(await scanner.listSourceFiles!(root)).toContain('node_modules/lib/broken.ts')
-    const excluded = exclusion([...manifest.groma.scanner.exclude, '!src/app.spec.ts'])
-    await scanner.checkReadiness!(root, {}, excluded)
-    expect((await scanner.scan(root, {}, excluded))!.files.map(file => file.file).toSorted()).toEqual(['src/app.spec.ts', 'src/app.ts'])
+    expect(await scanner.listSourceFiles!(root, {}, await angularCandidates(root))).toContain('node_modules/lib/broken.ts')
+    const files = await scannerFiles(root, { include: manifest.groma.scanner.include, exclude: [...manifest.groma.scanner.exclude, '!src/app.spec.ts'] })
+    await scanner.checkReadiness!(root, {}, files)
+    expect((await scanner.scan(root, {}, files))!.files.map(file => file.file).toSorted()).toEqual(['src/app.spec.ts', 'src/app.ts'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

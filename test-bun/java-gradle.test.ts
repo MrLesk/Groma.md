@@ -2,12 +2,12 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import java from '../plugins/scanners/java/src/index.ts'
+import manifest from '../plugins/scanners/java/package.json'
 import { gradleProjects, readGradleScript, withGradleDiagnostics } from '../plugins/scanners/java/src/gradle.ts'
 import { readJavaInput } from '../plugins/scanners/java/src/java-input.ts'
 import { reconcileScanObservations } from '../src/core.ts'
 import { formatScanReport } from '../src/scanner.ts'
-import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
+import { scannerFiles, scannerSelection } from '../src/scanner/modules/selection.ts'
 
 async function repository(fixture: string): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-gradle-'))
@@ -18,12 +18,18 @@ async function repository(fixture: string): Promise<string> {
   return root
 }
 
-const input = (directory: string) => readJavaInput(directory)
+/**
+ * The files Groma hands the Java scanner under the package's defaults, relative to a directory: Git lists a folder's
+ * files relative to it, as the project scanner hands a project its files.
+ */
+const javaFiles = (directory: string) => scannerFiles(directory, manifest.groma.scanner)
+
+const input = async (directory: string) => readJavaInput(directory, await javaFiles(directory))
 
 test.concurrent('Groovy settings include projects whose literal source sets and Java versions are read without Gradle', async () => {
   const root = await repository('java-gradle-groovy')
   try {
-    const found = await gradleProjects(root)
+    const found = await gradleProjects(root, await javaFiles(root))
     expect(found.directories.map(directory => path.relative(root, directory)).sort()).toEqual(['', 'app', path.join('libs', 'core')])
     expect(found.diagnostics.map(diagnostic => diagnostic.file).sort()).toEqual(['app/build.gradle', 'build.gradle'])
     expect(await input(root)).toBeUndefined()
@@ -39,7 +45,7 @@ test.concurrent('Groovy settings include projects whose literal source sets and 
 test.concurrent('Kotlin builds keep literal and conventional sources while unresolvable declarations are reported', async () => {
   const root = await repository('java-gradle-kotlin')
   try {
-    const found = await gradleProjects(root)
+    const found = await gradleProjects(root, await javaFiles(root))
     expect(found.directories).toEqual([root])
     expect(found.diagnostics.map(diagnostic => diagnostic.file).sort())
       .toEqual(['build.gradle.kts', 'build.gradle.kts', 'settings.gradle.kts', 'settings.gradle.kts'])
@@ -53,7 +59,7 @@ test.concurrent('Kotlin builds keep literal and conventional sources while unres
 test.concurrent('Gradle warnings reach the scan report when no project produced Java evidence', async () => {
   const root = await repository('java-gradle-unresolved')
   try {
-    const found = await gradleProjects(root)
+    const found = await gradleProjects(root, await javaFiles(root))
     expect(await input(root)).toBeUndefined()
     const summary = await reconcileScanObservations(root, [withGradleDiagnostics(undefined, found.diagnostics)!])
     expect(summary.scannerDiagnostics?.map(({ diagnostic }) => [diagnostic.code, diagnostic.file]))
@@ -65,7 +71,7 @@ test.concurrent('Gradle warnings reach the scan report when no project produced 
 test.concurrent('declarations under control flow, in a function or for an unreadable source set are reported, not applied', async () => {
   const root = await repository('java-gradle-scopes')
   try {
-    const found = await gradleProjects(root)
+    const found = await gradleProjects(root, await javaFiles(root))
     // allprojects applies to this project too and is reported for the other projects it configures.
     expect(found.diagnostics.map(diagnostic => diagnostic.line)).toEqual([6, 10, 12, 16, 19])
     expect(await input(root)).toMatchObject({ release: '17', files: ['src/main/java/scopes/Main.java'] })
@@ -117,8 +123,9 @@ test.concurrent('only literal values become versions, source directories and inc
 })
 
 test.concurrent('editing a Gradle build or settings script triggers a Java scan', () => {
-  const watches = compileWatchPatterns(java.watch)
+  // A change triggers a scanner when its include list names the path and no exclusion does.
+  const reads = scannerSelection(manifest.groma.scanner)
   for (const file of ['settings.gradle', 'settings.gradle.kts', 'app/build.gradle', 'libs/core/build.gradle.kts']) {
-    expect(watches(file)).toBeTrue()
+    expect(reads.included(file) && !reads.excluded(file)).toBeTrue()
   }
 })

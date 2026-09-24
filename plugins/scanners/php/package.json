@@ -9,6 +9,12 @@
     "scanner": {
       "id": "php",
       "entry": "./src/index.ts",
+      "include": [
+        "**/*.php",
+        "**/composer.json",
+        "**/bin/*",
+        "**/artisan"
+      ],
       "exclude": [
         "vendor/"
       ],

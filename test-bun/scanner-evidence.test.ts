@@ -5,12 +5,17 @@ import os from 'node:os'
 import path from 'node:path'
 import { createScanObservation } from '@groma/scanner'
 
-import { listTypeScriptFiles } from '../plugins/scanners/typescript/src/files.ts'
+import { typeScriptSources } from '../plugins/scanners/typescript/src/files.ts'
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { requireGromaMapping } from '../src/okf-profile.ts'
 import { upsertCode } from '../src/markdown-emitter.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 const packageFiles = {
   'groma/index.md': '---\nokf_version: "0.2"\n---\n',
@@ -119,13 +124,14 @@ test.concurrent('TypeScript emits one file fact and separate inferred placement'
   })
   try {
     await gitAdd(root)
-    expect(await listTypeScriptFiles(root)).toEqual([
+    const files = await typescriptFiles(root)
+    expect(typeScriptSources(files)).toEqual([
       'src/cli.ts',
       'src/parse.ts',
       'src/scanner.ts',
       'src/unused.ts',
     ])
-    const result = await scanTypeScriptSource(root)
+    const result = await scanTypeScriptSource(root, files)
     expect(result?.files.map(file => file.file)).toEqual([
       'src/cli.ts',
       'src/parse.ts',

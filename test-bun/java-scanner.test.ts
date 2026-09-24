@@ -8,7 +8,7 @@ import { buildPackage, buildWorker } from '../plugins/scanners/java/build.ts'
 import manifest from '../plugins/scanners/java/package.json'
 import { summarizeMissingTypes } from '../plugins/scanners/java/src/missing-types.ts'
 import { javaCommand, run } from '../plugins/scanners/java/src/process.ts'
-import { exclusion } from '../src/scanner/modules/config.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 import { createScanObservation, parseScanObservation, type ScanObservation, type ScannerPlugin } from '@groma/scanner'
 
@@ -134,7 +134,7 @@ test.concurrent('Java folds missing external types from every project into one s
   expect(diagnostics.map(item => item.code).sort()).toEqual(['JAVA_MISSING_EXTERNAL_TYPES', 'compiler.err.prob.found.req'])
 })
 
-test.concurrent('Java reads no build script or source its exclusions name, while a ! pattern restores a package folder a default names', async () => {
+test.concurrent('Java reads no build script or source outside its files, while a ! pattern restores a package folder a default names', async () => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-java-exclusions-'))
   try {
     const root = path.join(temporary, 'project')
@@ -156,10 +156,11 @@ test.concurrent('Java reads no build script or source its exclusions name, while
     const git = Bun.spawn(['git', 'init', '--quiet', root], { stdout: 'ignore', stderr: 'pipe' })
     expect(await git.exited, await new Response(git.stderr).text()).toBe(0)
     const java: ScannerPlugin = (await import(pathToFileURL(path.join(artifact, 'src/index.js')).href)).default
-    const excluded = exclusion([...manifest.groma.scanner.exclude, '!src/main/java/shop/build/'])
-    const observation = (await java.scan(root, {}, excluded))!
+    const { include, exclude } = manifest.groma.scanner
+    const selected = await scannerFiles(root, { include, exclude: [...exclude, '!src/main/java/shop/build/'] })
+    const observation = (await java.scan(root, {}, selected))!
     expect(observation.files.map(file => file.file).sort())
       .toEqual(['src/main/java/shop/Orders.java', 'src/main/java/shop/build/Tool.java'])
-    expect(observation.diagnostics.filter(diagnostic => diagnostic.file !== undefined && excluded(diagnostic.file))).toEqual([])
+    expect(observation.diagnostics.filter(diagnostic => diagnostic.file !== undefined && !selected.includes(diagnostic.file))).toEqual([])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 }, 120000)

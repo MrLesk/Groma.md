@@ -1,7 +1,6 @@
 import path from 'node:path'
 import type { ScanDiagnostic } from '@groma/scanner'
 import ts from 'typescript'
-import { repositoryFiles } from '../../projects.ts'
 import { frameworkProjectFiles, frameworkSourceFiles } from '../../typescript-project.ts'
 
 /** A package that declares Angular; an Nx workspace declares it once at its root and keeps configs in each project. */
@@ -21,16 +20,16 @@ function failDiagnostics(diagnostics: readonly ts.Diagnostic[]): void {
 }
 
 /**
- * Each Angular project directory with the TypeScript sources its scan compiles, among the files `excluded` leaves in; a
- * file belongs to its nearest project.
+ * Each Angular project directory with the TypeScript sources among the scanner's files that its scan compiles; a file
+ * belongs to its nearest project.
  */
-export function angularProjects(root: string, excluded: (file: string) => boolean): Promise<Map<string, string[]>> {
-  return frameworkProjectFiles({ root, ...SELECTION, sources: ['.ts'], excluded })
+export function angularProjects(root: string, files: readonly string[]): Promise<Map<string, string[]>> {
+  return frameworkProjectFiles({ root, files, ...SELECTION, sources: ['.ts'] })
 }
 
-/** The files a scan can read, before exclusions: the sources, and every template and stylesheet a component can name. */
-export function angularSourceFiles(root: string): Promise<string[]> {
-  return frameworkSourceFiles({ root, ...SELECTION, sources: ['.ts', ...RESOURCES] })
+/** The candidates a scan can read: the sources, and every template and stylesheet a component can name. */
+export function angularSourceFiles(root: string, candidates: readonly string[]): Promise<string[]> {
+  return frameworkSourceFiles({ root, files: candidates, ...SELECTION, sources: ['.ts', ...RESOURCES] })
 }
 
 /**
@@ -42,11 +41,11 @@ const unreadable = new Set([5083, 6053, 5023, 6046])
 export interface ProjectConfig { file: string; config: ts.ParsedCommandLine }
 
 /**
- * Every config inside the Angular projects that `excluded` leaves in, and each config they reference, as a solution
- * config names its projects.
+ * Every `tsconfig.json` among the scanner's files inside the Angular projects, and each config they reference, as a
+ * solution config names its projects.
  */
-export async function projectConfigs(root: string, directories: readonly string[],
-  excluded: (file: string) => boolean): Promise<{ configs: ProjectConfig[]; diagnostics: ScanDiagnostic[] }> {
+export function projectConfigs(root: string, directories: readonly string[],
+  files: readonly string[]): { configs: ProjectConfig[]; diagnostics: ScanDiagnostic[] } {
   const configs = new Map<string, ProjectConfig>()
   const diagnostics: ScanDiagnostic[] = []
   const read = (file: string): void => {
@@ -63,9 +62,7 @@ export async function projectConfigs(root: string, directories: readonly string[
     for (const reference of config.projectReferences ?? []) read(ts.resolveProjectReferencePath(reference))
   }
   const inProject = (file: string) => directories.some(directory => directory === '.' || file.startsWith(`${directory}/`))
-  for (const file of await repositoryFiles(root, file => path.posix.basename(file) === 'tsconfig.json' && inProject(file) && !excluded(file))) {
-    read(path.join(root, file))
-  }
+  for (const file of files.filter(file => path.posix.basename(file) === 'tsconfig.json' && inProject(file))) read(path.join(root, file))
   return { configs: [...configs.values()], diagnostics }
 }
 

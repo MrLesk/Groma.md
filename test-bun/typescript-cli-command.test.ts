@@ -2,9 +2,14 @@ import { expect, test } from 'bun:test'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 const fixture: {
   initial: Record<string, string>
@@ -25,14 +30,14 @@ for (const scenario of fixture.cases) {
       }
       const git = Bun.spawn(['git', 'init', '--quiet', root], { stderr: 'pipe' })
       expect(await git.exited).toBe(0)
-      await reconcileScanObservations(root, [(await scanTypeScriptSource(root))!])
+      await reconcileScanObservations(root, [(await scanTypeScriptSource(root, await typescriptFiles(root)))!])
       const initial = await loadAnnotatedArchitecture(root)
       const entry = initial.elements.find(element => element.code.some(code => code.file === 'main.ts'))!
       await editArchitecture(root, { id: entry.id, overview: 'Runs the selected operation.' })
       const curated = await loadAnnotatedArchitecture(root)
 
       for (const [file, source] of Object.entries(fixture.added)) await writeFile(path.join(root, file), source)
-      const scan = (await scanTypeScriptSource(root))!
+      const scan = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
       const modules = scan.roots.filter(candidate => candidate.kind === 'module')
       expect(modules.map(candidate => candidate.file).sort()).toEqual(scenario.independent ? ['main.ts', 'worker.ts'] : ['main.ts'])
       const mainRoot = modules.find(candidate => candidate.file === 'main.ts')!.id
@@ -52,7 +57,7 @@ for (const scenario of fixture.cases) {
       }
 
       for (let pass = 0; pass < 2; pass++) {
-        expect((await reconcileScanObservations(root, [(await scanTypeScriptSource(root))!])).created).toBe(0)
+        expect((await reconcileScanObservations(root, [(await scanTypeScriptSource(root, await typescriptFiles(root)))!])).created).toBe(0)
         expect(await loadAnnotatedArchitecture(root)).toEqual(updated)
       }
     } finally { await rm(root, { recursive: true, force: true }) }

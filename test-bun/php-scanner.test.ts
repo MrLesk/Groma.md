@@ -4,17 +4,20 @@ import os from 'node:os'
 import path from 'node:path'
 import type { CodeSymbol, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/php/build.ts'
-import { exclusion } from '../src/scanner/modules/config.ts'
+import manifest from '../plugins/scanners/php/package.json'
 import { discoverScanners } from '../src/scanner/modules/discovery.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { loadArchitecture } from '../src/architecture-reader.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
-import { compileWatchPatterns } from '../src/scanner/watch-patterns.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
+
+/** The files Groma hands the scanner: those its package's include list names, less its default exclusions. */
+const phpFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function setup(fixture = 'php-source') {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-php-test-'))
@@ -32,9 +35,10 @@ test.concurrent('packaged PHP discovers source without Composer and reports exac
   const { temporary, root, scanner } = await setup()
   try {
     expect((await discoverScanners(root)).recommendations.some(scanner => scanner.id === 'php')).toBe(true)
-    await scanner.checkReadiness?.(root)
-    const scan = (await scanner.scan(root))!
-    expect(await scanner.scan(root)).toEqual(scan)
+    const files = await phpFiles(root)
+    await scanner.checkReadiness?.(root, {}, files)
+    const scan = (await scanner.scan(root, {}, files))!
+    expect(await scanner.scan(root, {}, files)).toEqual(scan)
     expect(scan.files.map(file => file.file)).toEqual(['plugin.php', 'view.php'])
     expect(scan.files.flatMap(file => file.symbols).some(symbol => symbol.name === 'Example\\ProposalService::send')).toBe(true)
     const source = await readFile(path.join(root, 'plugin.php'), 'utf8')
@@ -59,7 +63,7 @@ test.concurrent('packaged PHP discovers source without Composer and reports exac
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
-test.concurrent('PHP reads tracked Composer binaries with and without a PHP extension', async () => {
+test.concurrent('PHP reads the Composer commands its include list names, with and without a PHP extension', async () => {
   const { temporary, root, scanner } = await setup()
   try {
     await mkdir(path.join(root, 'bin'))
@@ -69,7 +73,7 @@ test.concurrent('PHP reads tracked Composer binaries with and without a PHP exte
     await writeFile(path.join(root, 'tools/console'), '<?php function runTool(): void {}\n')
     await writeFile(path.join(root, 'composer.json'), JSON.stringify({ name: 'sample/tool',
       bin: ['bin/command.php', 'bin/console'], scripts: { inspect: '@php tools/console' } }))
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await phpFiles(root)))!
     expect(scan.files.some(file => file.file === 'bin/command.php')).toBe(true)
     expect(scan.entryPoints).toContainEqual({
       file: 'bin/command.php', declaration: 'composer.json', name: 'command', files: ['bin/command.php'],
@@ -78,10 +82,13 @@ test.concurrent('PHP reads tracked Composer binaries with and without a PHP exte
     expect(scan.entryPoints).toContainEqual({
       file: 'bin/console', declaration: 'composer.json', name: 'console', files: ['bin/console'],
     })
-    expect(scan.entryPoints).toContainEqual({
+    // A command outside the default include list is read only once its path is added to the list.
+    expect(scan.files.some(file => file.file === 'tools/console')).toBe(false)
+    const { include, exclude } = manifest.groma.scanner
+    const added = await scannerFiles(root, { include: [...include, 'tools/console'], exclude })
+    expect((await scanner.scan(root, {}, added))!.entryPoints).toContainEqual({
       file: 'tools/console', declaration: 'composer.json', name: 'console', files: ['tools/console'],
     })
-    expect(compileWatchPatterns(scanner.watch)('tools/console')).toBe(true)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
@@ -117,7 +124,7 @@ test.concurrent('a component outlines its PHP files beside a TypeScript file und
     const world = await loadAnnotatedArchitecture(root)
     const component = world.elements.find(element => element.kind === 'component')!
     // The fixture's Code symbols are names the scan reports, so entries follow the scan's naming.
-    const scanned = (await scanner.scan(root))!.files.flatMap(file => file.symbols.map(symbol => symbol.name))
+    const scanned = (await scanner.scan(root, {}, await phpFiles(root)))!.files.flatMap(file => file.symbols.map(symbol => symbol.name))
     const named = component.code.flatMap(reference => reference.scanner === 'php' && reference.symbol ? [reference.symbol] : [])
     expect(named).toHaveLength(3)
     expect(scanned).toEqual(expect.arrayContaining(named))
@@ -157,12 +164,12 @@ test.concurrent('PHP syntax failures cannot publish a partial observation and ig
   try {
     await writeFile(path.join(root, '.gitignore'), 'ignored.php\n')
     await writeFile(path.join(root, 'ignored.php'), '<?php function broken(')
-    const before = (await scanner.scan(root))!
+    const before = (await scanner.scan(root, {}, await phpFiles(root)))!
     expect(before.files.some(file => file.file === 'ignored.php')).toBe(false)
     await reconcileScanObservations(root, [before])
     const saved = await loadArchitecture(root)
     await writeFile(path.join(root, 'view.php'), '<?php function broken(')
-    await expect(scanner.scan(root)).rejects.toThrow()
+    await expect(scanner.scan(root, {}, await phpFiles(root))).rejects.toThrow()
     expect(await loadArchitecture(root)).toEqual(saved)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
@@ -172,24 +179,23 @@ test.concurrent('PHP accepts named arguments after unpacking but rejects positio
   try {
     const file = path.join(root, 'unpacked.php')
     await writeFile(file, '<?php function send($call, $args) { return $call(...$args, named: true); }')
-    expect((await scanner.scan(root))!.files.some(source => source.file === 'unpacked.php')).toBe(true)
+    expect((await scanner.scan(root, {}, await phpFiles(root)))!.files.some(source => source.file === 'unpacked.php')).toBe(true)
     await writeFile(file, '<?php function send($call, $args) { return $call(...$args, true); }')
-    await expect(scanner.scan(root)).rejects.toThrow()
+    await expect(scanner.scan(root, {}, await phpFiles(root))).rejects.toThrow()
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
 test.concurrent('the PHP scan reads nothing the default exclusions name', async () => {
-  const { temporary, root, artifact, scanner } = await setup()
+  const { temporary, root, scanner } = await setup()
   try {
     // Reading either vendored file fails the scan: the manifest when its entries are read, the source when it is parsed.
     await mkdir(path.join(root, 'vendor/acme/tool'), { recursive: true })
     await writeFile(path.join(root, 'vendor/acme/tool/composer.json'), '{')
     await writeFile(path.join(root, 'vendor/acme/tool/broken.php'), '<?php function broken(')
-    const defaults: string[] = JSON.parse(await readFile(path.join(artifact, 'package.json'), 'utf8')).groma.scanner.exclude
-    const excluded = exclusion(defaults)
     // The host lists before exclusions, so the listing names the vendored source instead of failing on its manifest.
-    expect(await scanner.listSourceFiles!(root)).toContain('vendor/acme/tool/broken.php')
-    expect((await scanner.scan(root, {}, excluded))!.files.map(file => file.file))
+    const candidates = await scannerFiles(root, { include: manifest.groma.scanner.include })
+    expect(await scanner.listSourceFiles!(root, {}, candidates)).toContain('vendor/acme/tool/broken.php')
+    expect((await scanner.scan(root, {}, await phpFiles(root)))!.files.map(file => file.file))
       .toEqual(['plugin.php', 'view.php'])
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

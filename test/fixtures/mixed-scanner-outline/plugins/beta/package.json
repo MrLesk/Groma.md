@@ -2,5 +2,5 @@
   "name": "beta",
   "version": "1.0.0",
   "type": "module",
-  "groma": { "scanner": { "id": "beta", "entry": "./index.js" } }
+  "groma": { "scanner": { "id": "beta", "entry": "./index.js", "include": ["**/*.beta"] } }
 }

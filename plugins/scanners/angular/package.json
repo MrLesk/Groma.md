@@ -8,6 +8,20 @@
     "scanner": {
       "id": "angular",
       "entry": "./dist/package/dist/index.js",
+      "include": [
+        "**/*.ts",
+        "**/*.html",
+        "**/*.css",
+        "**/*.scss",
+        "**/*.sass",
+        "**/*.less",
+        "**/*.styl",
+        "**/tsconfig*.json",
+        "**/package.json",
+        "**/angular.json",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "*.spec.ts",
         "*.test.ts",

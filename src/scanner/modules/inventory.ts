@@ -109,8 +109,9 @@ export async function addScanner(
   if (configured.some(scanner => scanner.id === resolved.id)) {
     throw new Error(`scanner id is already configured: ${resolved.id}`)
   }
-  // The package's default exclusions become this project's list, which people then extend or override.
-  const scanner = { id: resolved.id, source: installed.source, ...(resolved.exclude?.length ? { exclude: resolved.exclude } : {}) }
+  // The package's include globs and default exclusions become this project's lists, which people then edit.
+  const scanner = { id: resolved.id, source: installed.source, include: resolved.include,
+    ...(resolved.exclude?.length ? { exclude: resolved.exclude } : {}) }
   await writeScannerConfig(repositoryRoot, { ...config, scanners: [...configured, scanner] })
   return { id: scanner.id, source: scanner.source, status: 'found' }
 }

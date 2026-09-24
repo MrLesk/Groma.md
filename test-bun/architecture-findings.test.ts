@@ -7,6 +7,7 @@ import path from 'node:path'
 import { createScanObservation, type ScanOperation } from '@groma/scanner'
 
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { copiesOf, detectDuplicatedLogic, findingsForOwner, rememberArchitectureFindings } from '../src/architecture-findings.ts'
 
@@ -14,6 +15,10 @@ import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { scanRepository } from '../src/scanner.ts'
 import { inspectDetails } from '../src/viewers/web/organisms/details.ts'
 import type { ArchitectureFinding } from '../src/types.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 const fixtures = path.resolve(import.meta.dir, '../test/fixtures')
 
@@ -169,7 +174,7 @@ test.concurrent('similar independent rules still become a review finding', () =>
 test.concurrent('TypeScript operations match after renaming locals and keep literals', async () => {
   const root = await scannedFixture()
   try {
-    const scanned = (await scanTypeScriptSource(root))!
+    const scanned = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const byName = new Map((scanned.operations ?? []).map(operation => [operation.name, operation]))
     expect(byName.get('canStart')?.tokens).toEqual(byName.get('readyToRun')?.tokens)
     expect(byName.get('canStart')?.tokens?.join(' ')).toContain('"todo"')
@@ -183,7 +188,7 @@ test.concurrent('TypeScript operations match after renaming locals and keep lite
 test.concurrent('callbacks written in an object passed to a call or constructor are not compared', async () => {
   const root = await scannedFixture('call-argument-callbacks', 'src/observers.ts')
   try {
-    const scanned = (await scanTypeScriptSource(root))!
+    const scanned = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
     const findings = detectDuplicatedLogic([scanned], new Map())
     expect(findings).toHaveLength(1)
     expect(findings[0]!.match).toBe('exact')
@@ -198,7 +203,7 @@ test.concurrent('callbacks written in an object passed to a call or constructor 
 test.concurrent('bodies that differ in one operator, grouping or keyword are not copies, while constructors are compared', async () => {
   const root = await scannedFixture('distinct-bodies', 'src/bodies.ts')
   try {
-    const findings = detectDuplicatedLogic([(await scanTypeScriptSource(root))!], new Map())
+    const findings = detectDuplicatedLogic([(await scanTypeScriptSource(root, await typescriptFiles(root)))!], new Map())
     // Each function pair differs only in one operator, grouping, keyword, literal, `?.`, `...`, `this`, `index`,
     // a `#name` or a destructured property name.
     expect(findings.map(finding => [finding.match, namesOf(finding)])).toEqual([['exact', ['constructor', 'constructor']]])

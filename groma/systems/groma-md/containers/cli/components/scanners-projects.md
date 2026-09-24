@@ -8,6 +8,7 @@ groma:
   code:
     - scanner: typescript
       file: plugins/scanners/projects.ts
+      symbol: isUnder
     - scanner: typescript
       file: plugins/scanners/project-scanner.ts
       symbol: projectScanner

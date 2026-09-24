@@ -3,6 +3,20 @@
     {
       "id": "angular",
       "source": "./plugins/scanners/angular",
+      "include": [
+        "**/*.ts",
+        "**/*.html",
+        "**/*.css",
+        "**/*.scss",
+        "**/*.sass",
+        "**/*.less",
+        "**/*.styl",
+        "**/tsconfig*.json",
+        "**/package.json",
+        "**/angular.json",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "*.spec.ts",
         "*.test.ts",
@@ -19,6 +33,14 @@
       "settings": {
         "input": "plugins/scanners/csharp/dotnet/Groma.CSharpScanner.csproj"
       },
+      "include": [
+        "**/*.[cC][sS]",
+        "**/*.[cC][sS][pP][rR][oO][jJ]",
+        "**/*.[sS][lL][nN]",
+        "**/*.[sS][lL][nN][xX]",
+        "**/*.[pP][rR][oO][pP][sS]",
+        "**/*.[tT][aA][rR][gG][eE][tT][sS]"
+      ],
       "exclude": [
         "[bB][iI][nN]/",
         "[oO][bB][jJ]/",
@@ -35,6 +57,10 @@
     {
       "id": "go",
       "source": "./plugins/scanners/go",
+      "include": [
+        "**/*.go",
+        "**/go.mod"
+      ],
       "exclude": [
         "vendor/"
       ]
@@ -42,6 +68,14 @@
     {
       "id": "java",
       "source": "./plugins/scanners/java",
+      "include": [
+        "**/*.java",
+        "**/pom.xml",
+        "**/build.gradle",
+        "**/build.gradle.kts",
+        "**/settings.gradle",
+        "**/settings.gradle.kts"
+      ],
       "exclude": [
         "target/",
         "build/",
@@ -51,6 +85,15 @@
     {
       "id": "react",
       "source": "./plugins/scanners/react",
+      "include": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/tsconfig*.json",
+        "**/package.json",
+        "**/*.html",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "*.test.ts",
         "*.test.tsx",
@@ -69,6 +112,10 @@
       "settings": {
         "manifest": "plugins/scanners/rust/native/Cargo.toml"
       },
+      "include": [
+        "**/*.rs",
+        "**/Cargo.toml"
+      ],
       "exclude": [
         "target/",
         "vendor/"
@@ -77,6 +124,16 @@
     {
       "id": "typescript",
       "source": "./plugins/scanners/typescript",
+      "include": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/tsconfig*.json",
+        "**/package.json",
+        "**/*.html",
+        "**/angular.json",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "*.test.ts",
         "*.test.tsx",
@@ -92,6 +149,27 @@
     {
       "id": "vue",
       "source": "./plugins/scanners/vue",
+      "include": [
+        "**/*.vue",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs",
+        "**/*.html",
+        "**/*.css",
+        "**/*.scss",
+        "**/*.sass",
+        "**/*.less",
+        "**/*.styl",
+        "**/tsconfig*.json",
+        "**/package.json",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "node_modules/",
         "dist/",

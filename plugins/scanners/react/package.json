@@ -8,6 +8,15 @@
     "scanner": {
       "id": "react",
       "entry": "./dist/package/dist/index.js",
+      "include": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/tsconfig*.json",
+        "**/package.json",
+        "**/*.html",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "*.test.ts",
         "*.test.tsx",

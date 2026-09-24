@@ -1,7 +1,9 @@
+import { repositoryListing } from '../../repository-listing.ts'
 import { configuredScannerModules, type FoundScannerModule, type ScannerResolutionOptions } from './inventory.ts'
-import { configuredPlugin, scannerSourcesExcluded } from '../registry.ts'
+import { allExcluded, configuredPlugin } from '../registry.ts'
 import { discoverScanners } from './discovery.ts'
 import { readScannerConfig, type ScannerConfig } from './config.ts'
+import { selectedFiles } from './selection.ts'
 
 export interface ProjectReadiness {
   id: string
@@ -11,15 +13,15 @@ export interface ProjectReadiness {
 }
 
 async function sourceReadiness(
-  root: string, module: FoundScannerModule, config: ScannerConfig,
+  root: string, module: FoundScannerModule, config: ScannerConfig, listing: readonly string[],
 ): Promise<Pick<ProjectReadiness, 'project' | 'message'>> {
   const scanner = await configuredPlugin(module, config)
   if (scanner.plugin.checkReadiness === undefined) return { project: 'unchecked',
     message: 'No readiness check; project compatibility is established during scan.' }
-  if (await scannerSourcesExcluded(scanner, root)) {
+  if (allExcluded(listing, scanner)) {
     return { project: 'ready', message: 'All source files are excluded.' }
   }
-  await scanner.plugin.checkReadiness(root, scanner.settings, scanner.excluded)
+  await scanner.plugin.checkReadiness(root, scanner.settings ?? {}, selectedFiles(listing, scanner))
   return { project: 'ready', message: 'Preparation check passed; compilation is checked during scan.' }
 }
 
@@ -30,6 +32,7 @@ export async function checkScannerReadiness(
 ): Promise<ProjectReadiness[]> {
   const results: ProjectReadiness[] = []
   const config = await readScannerConfig(root)
+  const listing = await repositoryListing(root, config.useGitignore ?? true)
   const modules = await configuredScannerModules(root, options)
   const proposal = modules.some(module => module.status === 'found' && module.discovery?.compatibility)
     ? await discoverScanners(root, options) : undefined
@@ -46,7 +49,7 @@ export async function checkScannerReadiness(
     }
     try {
       results.push({ id: module.id, package: 'found',
-        ...await sourceReadiness(root, module, config) })
+        ...await sourceReadiness(root, module, config, listing) })
     } catch (error) {
       results.push({ id: module.id, package: 'found', project: 'blocked',
         message: error instanceof Error ? error.message : String(error) })

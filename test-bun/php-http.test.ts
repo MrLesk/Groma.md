@@ -4,7 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import type { HttpEndpointSegment, HttpRequestSegment, ScanObservation, ScannerPlugin } from '@groma/scanner'
 import { buildPackage } from '../plugins/scanners/php/build.ts'
+import manifest from '../plugins/scanners/php/package.json'
 import { inferRelationships } from '../src/relationship-inference.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 async function scanFixture(fixture = 'php-http', source?: string, base?: string): Promise<{ temporary: string; scan: ScanObservation }> {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-php-http-'))
@@ -17,7 +19,7 @@ async function scanFixture(fixture = 'php-http', source?: string, base?: string)
   expect(await git.exited).toBe(0)
   await buildPackage(artifact)
   const scanner: ScannerPlugin = (await import(path.join(artifact, 'dist/index.js'))).default
-  return { temporary, scan: (await scanner.scan(root))! }
+  return { temporary, scan: (await scanner.scan(root, {}, await scannerFiles(root, manifest.groma.scanner)))! }
 }
 
 test.concurrent('Slim routes to an inherited invokable handler in another file', async () => {

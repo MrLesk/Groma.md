@@ -1,10 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { proxyCreateProgram } from '@volar/typescript'
 import { createParsedCommandLine, createVueLanguagePlugin, SourceMap, VueVirtualCode, type Language } from '@vue/language-core'
 import ts from 'typescript'
 import type { ScanDiagnostic, ScanSourceUnit } from '@groma/scanner'
-import { hasDependency } from '../../projects.ts'
+import { hasDependency } from '../../typescript-project.ts'
 
 // Hoisted tooling declarations see the host SDK; the bundled runtime uses the package's pinned TypeScript.
 export const vueTypeScript = ts as unknown as Parameters<typeof createVueLanguagePlugin>[0]
@@ -27,10 +27,11 @@ export function failDiagnostics(diagnostics: readonly ts.Diagnostic[]): void {
     `${item.file?.fileName ?? 'Vue'}: ${ts.flattenDiagnosticMessageText(item.messageText, '\n')}`).join('\n'))
 }
 
-function projectConfig(root: string, repositoryRoot: string): string {
+/** The `tsconfig.json` among `files` that compiles a package: its own, else the nearest one in its repository ancestors. */
+function projectConfig(root: string, repositoryRoot: string, files: ReadonlySet<string>): string {
   for (let directory = root; ; directory = path.dirname(directory)) {
     const file = path.join(directory, 'tsconfig.json')
-    if (existsSync(file)) return file
+    if (files.has(relative(repositoryRoot, file))) return file
     if (directory === repositoryRoot) throw new Error(`${root}: no TypeScript config in the package or its repository ancestors`)
   }
 }
@@ -44,19 +45,21 @@ export class VueProject {
   readonly diagnostics: ScanDiagnostic[]
   private language!: Language<string>
   private readonly plugin
+  /** The scanner's files, the only repository files the project reads beyond what the compiler follows. */
+  private readonly readable: ReadonlySet<string>
 
   constructor(root: string, repositoryRoot: string, sources: readonly string[], owners: ReadonlyMap<string, string>,
-    excluded: (file: string) => boolean) {
+    files: ReadonlySet<string>) {
     this.root = repositoryRoot
+    this.readable = files
     const assigned = new Set(sources.map(file => path.resolve(repositoryRoot, file)))
-    // A file the config includes is this project's source unless a nested project owns it or the exclusions name
-    // it. Exclusions take repository paths, and their matcher throws on a path outside the repository, which a
-    // config may include, so such a file is never tested against them.
+    // A file the config includes is this project's source when it is among the scanner's files and no nested project
+    // owns it. A file outside the repository, which a config may include, is compiler context.
     const selected = (file: string) => {
       const local = relative(repositoryRoot, file)
-      return (owners.get(local) ?? root) === root && (local.startsWith('../') || !excluded(local))
+      return (owners.get(local) ?? root) === root && (local.startsWith('../') || files.has(local))
     }
-    const configFile = projectConfig(root, repositoryRoot)
+    const configFile = projectConfig(root, repositoryRoot, files)
     const configRoot = path.dirname(configFile)
     const config = ts.readJsonConfigFile(configFile, ts.sys.readFile)
     const vue = createParsedCommandLine(vueTypeScript, ts.sys, configFile)
@@ -103,11 +106,9 @@ export class VueProject {
     const companions = blocks.flatMap(block => {
       const src = block?.attrs.src
       if (typeof src !== 'string' || !src.startsWith('.')) return []
-      const filename = path.resolve(path.dirname(file), src)
-      const member = relative(this.root, filename)
-      if (member.startsWith('../')) return []
-      readFileSync(filename, 'utf8')
-      return [member]
+      // A companion outside the scanner's files is never read, so it stays out of the unit.
+      const member = relative(this.root, path.resolve(path.dirname(file), src))
+      return this.readable.has(member) ? [member] : []
     })
     return { primary, files: [primary, ...companions] }
   }
@@ -153,14 +154,16 @@ export class VueProject {
   }
 }
 
-export function vueProject(root: string, repositoryRoot = root, sources: readonly string[] = [], owners: ReadonlyMap<string, string> = new Map(),
-  excluded: (file: string) => boolean = () => false) {
+/** The Vue project in `root`, which reads only the scanner's `files`, or none when its manifest there declares no Vue. */
+export function vueProject(root: string, repositoryRoot: string, files: readonly string[], sources: readonly string[] = [],
+  owners: ReadonlyMap<string, string> = new Map()) {
+  const readable = new Set(files)
   const manifestFile = path.join(root, 'package.json')
-  if (!existsSync(manifestFile)) return undefined
+  if (!readable.has(relative(repositoryRoot, manifestFile))) return undefined
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
   if (!hasDependency(manifest, 'vue')) return undefined
   try {
-    return { manifest, project: new VueProject(root, repositoryRoot, sources, owners, excluded) }
+    return { manifest, project: new VueProject(root, repositoryRoot, sources, owners, readable) }
   } catch (error) {
     throw new Error(`VUE_SOURCE_INVALID: Check the project tsconfig.json and Vue syntax. ${error}`)
   }

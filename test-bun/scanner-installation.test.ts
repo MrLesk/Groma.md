@@ -26,13 +26,13 @@ async function fixture() {
     const directory = path.join(root, 'packages', id)
     const pkg = path.join(directory, 'package')
     await mkdir(pkg, { recursive: true })
-    const manifest = { name: `@groma/scanner-${id}`, version, groma: { scanner: { id, entry: './index.js', discovery: {
+    const manifest = { name: `@groma/scanner-${id}`, version, groma: { scanner: { id, entry: './index.js', include: ['**/*.fixture'], discovery: {
       technologies: [id], rules: [], compatibility: { groma: packageJson.version },
     } } } }
     manifests[manifest.name] = manifest
     await writeFile(path.join(pkg, 'package.json'), JSON.stringify(manifest))
     await writeFile(path.join(pkg, 'index.js'), `import { stat } from 'node:fs/promises';
-      export default { id: '${id}', watch: { include: ['**/*.fixture'], exclude: [] }, async scan(root) {
+      export default { id: '${id}', async scan(root) {
         if (await stat(root + '/tool-missing').then(() => true, () => false)) throw new Error('Install the project tool.');
         return { scanner: { id: '${id}', technology: '${id}', engine: 'fixture', engineVersion: '1' }, diagnostics: [], roots: [], files: [] };
       } }`)
@@ -68,7 +68,7 @@ test.concurrent('bulk installation retains successful releases, retries unpublis
     const before = await loadAnnotatedArchitecture(f.root)
     await expect(session.change({ action: 'install-recommended' })).rejects.toThrow('rust:')
     const first = await readScannerConfig(f.root)
-    expect(first.scanners).toEqual([{ id: 'react', source: `@groma/scanner-react@${f.version}` }])
+    expect(first.scanners).toEqual([{ id: 'react', source: `@groma/scanner-react@${f.version}`, include: ['**/*.fixture'] }])
     expect(session.state.scanners.find(item => item.id === 'react')?.status).toBe('ready')
     f.unavailable.clear()
     await session.change({ action: 'install-recommended' })
@@ -96,9 +96,9 @@ test.concurrent('setup retries a partial selection without reinstalling its succ
     f.unavailable.add('@groma/scanner-rust')
     await expect(installSelectedScanners(f.root, proposal, selected, f.options)).rejects.toThrow('rust')
     const first = await readScannerConfig(f.root)
-    expect(first.scanners).toEqual([{ id: 'react', source: `@groma/scanner-react@${f.version}` }])
+    expect(first.scanners).toEqual([{ id: 'react', source: `@groma/scanner-react@${f.version}`, include: ['**/*.fixture'] }])
     const refreshed = await discoverScanners(f.root, f.options)
-    expect(refreshed.inventory).toEqual([{ ...first.scanners[0]!, status: 'found' }])
+    expect(refreshed.inventory).toEqual([{ id: 'react', source: first.scanners[0]!.source, status: 'found' }])
     expect(installableScanners(refreshed).map(item => item.id)).toContain('rust')
     expect(installableScanners(refreshed).map(item => item.id)).not.toContain('react')
 
@@ -107,7 +107,7 @@ test.concurrent('setup retries a partial selection without reinstalling its succ
     await installSelectedScanners(f.root, proposal, selected, f.options)
     const complete = await readScannerConfig(f.root)
     expect(complete.scanners).toEqual([
-      ...first.scanners, { id: 'rust', source: `@groma/scanner-rust@${f.version}` },
+      ...first.scanners, { id: 'rust', source: `@groma/scanner-rust@${f.version}`, include: ['**/*.fixture'] },
     ])
     await installSelectedScanners(f.root, proposal, selected, f.options)
     await installSelectedScanners(f.root, refreshed, selected, f.options)

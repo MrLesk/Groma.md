@@ -3,7 +3,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
+import manifest from '../plugins/scanners/typescript/package.json'
 import { buildImportGraph } from '../plugins/scanners/typescript/src/graph.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 const cases = [
   ['unused', "import { Value } from './target.ts'; export const answer = 1", false],
@@ -36,7 +38,7 @@ test.concurrent('exported abstract classes retain class symbol identity', async 
     ].join('\n'))
     const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stderr: 'pipe' })
     expect(await git.exited).toBe(0)
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await scannerFiles(root, manifest.groma.scanner))
     expect(graph.files.find(file => file.file === 'classes.ts')?.symbols).toEqual([
       { id: 'classes.ts#Concrete', name: 'Concrete', kind: 'class' },
       { id: 'classes.ts#Abstract', name: 'Abstract', kind: 'class' },
@@ -72,7 +74,7 @@ test.concurrent('export symbols come from declarations rather than generated sou
     ].join('\n'))
     const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stderr: 'pipe' })
     expect(await git.exited).toBe(0)
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await scannerFiles(root, manifest.groma.scanner))
     expect(graph.files.find(file => file.file === 'source.ts')?.symbols).toEqual([
       ['run', 'function'], ['Service', 'class'], ['Input', 'interface'],
       ['Output', 'type'], ['Mode', 'enum'], ['fixed', 'const'],
@@ -91,7 +93,7 @@ test.concurrent('source dependencies follow bindings and explicit module executi
     await Promise.all(cases.map(([name, source]) => writeFile(path.join(root, `${name}.ts`), source)))
     const git = Bun.spawn(['git', 'init', '--quiet'], { cwd: root, stderr: 'pipe' })
     expect(await git.exited).toBe(0)
-    const graph = await buildImportGraph(root)
+    const graph = await buildImportGraph(root, await scannerFiles(root, manifest.groma.scanner))
     for (const [name, , used] of cases) {
       const node = graph.files.find(file => file.file === `${name}.ts`)
       expect(node?.imports, name).toEqual(used ? ['target.ts'] : [])

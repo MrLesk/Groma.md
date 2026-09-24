@@ -15,6 +15,8 @@ import { composeInvocations } from '../src/scan-evidence.ts'
 import { scanRepository, formatScanReport } from '../src/scanner.ts'
 
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+import typescriptManifest from '../plugins/scanners/typescript/package.json'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 
 const fixture = path.resolve(import.meta.dir, '../test/fixtures/scanner-composition')
@@ -152,11 +154,11 @@ test.concurrent('healthy scanners update overlapping evidence while failed scann
       const plugin = path.join(root, id)
       await mkdir(plugin)
       await writeFile(path.join(plugin, 'package.json'), JSON.stringify({
-        name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js' } },
+        name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js', include: ['**/*.ts'] } },
       }))
       await writeFile(path.join(plugin, 'index.js'), id === 'broken' ? 'export default {}' : `
         import { readFile, stat } from 'node:fs/promises'
-        export default { id: '${id}', watch: { include: ['**/*.ts'], exclude: [] }, async scan(root) {
+        export default { id: '${id}', async scan(root) {
           if (await stat(root + '/${id}.fail').then(() => true, () => false)) throw new Error('tool unavailable')
           return JSON.parse(await readFile(root + '/${id}.json', 'utf8'))
         } }
@@ -186,7 +188,7 @@ test.concurrent('healthy scanners update overlapping evidence while failed scann
 test.concurrent('TypeScript locates declarations and invocations using source offsets', async () => {
   const root = await repository()
   try {
-    const scan = (await scanTypeScriptSource(root))!
+    const scan = (await scanTypeScriptSource(root, await scannerFiles(root, typescriptManifest.groma.scanner)))!
     const source = await readFile(path.join(root, 'src/emitter.ts'), 'utf8')
     const call = scan.invocations!.find(invocation => invocation.member === 'emit')!
     const operation = scan.operations!.find(operation => operation.id === call.source)!

@@ -1,12 +1,11 @@
-import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { packageManifest, repositoryFiles } from './projects.ts'
+import { packageManifest } from './typescript-project.ts'
 
 /*
- * Workspace packages as a fresh checkout has them, without node_modules or build output. Every named package.json the
- * scanner's exclusions leave in is a workspace package, whatever a `workspaces` field lists: its name resolves to the
- * source its manifest points at, and a file its build writes to the source it comes from. The TypeScript scanner gives
- * these mappings to its compiler and to the entry reader.
+ * Workspace packages as a fresh checkout has them, without node_modules or build output. Every named package.json among
+ * the scanner's files is a workspace package, whatever a `workspaces` field lists: its name resolves to the source its
+ * manifest points at, and a file its build writes to the source it comes from. The TypeScript scanner gives these
+ * mappings to its compiler and to the entry reader.
  */
 
 /** Where a build writes a source folder: a file under `outDir` comes from the same path under `rootDir`. */
@@ -18,11 +17,10 @@ function inRootDir(file: string, outputs: readonly BuildOutput[]): string | unde
   return output === undefined ? undefined : path.posix.join(output.rootDir, file.slice(output.outDir.length + 1))
 }
 
-/** The source file a built file under an `outDir` comes from, by its `.ts` or `.tsx` name, or none. */
-export function sourceOf(root: string, file: string, outputs: readonly BuildOutput[]): string | undefined {
+/** The source file among `files` a built file under an `outDir` comes from, by its `.ts` or `.tsx` name, or none. */
+export function sourceOf(file: string, outputs: readonly BuildOutput[], files: ReadonlySet<string>): string | undefined {
   const stem = inRootDir(file, outputs)?.replace(/\.(?:d\.[cm]?ts|[cm]?jsx?)$/, '')
-  return stem === undefined ? undefined
-    : ['.ts', '.tsx'].map(extension => `${stem}${extension}`).find(candidate => existsSync(path.join(root, candidate)))
+  return stem === undefined ? undefined : ['.ts', '.tsx'].map(extension => `${stem}${extension}`).find(candidate => files.has(candidate))
 }
 
 /**
@@ -71,11 +69,11 @@ function packageMappings(root: string, file: string, name: string, manifest: Man
 }
 
 /**
- * Compiler path mappings from each workspace package's name, and each subpath it serves, to absolute targets. A name
- * two packages share is ambiguous, so its imports stay unresolved. The manifests `excluded` names are not read.
+ * Compiler path mappings from the name of each workspace package among `files`, and each subpath it serves, to absolute
+ * targets. A name two packages share is ambiguous, so its imports stay unresolved.
  */
-export async function packagePaths(root: string, outputs: readonly BuildOutput[], excluded: (file: string) => boolean): Promise<Record<string, string[]>> {
-  const manifests = await Promise.all((await repositoryFiles(root, file => path.posix.basename(file) === 'package.json' && !excluded(file)))
+export async function packagePaths(root: string, outputs: readonly BuildOutput[], files: readonly string[]): Promise<Record<string, string[]>> {
+  const manifests = await Promise.all(files.filter(file => path.posix.basename(file) === 'package.json')
     .map(async file => ({ file, manifest: await packageManifest(root, file) as Manifest | undefined })))
   const named = manifests.flatMap(({ file, manifest }) => typeof manifest?.name === 'string' ? [{ file, name: manifest.name, manifest }] : [])
   const counts = new Map<string, number>()

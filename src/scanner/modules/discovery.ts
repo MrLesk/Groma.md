@@ -35,8 +35,8 @@ function declarationFile(file: string, rules: CompiledRule[]): boolean {
   return !file.split('/').some(part => excluded.has(part)) && rules.some(rule => rule.matches(file))
 }
 
-async function projectDeclarations(repositoryRoot: string, rules: CompiledRule[]): Promise<string[]> {
-  return [...new Set((await repositoryListing(repositoryRoot)).filter(file => declarationFile(file, rules)))].sort()
+async function projectDeclarations(repositoryRoot: string, rules: CompiledRule[], useGitignore: boolean): Promise<string[]> {
+  return [...new Set((await repositoryListing(repositoryRoot, useGitignore)).filter(file => declarationFile(file, rules)))].sort()
 }
 
 async function resolveDependencyVersion(
@@ -103,12 +103,12 @@ export async function discoverScanners(
   const findings: TechnologyFinding[] = []
   const limits: string[] = []
   const rules = catalog.flatMap(scanner => scanner.rules.map(rule => ({
-    rule, matches: compileWatchPatterns({ include: rule.files, exclude: [] }),
+    rule, matches: compileWatchPatterns(rule.files),
   })))
   // Discovery rules belong to every scanner, installed or not, so the global list alone applies.
   const config = initialized ? await readScannerConfig(repositoryRoot) : undefined
   const excluded = exclusion(config?.exclude ?? [])
-  for (const file of await projectDeclarations(repositoryRoot, rules)) {
+  for (const file of await projectDeclarations(repositoryRoot, rules, config?.useGitignore ?? true)) {
     if (excluded(file)) continue
     try {
       findings.push(...await declarationFindings(repositoryRoot, file, rules))

@@ -22,19 +22,21 @@ packages, including the MIT-licensed `good-enough-parser`.
 
 ## Source inputs
 
-Tracked and unignored `pom.xml` files identify Maven projects. Each POM supplies
-literal source settings and properties: main source directory, language release,
-encoding and artifact name. Defaults are `src/main/java`, the bundled compiler's
-language version and UTF-8. POM-only aggregators supply no source observation.
+The package declares the default
+[include and exclude lists](../index.md#selecting-source-files). It includes
+`**/*.java`, `**/pom.xml`, `**/build.gradle`, `**/build.gradle.kts`,
+`**/settings.gradle` and `**/settings.gradle.kts`, and excludes `target/`,
+`build/` and `.gradle/`. Each exclusion matches a folder of that name anywhere,
+including a package folder such as `com/acme/build/` and a declared source root
+inside one, such as `build/generated/java`. Of its `.java` files, the scanner
+reads only those under each project's main source roots, so test source sets
+stay out whatever the lists say.
 
-The package declares default
-[exclusions](../index.md#excluding-source-evidence): `target/`, `build/` and
-`.gradle/`. Each pattern matches a
-folder of that name anywhere, including a package folder such as
-`com/acme/build/`. The scan and the readiness check skip every POM, Gradle
-script and source that the scanner's exclusions name, including sources under a
-declared source root such as `build/generated/java`. Test source sets stay out
-whatever the list says, because only main source roots are read.
+Each `pom.xml` among the scanner's files identifies a Maven project. Each POM
+supplies literal source settings and properties: main source directory, language
+release, encoding and artifact name. Defaults are `src/main/java`, the bundled
+compiler's language version and UTF-8. POM-only aggregators supply no source
+observation.
 
 The scanner does not evaluate Maven, parent POMs, profiles, build plugins,
 annotation processors or dependency declarations. It does not load project
@@ -58,10 +60,11 @@ loading a project build or dependency JARs.
 
 ## Gradle projects
 
-Tracked and unignored `build.gradle`, `build.gradle.kts`, `settings.gradle` and
-`settings.gradle.kts` files identify Gradle projects. The scanner reads Groovy
-and Kotlin scripts with the bundled `good-enough-parser` library. It never runs
-Gradle, downloads a Gradle distribution or plugins, or executes build logic.
+The build and settings scripts among the scanner's files, `build.gradle`,
+`build.gradle.kts`, `settings.gradle` and `settings.gradle.kts`, identify Gradle
+projects. The scanner reads Groovy and Kotlin scripts with the bundled
+`good-enough-parser` library. It never runs Gradle, downloads a Gradle
+distribution or plugins, or executes build logic.
 
 Every directory with a build or settings script is a project; a directory with
 `pom.xml` is read as a Maven project instead. Literal `include` paths in a

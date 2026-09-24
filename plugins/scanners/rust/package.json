@@ -8,6 +8,10 @@
     "scanner": {
       "id": "rust",
       "entry": "./src/index.ts",
+      "include": [
+        "**/*.rs",
+        "**/Cargo.toml"
+      ],
       "exclude": [
         "target/",
         "vendor/"

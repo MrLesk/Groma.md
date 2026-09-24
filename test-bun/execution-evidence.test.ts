@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createScanObservation } from '@groma/scanner'
@@ -7,6 +7,13 @@ import { scanReact } from '../plugins/scanners/react/src/scan.ts'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { createScannerRegistry } from '../src/scanner/registry.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files a scanner's package defaults hand it in a repository. */
+async function defaultFiles(root: string, scanner: string): Promise<string[]> {
+  const manifest = JSON.parse(await readFile(path.resolve(import.meta.dir, `../plugins/scanners/${scanner}/package.json`), 'utf8'))
+  return scannerFiles(root, manifest.groma.scanner)
+}
 import javascript from '../plugins/scanners/javascript/src/index.ts'
 import php from '../plugins/scanners/php/src/index.ts'
 import vue from '../plugins/scanners/vue/src/index.ts'
@@ -54,7 +61,7 @@ for (const example of examples) test.concurrent(`${example.scanner.id} reports d
     const artifact = path.join(directory, 'scanner')
     if (example.build) await example.build(artifact)
     const scanner = example.build ? (await import(path.join(artifact, 'dist/index.js'))).default : example.scanner
-    const scan = (await scanner.scan(root))!
+    const scan = (await scanner.scan(root, {}, await defaultFiles(root, example.scanner.id)))!
     expect(scan.entryPoints).toHaveLength(1)
     expect(scan.entryPoints![0]!.file).toBe(example.entry)
     expect(scan.entryPoints![0]!.files).toContain(example.member)
@@ -85,7 +92,7 @@ test.concurrent('each literal command in a package script, and each page script,
     await writeFile(path.join(root, 'web/index.html'), '<script type="module" src="./main.js"></script>')
     await writeFile(path.join(root, 'web/main.js'), 'console.log(1)\n')
     expect(await Bun.spawn(['git', 'init', '--quiet', root]).exited).toBe(0)
-    const scan = (await javascript.scan(root))!
+    const scan = (await javascript.scan(root, {}, await defaultFiles(root, 'javascript')))!
     expect(scan.entryPoints?.map(entry => entry.file).sort()).toEqual(['cjs.js', 'configured.js', 'cross.js', 'env.js',
       'flagged.js', 'formatting.js', 'index.js', 'preloaded.js', 'watched.js', 'web/main.js'])
     expect(scan.entryPoints?.find(entry => entry.file === 'web/main.js')?.name).toBe('web')
@@ -118,12 +125,12 @@ test.concurrent('declared commands and browser builds share source identity acro
       await writeFile(path.join(root, file), text)
     }
     expect(await Bun.spawn(['git', 'init', '--quiet'], { cwd: root }).exited).toBe(0)
-    const typescript = (await scanTypeScriptSource(root))!
+    const typescript = (await scanTypeScriptSource(root, await defaultFiles(root, 'typescript')))!
     const browserFacts = typescript.entryPoints!.filter(entry => entry.file === 'src/browser.ts')
     expect(browserFacts.map(entry => entry.declaration).sort()).toEqual(['build.ts', 'index.html'])
     expect(browserFacts.every(entry => entry.files.includes('src/view.tsx'))).toBe(true)
     expect(typescript.entryPoints!.find(entry => entry.file === 'src/cli.ts')!.files).not.toContain('library/lib.ts')
-    const framework = (await scanReact(root))!
+    const framework = (await scanReact(root, {}, await defaultFiles(root, 'react')))!
     expect(framework.entryPoints!.map(entry => entry.file)).toEqual(['src/browser.ts', 'src/browser.ts'])
     expect(framework.files.some(file => file.file === 'src/browser.ts')).toBe(true)
     await reconcileScanObservations(root, [framework, typescript])
@@ -142,7 +149,7 @@ test.concurrent('excluding an execution declaration removes its fact even when s
     roots: [{ id: 'root', kind: 'source', name: 'Source' }],
     files: [{ file: 'entry', roots: ['root'], symbols: [] }],
     entryPoints: [{ file: 'entry', declaration: 'build', name: 'Run', files: ['entry'] }], diagnostics: [] })
-  const registry = createScannerRegistry([{ plugin: { id: 'fixture', watch: { include: ['**/*'], exclude: [] }, async scan() { return scan } }, excluded: file => file === 'build' }])
+  const registry = createScannerRegistry([{ plugin: { id: 'fixture', async scan() { return scan } }, included: () => true, excluded: file => file === 'build' }])
   const batch = await registry.collectObservations('.')
   expect(batch.observations[0]!.files).toEqual(scan.files)
   expect(batch.observations[0]!.entryPoints).toEqual([])

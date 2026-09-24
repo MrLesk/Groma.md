@@ -3,9 +3,14 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ScanObservation } from '@groma/scanner'
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 const variants = [
   ['domain', 'atoms'], ['domain', 'molecules'], ['domain', 'organisms'],
@@ -45,8 +50,8 @@ for (const [neutral, special] of variants) {
     try {
       const baselineRoot = await project(temporary, 'neutral', text => text)
       const root = await project(temporary, 'renamed', rename)
-      const baseline = (await scanTypeScriptSource(baselineRoot))!
-      const scan = (await scanTypeScriptSource(root))!
+      const baseline = (await scanTypeScriptSource(baselineRoot, await typescriptFiles(baselineRoot)))!
+      const scan = (await scanTypeScriptSource(root, await typescriptFiles(root)))!
       expect(membership(scan, normalize)).toEqual(membership(baseline, text => text))
       expect(scan.files).toHaveLength(3)
       expect(scan.files.every(file => file.symbols.length > 0)).toBe(true)
@@ -58,7 +63,7 @@ for (const [neutral, special] of variants) {
       const component = before.elements.find(element => element.code.some(code => code.file === service.file))!
       await editArchitecture(root, { id: component.id, title: 'Curated responsibility' })
       const curated = await loadAnnotatedArchitecture(root)
-      expect((await reconcileScanObservations(root, [(await scanTypeScriptSource(root))!])).created).toBe(0)
+      expect((await reconcileScanObservations(root, [(await scanTypeScriptSource(root, await typescriptFiles(root)))!])).created).toBe(0)
       expect(await loadAnnotatedArchitecture(root)).toEqual(curated)
     } finally { await rm(temporary, { recursive: true, force: true }) }
   })

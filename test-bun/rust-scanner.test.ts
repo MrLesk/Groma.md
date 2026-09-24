@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { appendFile, cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import rustPackage from '../plugins/scanners/rust/package.json'
 import rustScanner, { scanRustSource } from '../plugins/scanners/rust/src/index.ts'
 
 import { execute } from '../plugins/scanners/rust/src/project.ts'
@@ -10,6 +11,7 @@ import { loadArchitecture } from '../src/architecture-reader.ts'
 import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { scanRepository } from '../src/scanner.ts'
 import { addScanner } from '../src/scanner/modules/inventory.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
 import type { CodeSymbol, ScanObservation } from '@groma/scanner'
 
@@ -22,9 +24,13 @@ async function fixture(name: string, action: (root: string) => Promise<void>) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma rust '))
   try {
     await cp(path.resolve(import.meta.dir, '../test/fixtures', name), root, { recursive: true })
+    await execute('git', ['init', '--quiet'], { cwd: root })
     await action(root)
   } finally { await rm(root, { recursive: true, force: true }) }
 }
+
+/** The files Groma hands the Rust scanner in this repository, under the package's default lists. */
+const rustFiles = (root: string) => scannerFiles(root, rustPackage.groma.scanner)
 
 function evidence(observation: ScanObservation) {
   const operations = new Map(observation.operations!.map(operation => [operation.id, operation]))
@@ -36,11 +42,11 @@ function evidence(observation: ScanObservation) {
 
 rustTest('rust-analyzer owns alias and inherent method targets while unsupported dispatch stays uncertain', async () => {
   await fixture('rust-semantic', async root => {
-    const first = await scanRustSource(root, {}, { worker })
+    const first = await scanRustSource(root, {}, await rustFiles(root), worker)
     const manifest = first.roots.find(item => item.file === 'Cargo.toml')!
     expect(manifest).toBeDefined()
     expect(first.files.every(file => file.roots.includes(manifest.id))).toBeTrue()
-    expect(await scanRustSource(root, {}, { worker })).toEqual(first)
+    expect(await scanRustSource(root, {}, await rustFiles(root), worker)).toEqual(first)
     expect(first.files.map(file => file.file)).not.toContain('src/unreferenced.rs')
     const calls = evidence(first)
     const alias = calls.find(call => call.caller.name === 'entry')!
@@ -62,7 +68,7 @@ rustTest('inactive cfg branches and test functions produce no ordinary source fa
   await fixture('rust-semantic', async root => {
     await appendFile(path.join(root, 'Cargo.toml'), '\n[features]\noptional = []\n')
     await appendFile(path.join(root, 'src/lib.rs'), '\npub fn conditional() {\n    #[cfg(feature = "optional")] provider::Worker::create().work();\n    #[cfg(not(feature = "optional"))] provider::run();\n}\n#[test]\nfn test_only() { provider::run(); }\n')
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     const conditional = observation.operations!.find(operation => operation.name === 'conditional')!
     expect(observation.invocations!.filter(call => call.source === conditional.id)).toHaveLength(1)
     expect(conditional.tokens).not.toContain('create')
@@ -78,7 +84,7 @@ symlinkTest('one physical Rust file reached through a symlink has one uncertain 
     await writeFile(path.join(root, 'mirror/Cargo.toml'), '[package]\nname = "mirror"\nversion = "0.1.0"\nedition = "2021"\n')
     await writeFile(path.join(root, 'mirror/src/lib.rs'), 'mod provider;\n')
     await symlink('../../src/provider.rs', path.join(root, 'mirror/src/provider.rs'))
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     expect(observation.files.filter(file => file.file.endsWith('provider.rs'))).toHaveLength(1)
     expect(observation.operations!.some(operation => operation.file === 'src/provider.rs')).toBeFalse()
     expect(observation.diagnostics.some(item => item.code === 'rust-unsupported-compilation-contexts'
@@ -88,7 +94,7 @@ symlinkTest('one physical Rust file reached through a symlink has one uncertain 
 
 rustTest('wildcard import of a local module never resolves to the dependency with the same name', async () => {
   await fixture('rust-collision', async root => {
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     const call = evidence(observation).find(call => call.caller.name === 'main')!
     expect(call.unresolved).toBeFalse()
     expect(call.providers.map(provider => provider.file)).toEqual(['app/src/local.rs'])
@@ -97,23 +103,22 @@ rustTest('wildcard import of a local module never resolves to the dependency wit
 
 rustTest('shared compilation source has one identity and no guessed provider from either context', async () => {
   await fixture('rust-shared', async root => {
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     expect(observation.files.filter(file => file.file === 'src/shared.rs')).toHaveLength(1)
     expect(observation.files.find(file => file.file === 'src/shared.rs')?.roots).toHaveLength(1)
     expect(observation.operations!.some(operation => operation.file === 'src/shared.rs')).toBeFalse()
     expect(observation.diagnostics.some(diagnostic => diagnostic.code === 'rust-unsupported-compilation-contexts')).toBeTrue()
     expect(observation.roots).toHaveLength(1)
-    expect(await scanRustSource(root, {}, { worker })).toEqual(observation)
+    expect(await scanRustSource(root, {}, await rustFiles(root), worker)).toEqual(observation)
   })
 }, 60000)
 
 rustTest('lint finds identical and near-duplicate Rust functions but never closures or constant initializers', async () => {
   await fixture('rust-duplicates', async root => {
     // Every function body carries tokens; core, not the scanner, skips small bodies.
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     expect(observation.operations!.every(operation => operation.tokens!.length > 0)).toBeTrue()
     await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
-    await execute('git', ['init', '--quiet'], { cwd: root })
     await addScanner(root, packagePath)
     const lint = Bun.spawn([process.execPath, cli, 'lint'], { cwd: root, stdout: 'pipe', stderr: 'pipe' })
     const [code, out, error] = await Promise.all([lint.exited, new Response(lint.stdout).text(), new Response(lint.stderr).text()])
@@ -215,7 +220,7 @@ function segments(path: { kind: string; name?: string; value?: string; optional?
 
 rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest requests and the unresolved cases', async () => {
   await fixture('rust-http', async root => {
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     const operations = new Map(observation.operations!.map(operation => [operation.id, operation]))
     const where = (id: string) => {
       const operation = operations.get(id)!
@@ -295,7 +300,7 @@ rustTest('Rust HTTP facts cover axum, actix-web and Rocket endpoints, reqwest re
 rustTest('Rocket route registration uses the handler in its module when another module reuses the name', async () => {
   await fixture('rust-http', async root => {
     await appendFile(path.join(root, 'src/rocket_routes.rs'), '\nmod unrelated {\n    #[get("/unused")]\n    fn index() -> &\'static str { "" }\n}\n')
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     const routes = observation.httpEndpoints!.map(fact => `${fact.method} /${segments(fact.path)}`)
     expect(routes).toContain('GET /v1/speakers')
   })
@@ -304,7 +309,7 @@ rustTest('Rocket route registration uses the handler in its module when another 
 rustTest('a reqwest client taken from a typed extractor sends an HTTP request', async () => {
   await fixture('rust-http', async root => {
     await appendFile(path.join(root, 'src/client.rs'), '\npub async fn extracted(axum::extract::State(client): axum::extract::State<Client>) {\n    client.get("/stream").send().await;\n}\n')
-    const observation = await scanRustSource(root, {}, { worker })
+    const observation = await scanRustSource(root, {}, await rustFiles(root), worker)
     const operation = observation.operations!.find(item => item.name === 'extracted')!
     const request = observation.httpRequests!.find(item => item.operation === operation.id)
     expect(request?.method).toBe('GET')
@@ -315,7 +320,6 @@ rustTest('a reqwest client taken from a typed extractor sends an HTTP request', 
 rustTest('a Rust scan derives HTTP rows from the requesting file to the file that serves the endpoints', async () => {
   await fixture('rust-http', async root => {
     await cp(path.resolve(import.meta.dir, '../test/fixtures/empty-project'), root, { recursive: true })
-    await execute('git', ['init', '--quiet'], { cwd: root })
     await addScanner(root, packagePath)
     await scanRepository(root)
     const world = await loadAnnotatedArchitecture(root)
@@ -331,7 +335,6 @@ rustTest('a Rust scan derives HTTP rows from the requesting file to the file tha
 
 rustTest('registered Rust scans preserve curated ownership and a failed scan preserves the prior architecture', async () => {
   await fixture('rust-semantic', async root => {
-    await execute('git', ['init', '--quiet'], { cwd: root })
     await execute('git', ['add', '-A'], { cwd: root })
     await addScanner(root, packagePath)
     await scanRepository(root)

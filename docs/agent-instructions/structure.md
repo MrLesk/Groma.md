@@ -62,7 +62,9 @@ ignore patterns to the global `exclude` array in `<groma-root>/scanners.json`,
 or to one scanner entry's own `exclude` array to affect only that scanner, keep
 the existing entries, and run `groma scan`. A scanner's own list starts with the
 defaults its package declares; a `!` pattern there restores a globally excluded
-file for that scanner.
+file for that scanner. A scanner reads only the files its entry's `include` list
+names, less both exclusion lists and, unless `useGitignore` is false, the files
+Git ignores.
 
 ```json
 "exclude": ["/scripts/", "/test/", "**/*.spec.ts"]

@@ -9,6 +9,14 @@
     "scanner": {
       "id": "csharp",
       "entry": "./src/index.ts",
+      "include": [
+        "**/*.[cC][sS]",
+        "**/*.[cC][sS][pP][rR][oO][jJ]",
+        "**/*.[sS][lL][nN]",
+        "**/*.[sS][lL][nN][xX]",
+        "**/*.[pP][rR][oO][pP][sS]",
+        "**/*.[tT][aA][rR][gG][eE][tT][sS]"
+      ],
       "exclude": [
         "[bB][iI][nN]/",
         "[oO][bB][jJ]/",

@@ -4,12 +4,17 @@ import os from 'node:os'
 import path from 'node:path'
 import { parseScanObservation, type ScannerPlugin } from '@groma/scanner'
 import { buildPackage as buildPython } from '../plugins/scanners/python/build.ts'
+import python from '../plugins/scanners/python/package.json'
 import { buildPackage as buildSwift } from '../plugins/scanners/swift/build.ts'
+import swift from '../plugins/scanners/swift/package.json'
 import { buildWorker as buildJava } from '../plugins/scanners/java/build.ts'
 import { javaCommand, run } from '../plugins/scanners/java/src/process.ts'
 import { buildWorker as buildGo } from '../plugins/scanners/go/build.ts'
+import go from '../plugins/scanners/go/package.json'
 import { scanGoSource } from '../plugins/scanners/go/src/adapter.ts'
+import rust from '../plugins/scanners/rust/package.json'
 import { scanRustSource } from '../plugins/scanners/rust/src/index.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
 
 async function example(files: Record<string, string>, action: (root: string, artifact: string) => Promise<void>) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'groma-native-entry-'))
@@ -40,7 +45,7 @@ test.concurrent('Python execution guards and console scripts identify entries wi
     'library/pyproject.toml': '[project]\nname = "library"\n',
     'library/shared.py': 'def work():\n    pass\n',
   }, async (root, artifact) => {
-    const scan = await (await packaged(buildPython, artifact)).scan(root)
+    const scan = await (await packaged(buildPython, artifact)).scan(root, {}, await scannerFiles(root, python.groma.scanner))
     expect(scan!.entryPoints!.map(entry => entry.file).sort()).toEqual(['service.py', 'worker.py'])
     expect(scan!.entryPoints!.find(entry => entry.file === 'service.py')!.files).toEqual(['helper.py', 'service.py'])
   })
@@ -48,7 +53,8 @@ test.concurrent('Python execution guards and console scripts identify entries wi
 
 test.concurrent('Swift reports the main attribute without treating source files or imports as applications', async () => {
   await example({ 'App.swift': '@main struct App { static func main() {} }', 'Library.swift': 'struct Library {}' }, async (root, artifact) => {
-    const scan = await (await packaged(buildSwift, artifact, process.env.GROMA_TEST_SWIFT_PACKAGE)).scan(root)
+    const scan = await (await packaged(buildSwift, artifact, process.env.GROMA_TEST_SWIFT_PACKAGE))
+      .scan(root, {}, await scannerFiles(root, swift.groma.scanner))
     expect(scan!.entryPoints).toEqual([{ file: 'App.swift', declaration: 'App.swift', name: 'App', files: ['App.swift'] }])
   })
 }, 60000)
@@ -81,7 +87,7 @@ goTest('Go main packages include the module packages they import, directly or in
   }, async (root, artifact) => {
     const worker = path.join(artifact, process.platform === 'win32' ? 'worker.exe' : 'worker')
     await buildGo(worker, process.env.GROMA_TEST_GO)
-    const scan = await scanGoSource(root, { worker })
+    const scan = await scanGoSource(root, { worker }, await scannerFiles(root, go.groma.scanner))
     const files = (file: string) => scan.entryPoints!.find(entry => entry.file === file)!.files
     // Blank imports are compiled into the binary too.
     expect(files('cmd/api/main.go')).toEqual([
@@ -100,7 +106,7 @@ rustTest('Rust reports separate binary targets and excludes the library crate fr
     'src/bin/worker.rs': 'fn main() {}',
     'src/lib.rs': 'pub fn library() {}',
   }, async root => {
-    const scan = await scanRustSource(root)
+    const scan = await scanRustSource(root, {}, await scannerFiles(root, rust.groma.scanner))
     expect(scan.entryPoints!.map(entry => entry.file).sort()).toEqual(['src/bin/worker.rs', 'src/main.rs'])
     expect(scan.entryPoints!.find(entry => entry.file === 'src/main.rs')!.files).toEqual(['src/helper.rs', 'src/main.rs'])
   })

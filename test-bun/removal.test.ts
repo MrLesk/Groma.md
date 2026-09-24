@@ -5,7 +5,12 @@ import path from 'node:path'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { writes } from '../src/authoring.ts'
 import { removalBlocker } from '../src/removable.ts'
+import manifest from '../plugins/scanners/typescript/package.json'
 import { scanTypeScriptSource } from '../plugins/scanners/typescript/src/scan.ts'
+import { scannerFiles } from '../src/scanner/modules/selection.ts'
+
+/** The files Groma hands the TypeScript scanner with its package defaults. */
+const typescriptFiles = (root: string) => scannerFiles(root, manifest.groma.scanner)
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-remove-'))
@@ -27,7 +32,7 @@ test.concurrent('deleted source requires a scan before its empty component can b
     await expect(writes.remove(root, { id: 'obsolete' })).rejects.toThrow()
     await rm(path.join(root, 'src/obsolete.ts'))
     await expect(writes.remove(root, { id: 'obsolete' })).rejects.toThrow()
-    const observation = await scanTypeScriptSource(root)
+    const observation = await scanTypeScriptSource(root, await typescriptFiles(root))
     expect(observation).toBeDefined()
     await reconcileScanObservations(root, [observation!])
     const scanned = await loadAnnotatedArchitecture(root)

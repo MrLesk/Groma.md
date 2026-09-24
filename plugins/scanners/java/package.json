@@ -8,6 +8,14 @@
     "scanner": {
       "id": "java",
       "entry": "./src/index.ts",
+      "include": [
+        "**/*.java",
+        "**/pom.xml",
+        "**/build.gradle",
+        "**/build.gradle.kts",
+        "**/settings.gradle",
+        "**/settings.gradle.kts"
+      ],
       "exclude": [
         "target/",
         "build/",

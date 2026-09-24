@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { version as typescriptVersion } from 'typescript'
@@ -19,7 +18,9 @@ import {
 import { displayName, kebabCase } from './naming.ts'
 import { withJavaScriptEntries } from '../../entry-points/javascript.ts'
 
-async function packageBins(repositoryRoot: string): Promise<string[]> {
+/** The `bin` entries of the root package, when the scanner reads its manifest. */
+async function packageBins(repositoryRoot: string, files: readonly string[]): Promise<string[]> {
+  if (!files.includes('package.json')) return []
   try {
     const source = await readFile(path.join(repositoryRoot, 'package.json'), 'utf8')
     const bin = (JSON.parse(source) as { bin?: unknown }).bin
@@ -112,18 +113,15 @@ function scopeNames(scopeFiles: string[]): Map<string, string> {
   return names
 }
 
-/** `excluded` names the repository files the scan leaves out: sources, and the configs and workspace manifests it selects. */
-export async function scanTypeScriptSource(
-  repositoryRoot: string,
-  excluded: (file: string) => boolean = () => false,
-): Promise<ScanObservation | undefined> {
-  const graph = await buildImportGraph(repositoryRoot, excluded)
+/** The scan reads only `files`: its sources, and the configs, workspace manifests and entry declarations among them. */
+export async function scanTypeScriptSource(repositoryRoot: string, files: readonly string[]): Promise<ScanObservation | undefined> {
+  const graph = await buildImportGraph(repositoryRoot, files)
   if (graph.files.length === 0) return undefined
-  const scopeFiles = inferScopeFiles(graph, await packageBins(repositoryRoot))
+  const scopeFiles = inferScopeFiles(graph, await packageBins(repositoryRoot, files))
   const placements = placementByFile(graph, scopeFiles)
   const names = scopeNames(scopeFiles)
   const scopeId = (file: string) => `scope:${file}`
-  const name = await packageName(repositoryRoot)
+  const name = await packageName(repositoryRoot, files)
   return withJavaScriptEntries(repositoryRoot, createScanObservation({
     scanner: {
       id: 'typescript',
@@ -133,7 +131,7 @@ export async function scanTypeScriptSource(
     },
     roots: [
       { id: 'package', kind: 'package', name,
-        ...(existsSync(path.join(repositoryRoot, 'package.json')) ? { file: 'package.json' } : {}) },
+        ...(files.includes('package.json') ? { file: 'package.json' } : {}) },
       ...scopeFiles.map(file => ({ id: scopeId(file), kind: 'module', parent: 'package',
         name: names.get(file) ?? fileLabel(file), file })),
     ],
@@ -144,5 +142,5 @@ export async function scanTypeScriptSource(
     httpRequests: graph.httpRequests,
     diagnostics: graph.diagnostics,
   }), { imports: new Map(graph.files.map(node => [node.file, node.imports])), entries: graph.entries, buildOutputs: graph.buildOutputs },
-  excluded)
+  files)
 }

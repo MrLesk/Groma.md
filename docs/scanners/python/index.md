@@ -35,13 +35,14 @@ not download Python packages or use project environments.
 
 ## Source evidence
 
-The scanner reads Git-tracked and unignored untracked `.py` files. It scans
-neither `.pyi` stubs nor notebooks. The package declares default
-[exclusions](../index.md#excluding-source-evidence) for virtual environments
-and bytecode caches (`.venv/`, `venv/`, `__pycache__/`), tests (`test/`,
-`tests/`, `test_*.py`, `*_test.py`, `conftest.py`), and build output (`build/`,
-`dist/`). The readiness check and scan read no source or project declaration
-that the scanner's exclusions name.
+The package's default [include and exclude lists](../index.md#selecting-source-files)
+decide which files the scanner reads. The include list, `**/*.py`,
+`**/pyproject.toml`, `**/setup.cfg` and `**/requirements.txt`, names `.py`
+sources and the project declarations below, and no `.pyi` stubs or notebooks.
+The exclude list names virtual environments and bytecode
+caches (`.venv/`, `venv/`, `__pycache__/`), tests (`test/`, `tests/`,
+`test_*.py`, `*_test.py`, `conftest.py`), and build output (`build/`, `dist/`).
+Excluded files are never read, so an excluded file cannot fail the scan.
 
 `pyproject.toml`, `setup.py`, `setup.cfg`, and `requirements.txt` identify source
 projects. A file belongs to its nearest containing project; nested project roots

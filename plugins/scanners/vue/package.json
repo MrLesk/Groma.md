@@ -8,6 +8,27 @@
     "scanner": {
       "id": "vue",
       "entry": "./dist/package/dist/index.js",
+      "include": [
+        "**/*.vue",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs",
+        "**/*.html",
+        "**/*.css",
+        "**/*.scss",
+        "**/*.sass",
+        "**/*.less",
+        "**/*.styl",
+        "**/tsconfig*.json",
+        "**/package.json",
+        "**/project.json",
+        "**/nx.json"
+      ],
       "exclude": [
         "node_modules/",
         "dist/",

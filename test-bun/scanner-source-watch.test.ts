@@ -18,6 +18,7 @@ test.concurrent('an edit during the initial scan is collected after the initial 
     await writeFile(file, 'before')
     watcher = await watchObservations(root, {
       scannerIds: ['fixture'],
+      useGitignore: true,
       watchesFile: file => file === 'source.fixture',
       readersOfFile: async () => ({ readers: [], failures: [] }),
       async collectObservations(_root, files) {

@@ -20,10 +20,10 @@ async function write(root: string, file: string, content: string): Promise<void>
 async function plugin(root: string, id: string, listing: string): Promise<string> {
   const source = `./plugins/${id}`
   await write(root, `${source}/package.json`, JSON.stringify({
-    name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js' } },
+    name: `fixture-${id}`, version: '1.0.0', type: 'module', groma: { scanner: { id, entry: './index.js', include: ['**/*.ts'] } },
   }))
   await write(root, `${source}/index.js`, `export default {
-    id: ${JSON.stringify(id)}, watch: { include: ['**/*'], exclude: [] },
+    id: ${JSON.stringify(id)},
     async listSourceFiles() { ${listing} },
     async scan() { return undefined },
   }`)

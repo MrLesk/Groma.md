@@ -8,13 +8,17 @@ import { gromaDirectories } from '../groma-filesystem.ts'
 import type { ScannerRegistry, ScanBatch, ScanEvent } from './registry.ts'
 
 const SETTLE_MS = 150
-const skippedRoots = new Set(['.git', ...gromaDirectories, 'node_modules'])
 
-async function subscribeSources(root: string, listener: (error: Error | null, files: string[]) => void) {
+/** Top-level folders no scan reads: Git's and Groma's own, and node_modules while Git's ignore rules apply. */
+function skippedRoots(useGitignore: boolean): Set<string> {
+  return new Set(['.git', ...gromaDirectories, ...(useGitignore ? ['node_modules'] : [])])
+}
+
+async function subscribeSources(root: string, skipped: Set<string>, listener: (error: Error | null, files: string[]) => void) {
   if (process.platform !== 'win32') {
     return subscribe(root, (error, events) => {
       listener(error, events.map(event => path.relative(root, event.path).split(path.sep).join('/')))
-    }, { ignore: [...skippedRoots] })
+    }, { ignore: [...skipped] })
   }
 
   // Bun's Windows fs.watch registers ReadDirectoryChangesW before returning.
@@ -22,7 +26,7 @@ async function subscribeSources(root: string, listener: (error: Error | null, fi
   const watcher = watch(root, { recursive: true }, (_event, filename) => {
     if (filename === null) return
     const file = filename.split(path.sep).join('/')
-    if (!skippedRoots.has(file.split('/')[0]!)) listener(null, [file])
+    if (!skipped.has(file.split('/')[0]!)) listener(null, [file])
   })
   watcher.on('error', error => listener(error, []))
   return {
@@ -81,7 +85,7 @@ export async function watchObservations(
     }, SETTLE_MS)
   }
 
-  const watcher = await subscribeSources(root, (error, files) => {
+  const watcher = await subscribeSources(root, skippedRoots(registry.useGitignore), (error, files) => {
     if (closed) return
     if (error) {
       options.onError?.(error)
