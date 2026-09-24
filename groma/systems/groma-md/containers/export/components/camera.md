@@ -5,16 +5,16 @@ status: stable
 groma:
   id: camera
   parent: export
+  group: Map drawing
   code:
     - scanner: typescript
-      file: src/viewers/web/iso/camera.ts
+      file: src/viewers/web/iso/camera/camera.ts
     - scanner: typescript
-      file: src/viewers/web/iso/motion.ts
+      file: src/viewers/web/iso/camera/motion.ts
     - scanner: typescript
-      file: src/viewers/web/iso/pointer.ts
+      file: src/viewers/web/iso/camera/pointer.ts
     - scanner: typescript
-      file: src/viewers/web/iso/camera-layer.ts
-  group: Map drawing
+      file: src/viewers/web/iso/camera/layer.ts
 description: Fits, pans and zooms the browser map camera
 ---
 

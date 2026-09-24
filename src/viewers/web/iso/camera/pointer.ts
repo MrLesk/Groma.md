@@ -1,6 +1,6 @@
-import type { Point } from '../../../types.ts'
+import type { Point } from '../../../../types.ts'
 import { wheelAction } from './camera.ts'
-import type { IsoMap } from './map.ts'
+import type { IsoMap } from '../map.ts'
 
 export interface MapPointerActions {
   orbiting(): boolean

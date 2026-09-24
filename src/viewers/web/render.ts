@@ -19,11 +19,11 @@ import { listenForEmbeddedViews } from './embedding.ts'
 import { createFlowList } from './flow/list.ts'
 import { flowFocus, flowHighlight, flowSelection, retainFlows, toggleFlowActivation, type WebFlowRef } from './flow/state.ts'
 import { paintFlowReturn, paintFlowDetails } from './flow/reader.ts'
-import { fitArchitecture, fitHighlights, fitCamera, pan, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera.ts'
+import { fitArchitecture, fitHighlights, fitCamera, pan, zoomAbout, zoomLimits, zoomReadout, type Camera } from './iso/camera/camera.ts'
 import { createMap } from './iso/map.ts'
 import { createMapHighlights } from './map-highlights.ts'
-import { createCameraAnimator } from './iso/motion.ts'
-import { bindMapPointer } from './iso/pointer.ts'
+import { createCameraAnimator } from './iso/camera/motion.ts'
+import { bindMapPointer } from './iso/camera/pointer.ts'
 import { presentScene, createMapAnimator, createMapMotion } from './iso/presentation.ts'
 import { paintRelationship } from './organisms/relationship-details.ts'
 import { detailsTabAfterSelection, detailsTabAfterWork, type DetailsTab, inspectSelection, paintDetails } from './organisms/details.ts'
@@ -333,11 +333,11 @@ bindMapPointer(host, map, {
   orbiting: () => mapMotion.view === 'layers',
   hold: camera.hold,
   zoom(factor, point) {
-    camera.jump(zoomAbout(camera.current, factor, point, fitted))
+    camera.track(zoomAbout(camera.current, factor, point, fitted))
     touched = true
   },
   pan(dx, dy) {
-    camera.jump(pan(camera.current, dx, dy))
+    camera.track(pan(camera.current, dx, dy))
     touched = true
   },
   glide: camera.glide,
@@ -401,7 +401,7 @@ function repaintScene(fit: boolean): void {
     const focus = mapMotion.view === 'layers' ? undefined : fitArchitecture(scene, world, selectedArchitecture(selection), frame)
     camera.frame(focus === undefined ? fitted : pan(focus, frame.x, frame.y), mapMotion.framing)
     touched = focus !== undefined
-  } else camera.jump(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k))
+  } else camera.track(pan(camera.current, (before.x - after.x) * camera.current.k, (before.y - after.y) * camera.current.k))
   following = mapMotion.morphing
   applyCamera()
   if (rehighlight) paintMapState()

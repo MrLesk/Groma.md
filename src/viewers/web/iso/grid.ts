@@ -1,5 +1,5 @@
 import { PLANE } from '../../../sheet/measure.ts'
-import type { Camera } from './camera.ts'
+import type { Camera } from './camera/camera.ts'
 import { DEFAULT_PROJECTION, planeMatrix, type ProjectionView } from './project.ts'
 import { mark, node, patch, svg, type SvgNode } from './svg.ts'
 

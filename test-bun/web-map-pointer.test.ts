@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { IsoMap } from '../src/viewers/web/iso/map.ts'
-import { bindMapPointer } from '../src/viewers/web/iso/pointer.ts'
+import { bindMapPointer } from '../src/viewers/web/iso/camera/pointer.ts'
 
 /** The map pane reduced to what the gesture binding touches; every press lands on the empty sheet at the pane's origin. */
 function mapPane() {

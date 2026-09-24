@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { SheetScene } from '../src/sheet/types.ts'
-import { fitHighlights } from '../src/viewers/web/iso/camera.ts'
+import { fitHighlights } from '../src/viewers/web/iso/camera/camera.ts'
 import { projectScene } from '../src/viewers/web/iso/project.ts'
 
 const sheet: SheetScene = {

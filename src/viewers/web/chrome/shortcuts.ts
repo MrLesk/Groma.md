@@ -1,4 +1,4 @@
-import { keyAction, keyTarget } from '../iso/camera.ts'
+import { keyAction, keyTarget } from '../iso/camera/camera.ts'
 
 export interface ShortcutActions {
   hud(): void

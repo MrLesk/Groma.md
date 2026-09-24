@@ -2,7 +2,7 @@ import lockup from '../atoms/lockup.svg' with { type: 'text' }
 import { escaped } from '../atoms/escape.ts'
 import { palettes, webFontFamily, type WebTheme } from '../atoms/theme.ts'
 import { textWidth } from '../../../sheet/measure.ts'
-import { fitCamera, pan } from '../iso/camera.ts'
+import { fitCamera, pan } from '../iso/camera/camera.ts'
 import { gridPattern } from '../iso/grid.ts'
 import { buildingsSvg, facadeDefs } from '../iso/paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from '../iso/paint-ground.ts'

@@ -1,7 +1,7 @@
 import type { Point } from '../../../types.ts'
 import type { WorkPin } from '../../../work/pins.ts'
 import { fillWorkBadge, finishingWorkKeys, WORK_BADGE, WORK_BADGE_FINISH_MS } from './badge.ts'
-import type { Camera } from '../iso/camera.ts'
+import type { Camera } from '../iso/camera/camera.ts'
 import type { Tip } from '../organisms/tip.ts'
 
 /** Screen pixels between the badges of pins that share an element. */

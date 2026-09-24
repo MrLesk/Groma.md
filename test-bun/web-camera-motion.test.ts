@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { CAMERA_DURATION_MS, createCameraMotion } from '../src/viewers/web/iso/motion.ts'
+import { CAMERA_DURATION_MS, createCameraMotion } from '../src/viewers/web/iso/camera/motion.ts'
 
 test.concurrent('camera navigation interpolates position and zoom together and ends at the exact destination', () => {
   const start = { x: 0, y: 200, k: 0.2 }

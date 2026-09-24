@@ -12,9 +12,9 @@ export interface CameraView {
 /** What the cached layer asks of the map drawn inside it. */
 export interface LayerPainter {
   /** Writes the SVG for `view`: its transform and everything drawn at that zoom's scale. */
-  draw(view: CameraView): void
+  drawCamera(view: CameraView): void
   /** The map starts moving; glows wait until it settles. */
-  moving(): void
+  moveStarted(): void
   /** The map has settled; hover and glows return. */
   settled(): void
 }
@@ -27,6 +27,8 @@ export interface LayerPainter {
 export function createCameraLayer(painter: LayerPainter) {
   const element = document.createElement('div')
   element.className = 'camera'
+  // showCached's translate assumes the picture scales about the layer's top-left corner.
+  element.style.transformOrigin = '0 0'
   // The cached layer stays promoted at rest: promoting it again when a pan starts makes Safari redraw the whole map.
   element.style.willChange = 'transform'
   /** The camera shown now, and the one the SVG was last drawn for; between them the cached picture moves. */
@@ -45,8 +47,8 @@ export function createCameraLayer(painter: LayerPainter) {
   let movedAt = 0
 
   /** Refresh scale-dependent SVG together; per-frame writes invalidate Safari's cached layer. */
-  const draw = (view: CameraView): void => {
-    painter.draw(view)
+  const drawCamera = (view: CameraView): void => {
+    painter.drawCamera(view)
     drawn = view
     stale = false
     // The cached layer keeps a transform at rest: removing it and setting it again on the next pan makes Safari redraw the whole map.
@@ -86,7 +88,7 @@ export function createCameraLayer(painter: LayerPainter) {
     settleTimer = undefined
     moving = false
     stale = false
-    if (shown !== undefined && (shown.camera.k !== drawn?.camera.k || shown.zoomRatio !== drawn?.zoomRatio)) draw(shown)
+    if (shown !== undefined && (shown.camera.k !== drawn?.camera.k || shown.zoomRatio !== drawn?.zoomRatio)) drawCamera(shown)
     if (scaled) {
       scaled = false
       requestAnimationFrame(rebuild)
@@ -101,7 +103,7 @@ export function createCameraLayer(painter: LayerPainter) {
   const markMoving = (): void => {
     if (!moving) {
       moving = true
-      painter.moving()
+      painter.moveStarted()
     }
     movedAt = performance.now()
     if (settleTimer === undefined) waitToSettle(SETTLE_MS)
@@ -121,7 +123,7 @@ export function createCameraLayer(painter: LayerPainter) {
       shown = view
       markMoving()
       // A stale picture has no cached layer worth moving, so the camera goes straight into the SVG.
-      if (drawn === undefined || stale) draw(view)
+      if (drawn === undefined || stale) drawCamera(view)
       else showCached(view.camera, drawn.camera)
       return scaleChanged
     },
@@ -132,7 +134,7 @@ export function createCameraLayer(painter: LayerPainter) {
      */
     approach(destination: CameraView): void {
       if (shown === undefined || drawn === undefined || destination.camera.k >= drawn.camera.k) return
-      draw(destination)
+      drawCamera(destination)
       showCached(shown.camera, destination.camera)
       markMoving()
     },

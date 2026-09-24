@@ -2,8 +2,8 @@ import type { Comparison } from '../../../history/comparison.ts'
 import type { Point } from '../../../types.ts'
 import { layerLabelsSvg, layerPlanesSvg } from '../layers/paint.ts'
 import type { LayeredScene } from '../layers/separation.ts'
-import type { Camera } from './camera.ts'
-import { type CameraView, createCameraLayer } from './camera-layer.ts'
+import type { Camera } from './camera/camera.ts'
+import { type CameraView, createCameraLayer } from './camera/layer.ts'
 import { createGlows } from './glow.ts'
 import { buildingsSvg, facadeDefs } from './paint-buildings.ts'
 import { islandsSvg, sheetSvg, slabsSvg } from './paint-ground.ts'
@@ -97,9 +97,9 @@ export function createMap(host: HTMLElement): IsoMap {
   root.setAttribute('aria-label', 'Architecture map')
   root.tabIndex = 0
   const grid = createGrid()
-  const layer = createCameraLayer({
-    draw: view => drawCamera(view),
-    moving: () => glows.hide(true),
+  const cameraLayer = createCameraLayer({
+    drawCamera: view => drawCamera(view),
+    moveStarted: () => glows.hide(true),
     settled: () => {
       // A drag held still keeps its hover: the point under the pointer is the drag cover, not the map.
       if (dragCover.hidden) hover(pointer === undefined ? undefined : document.elementFromPoint(pointer.x, pointer.y))
@@ -107,7 +107,6 @@ export function createMap(host: HTMLElement): IsoMap {
       glows.hide(false)
     },
   })
-  const camera = layer.element
   const layers = {
     sheet: svg('g', {}, 'sheet'),
     islands: svg('g', {}, 'islands'),
@@ -122,12 +121,12 @@ export function createMap(host: HTMLElement): IsoMap {
   const definitions = svg('defs')
   foreground.scene.prepend(definitions)
   const paintSurfaces = [ground, routeSurface, foreground]
-  camera.append(...paintSurfaces.map(({ surface }) => surface))
-  const glows = createGlows(camera, routeSurface.surface)
+  cameraLayer.element.append(...paintSurfaces.map(({ surface }) => surface))
+  const glows = createGlows(cameraLayer.element, routeSurface.surface)
   const dragCover = document.createElement('div')
   dragCover.className = 'drag-cover'
   dragCover.hidden = true
-  root.append(grid.surface, camera, dragCover)
+  root.append(grid.surface, cameraLayer.element, dragCover)
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
@@ -144,9 +143,9 @@ export function createMap(host: HTMLElement): IsoMap {
 
   /** Selection and flow focus share one glow per visible body, including their overlapping endpoints. Glows wait while the map moves. */
   const updateGlows = (): void => {
-    if (painted === undefined || layer.moving) return
+    if (painted === undefined || cameraLayer.moving) return
     const focused = [...items].filter(([, item]) => item.matches('.component-focus, :is(.building, .slab, .island).focused'))
-    glows.show(painted, focused.map(([id]) => id), layer.drawn)
+    glows.show(painted, focused.map(([id]) => id), cameraLayer.drawn)
   }
 
   /**
@@ -155,7 +154,7 @@ export function createMap(host: HTMLElement): IsoMap {
    * which stalls Safari on a zoomed-out map.
    */
   const hover = (target: EventTarget | null | undefined): void => {
-    if (layer.moving) return
+    if (cameraLayer.moving) return
     const next = target instanceof Element ? target.closest(HOVERABLE) ?? undefined : undefined
     if (next === hovered) return
     hovered?.classList.remove('hovered')
@@ -181,8 +180,8 @@ export function createMap(host: HTMLElement): IsoMap {
 
   /** The drawn items and routes by id, and the surface under each body, as the highlight setters read them. */
   const index = (inputs: ReturnType<typeof highlightInputs>): void => {
-    items = new Map([layers.islands, layers.slabs, layers.items].flatMap(layer =>
-      [...layer.querySelectorAll<SVGGElement>('[data-id]')].map(item => [item.dataset.id!, item] as const)))
+    items = new Map([layers.islands, layers.slabs, layers.items].flatMap(group =>
+      [...group.querySelectorAll<SVGGElement>('[data-id]')].map(item => [item.dataset.id!, item] as const)))
     const groups = new Map([...layers.routes.querySelectorAll<SVGGElement>('g.route')]
       .map(group => [group.dataset.id!, group]))
     routes = new Map()
@@ -194,16 +193,16 @@ export function createMap(host: HTMLElement): IsoMap {
   }
 
   /** Writes the SVG for a camera: surface titles at its zoom's step, glows, world transforms, stroke weight and pattern attributes. */
-  const drawCamera = ({ camera: current, zoomRatio }: CameraView): void => {
+  const drawCamera = ({ camera, zoomRatio }: CameraView): void => {
     // Surface titles move to the settled zoom's step through the same painters; only their attributes change.
-    if (painted !== undefined && surfaceLabelStep(current.k) !== labelStep) drawSurfaces(painted, current.k)
-    glows.move(current)
+    if (painted !== undefined && surfaceLabelStep(camera.k) !== labelStep) drawSurfaces(painted, camera.k)
+    glows.move(camera)
     for (const { world } of paintSurfaces) {
-      world.setAttribute('transform', `translate(${current.x} ${current.y}) scale(${current.k})`)
+      world.setAttribute('transform', `translate(${camera.x} ${camera.y}) scale(${camera.k})`)
     }
-    camera.style.setProperty('--weight', String(weightAt(zoomRatio)))
-    camera.style.setProperty('--camera-scale', String(current.k))
-    for (const [name, set] of Object.entries(patternAttributes(current.k))) camera.toggleAttribute(name, set)
+    cameraLayer.element.style.setProperty('--weight', String(weightAt(zoomRatio)))
+    cameraLayer.element.style.setProperty('--camera-scale', String(camera.k))
+    for (const [name, set] of Object.entries(patternAttributes(camera.k))) cameraLayer.element.toggleAttribute(name, set)
   }
 
   root.addEventListener('pointermove', event => {
@@ -221,18 +220,18 @@ export function createMap(host: HTMLElement): IsoMap {
     dragging(active) {
       dragCover.hidden = !active
     },
-    move(current, zoomRatio) {
+    move(camera, zoomRatio) {
       // Before the unchanged-camera return: a repaint can change the projection without moving the camera.
-      grid.follow(current, painted?.view ?? DEFAULT_PROJECTION)
-      return layer.move({ camera: current, zoomRatio })
+      grid.follow(camera, painted?.view ?? DEFAULT_PROJECTION)
+      return cameraLayer.move({ camera, zoomRatio })
     },
     approach(destination, zoomRatio) {
-      layer.approach({ camera: destination, zoomRatio })
+      cameraLayer.approach({ camera: destination, zoomRatio })
     },
     paint(scene) {
       painted = scene
-      const reshaped = draw(scene, layer.shown?.k ?? 1)
-      layer.invalidate()
+      const reshaped = draw(scene, cameraLayer.shown?.k ?? 1)
+      cameraLayer.invalidate()
       const inputs = highlightInputs(scene)
       const key = JSON.stringify(inputs)
       if (!reshaped && key === highlighted) return false
@@ -294,7 +293,7 @@ export function createMap(host: HTMLElement): IsoMap {
       const tracing = litRouteIds.size > 0
       const litEndpointIds = new Set<string>()
       const focused = focusedRouteId === undefined ? undefined : routes.get(focusedRouteId)
-      camera.toggleAttribute('data-tracing', tracing)
+      cameraLayer.element.toggleAttribute('data-tracing', tracing)
       for (const route of new Set(routes.values())) {
         const lit = route.ids.some(id => litRouteIds.has(id))
         route.group.classList.toggle('lit', lit)
@@ -313,7 +312,7 @@ export function createMap(host: HTMLElement): IsoMap {
       return target.closest<HTMLElement>('[data-id]')?.dataset.id
     },
     isSheet(target) {
-      return target === root || target === camera
+      return target === root || target === cameraLayer.element
     },
     isProjectEdit(target) {
       return target instanceof Element && target.closest('[data-project-edit]') !== null

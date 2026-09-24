@@ -206,7 +206,6 @@ export const mapCss = `
   #map > .map-surface [data-id] { cursor: pointer; }
   #map > .map-surface:active, #map .drag-cover { cursor: grabbing; }
   #map .drag-cover { position: absolute; inset: 0; }
-  #map .camera { transform-origin: 0 0; }
   ${mapDrawingCss()}
   #map .route.hovered, #map .route.endpoint, #map .route.touched { --emphasis: ${emphasis(1)}; }
   #map .route.hovered .line { stroke: var(--map-line); opacity: 1; }

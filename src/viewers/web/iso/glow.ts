@@ -1,6 +1,6 @@
 import type { Point } from '../../../types.ts'
 import type { LayeredScene } from '../layers/separation.ts'
-import type { Camera } from './camera.ts'
+import type { Camera } from './camera/camera.ts'
 import { boundsOf } from './project.ts'
 import { node, patch, pointsAttribute, svg } from './svg.ts'
 

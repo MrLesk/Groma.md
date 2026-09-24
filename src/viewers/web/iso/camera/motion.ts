@@ -1,4 +1,4 @@
-import type { Point } from '../../../types.ts'
+import type { Point } from '../../../../types.ts'
 import { type Camera, pan } from './camera.ts'
 
 export const CAMERA_DURATION_MS = 220
@@ -98,8 +98,11 @@ export function createCameraAnimator(initial: Camera, paint: () => void, approac
     motion.move(to, performance.now(), animate)
     frame = requestAnimationFrame(tick)
   }
-  /** Moves at once, as direct gestures do; it never announces a destination, or a pinch would redraw the map every frame. */
-  const jump = (to: Camera): void => start(to, false)
+  /**
+   * Moves at once, following a direct gesture or keeping the map centred when a repaint reshapes it. It never announces
+   * a destination, or a pinch would redraw the map every frame, so navigation uses navigate instead.
+   */
+  const track = (to: Camera): void => start(to, false)
   return {
     get current() { return motion.current },
     get target() { return motion.target },
@@ -113,9 +116,9 @@ export function createCameraAnimator(initial: Camera, paint: () => void, approac
       approach(to)
       start(to, !matchMedia('(prefers-reduced-motion: reduce)').matches)
     },
-    jump,
+    track,
     /** Stops a transition or glide where the camera is shown now. */
-    hold: () => jump(motion.current),
+    hold: () => track(motion.current),
     /** Reduced motion leaves the camera where the drag left it. */
     glide(velocity: Point) {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return

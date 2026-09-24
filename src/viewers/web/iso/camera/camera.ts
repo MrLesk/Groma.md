@@ -1,8 +1,7 @@
-import type { ArchitectureGraph, Bounds, Point } from '../../../types.ts'
-import { ancestorIds, parentOfElements } from '../../relationship-text.ts'
-import type { LayeredScene } from '../layers/separation.ts'
-import { boundsOf } from './project.ts'
-import type { ProjectedScene } from './project.ts'
+import type { ArchitectureGraph, Bounds, Point } from '../../../../types.ts'
+import { ancestorIds, parentOfElements } from '../../../relationship-text.ts'
+import type { LayeredScene } from '../../layers/separation.ts'
+import { boundsOf, type ProjectedScene } from '../project.ts'
 
 /** Screen = world · k + (x, y); the same camera transform owns pan and zoom. */
 export interface Camera {
@@ -134,11 +133,6 @@ export function zoomAbout(camera: Camera, factor: number, anchor: Point, fit: Ca
 
 export function pan(camera: Camera, dx: number, dy: number): Camera {
   return { ...camera, x: camera.x + dx, y: camera.y + dy }
-}
-
-/** Keeps the same world point in the centre when the viewport changes size. */
-export function resized(camera: Camera, from: Viewport, to: Viewport): Camera {
-  return pan(camera, (to.width - from.width) / 2, (to.height - from.height) / 2)
 }
 
 /** Two fingers on a trackpad, or the wheel, pan; a pinch (which arrives as ctrl+wheel) and cmd or ctrl with the wheel zoom. */

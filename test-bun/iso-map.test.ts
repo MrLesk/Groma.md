@@ -16,7 +16,7 @@ import {
   wheelAction,
   zoomAbout,
   zoomLimits,
-} from '../src/viewers/web/iso/camera.ts'
+} from '../src/viewers/web/iso/camera/camera.ts'
 import {
   HEIGHT_UNIT,
   boxFaces,

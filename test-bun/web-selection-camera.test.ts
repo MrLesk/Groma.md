@@ -3,7 +3,7 @@ import path from 'node:path'
 import { loadAnnotatedArchitecture } from '../src/core.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Point } from '../src/types.ts'
-import { fitArchitecture, fitCamera, zoomAbout, type Camera } from '../src/viewers/web/iso/camera.ts'
+import { fitArchitecture, fitCamera, zoomAbout, type Camera } from '../src/viewers/web/iso/camera/camera.ts'
 import { boundsOf, projectScene } from '../src/viewers/web/iso/project.ts'
 import { sceneAtSeparation } from '../src/viewers/web/layers/separation.ts'
 
