@@ -1,0 +1,2 @@
+[debug] Created transactional ClassFileManager with tempDir = /Users/alexboisvert/git/groma.md/plugins/scanners/scala/worker/target/scala-3.9.0/classes.bak
+[debug] Removing the temporary directory used for backing up class files: /Users/alexboisvert/git/groma.md/plugins/scanners/scala/worker/target/scala-3.9.0/classes.bak

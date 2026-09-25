@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { definitionHash } from '../plugins/scanners/scala/src/cache.ts'
+import { SBT_VERSION } from '../plugins/scanners/scala/versions.ts'
 import {
   buildDirectories,
   filesForBuild,
@@ -163,7 +164,7 @@ test('definition hash ignores src edits but reacts to build.sbt edits', async ()
     await mkdir(path.join(temporary, 'project'), { recursive: true })
     await mkdir(path.join(temporary, 'src/main/scala'), { recursive: true })
     await writeFile(path.join(temporary, 'build.sbt'), 'name := "demo"\n')
-    await writeFile(path.join(temporary, 'project/build.properties'), 'sbt.version=2.0.0\n')
+    await writeFile(path.join(temporary, 'project/build.properties'), `sbt.version=${SBT_VERSION}\n`)
     await writeFile(path.join(temporary, 'src/main/scala/App.scala'), 'object App\n')
     const files = ['build.sbt', 'project/build.properties', 'src/main/scala/App.scala']
     const first = await definitionHash(temporary, '', files)

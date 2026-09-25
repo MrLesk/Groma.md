@@ -1,8 +1,15 @@
 .DS_Store
 .groma/swift-syntax-build/
 .idea/
+.vscode/
+.cursor/
 node_modules/
 /dist/
 /npm-release/
 /plugins/scanners/typescript/dist/
 /test/fixtures/csharp-operations/**/obj/
+
+# Scala-specific
+.bsp/
+.metals/
+.scala-build/

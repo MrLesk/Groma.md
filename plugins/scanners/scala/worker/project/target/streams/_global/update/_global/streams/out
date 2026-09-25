@@ -1,0 +1,3 @@
+[debug] not up to date. inChanged = true, force = false
+[debug] Updating ProjectRef(uri("file:/Users/alexboisvert/git/groma.md/plugins/scanners/scala/worker/project/"), "worker-build")...
+[debug] Done updating ProjectRef(uri("file:/Users/alexboisvert/git/groma.md/plugins/scanners/scala/worker/project/"), "worker-build")
