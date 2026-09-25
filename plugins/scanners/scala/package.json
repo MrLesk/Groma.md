@@ -1,0 +1,49 @@
+{
+  "name": "@groma/scanner-scala",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "description": "Scala 3.9 source evidence from sbt 2 builds; dependencies and runtime use are not verified.",
+  "groma": {
+    "scanner": {
+      "id": "scala",
+      "entry": "./src/index.ts",
+      "include": [
+        "**/*.scala",
+        "**/build.sbt",
+        "**/project/*.scala",
+        "**/project/*.sbt",
+        "**/project/build.properties"
+      ],
+      "exclude": [
+        "target/",
+        "project/target/",
+        ".bloop/",
+        ".metals/"
+      ],
+      "discovery": {
+        "technologies": [
+          "scala"
+        ],
+        "rules": [
+          {
+            "type": "file",
+            "files": [
+              "**/build.sbt"
+            ],
+            "technology": "scala",
+            "kind": "language",
+            "declaration": "sbt build; Scala version unresolved"
+          }
+        ],
+        "compatibility": {
+          "groma": ">=0.5.0"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@groma/scanner": "workspace:*"
+  }
+}
