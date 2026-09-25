@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { buildWorker } from '../plugins/scanners/scala/build.ts'
 import type { GromaModel } from '../plugins/scanners/scala/src/model.ts'
-import { listScalaSourceFiles, scanScalaBuild } from '../plugins/scanners/scala/src/scan.ts'
+import { createScalaScanner } from '../plugins/scanners/scala/src/index.ts'
 
 const workerJar = path.resolve(import.meta.dir, '../plugins/scanners/scala/dist/worker.jar')
 
@@ -38,7 +38,7 @@ test('host scan honors injected Compile directories and drops test sources', asy
         hasManagedSources: false,
       }],
     }
-    const loadModel = async () => model
+    const scanner = createScalaScanner(() => async () => model)
     const candidates = [
       'build.sbt',
       'project/build.properties',
@@ -46,13 +46,13 @@ test('host scan honors injected Compile directories and drops test sources', asy
       'src/main/scala/Main.scala',
       'src/test/scala/Spec.scala',
     ]
-    const observation = await scanScalaBuild(root, '', candidates, loadModel)
+    const observation = await scanner.scan!(root, {}, candidates)
     const files = observation!.files.map(file => file.file).sort()
     expect(files).toEqual(['modules/api/scala/Ok.scala'])
-    expect(await listScalaSourceFiles(root, candidates, loadModel)).toEqual(['modules/api/scala/Ok.scala'])
+    expect(await scanner.listSourceFiles!(root, {}, candidates)).toEqual(['modules/api/scala/Ok.scala'])
     expect(observation!.roots.some(entry => entry.kind === 'sbt-build')).toBeTrue()
-    expect(observation!.roots.some(entry => entry.kind === 'sbt-project' && entry.id === 'root')).toBeTrue()
-    expect(observation!.files[0]!.roots).toEqual(['root'])
+    expect(observation!.roots.some(entry => entry.kind === 'sbt-project' && entry.id === JSON.stringify(['', 'root']))).toBeTrue()
+    expect(observation!.files[0]!.roots).toEqual([JSON.stringify(['', 'root'])])
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

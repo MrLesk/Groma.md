@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { run } from './process.ts'
 
 const worker = fileURLToPath(new URL('../dist/worker.jar', import.meta.url))
+const gromaSbt = fileURLToPath(new URL('../dist/groma-sbt.jar', import.meta.url))
+const sbtLaunch = fileURLToPath(new URL('../dist/sbt-launch.jar', import.meta.url))
 const bundledRuntime = fileURLToPath(new URL(
   `../dist/${process.platform}-${process.arch}/runtime/bin/java${process.platform === 'win32' ? '.exe' : ''}`,
   import.meta.url,
@@ -12,6 +14,14 @@ const bundledRuntime = fileURLToPath(new URL(
 
 export function workerJar(): string {
   return worker
+}
+
+export function gromaSbtJar(): string {
+  return gromaSbt
+}
+
+export function sbtLaunchJar(): string {
+  return sbtLaunch
 }
 
 export function javaCommand(): string {
@@ -25,6 +35,12 @@ export function javaCommand(): string {
 export async function checkScalaReadiness(): Promise<void> {
   if (!existsSync(worker)) {
     throw new Error('SCALA_WORKER_MISSING: Install the packaged Scala scanner, or build it with bun plugins/scanners/scala/build.ts.')
+  }
+  if (!existsSync(gromaSbt)) {
+    throw new Error('SCALA_SBT_PLUGIN_MISSING: Install the packaged Scala scanner, or build it with bun plugins/scanners/scala/build.ts.')
+  }
+  if (!existsSync(sbtLaunch)) {
+    throw new Error('SCALA_SBT_LAUNCHER_MISSING: Install the packaged Scala scanner, or build it with bun plugins/scanners/scala/build.ts.')
   }
   if (!existsSync(bundledRuntime)) {
     try {

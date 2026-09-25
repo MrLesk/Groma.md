@@ -29,10 +29,10 @@ async function readBuildProperties(buildRoot: string, buildFiles: readonly strin
   return readFile(path.join(buildRoot, 'project/build.properties'), 'utf8')
 }
 
-function buildRoots(selection: BuildSelection, buildKey: string) {
+function buildRoots(selection: BuildSelection) {
   if (selection.projects.length === 0) return []
   return [
-    { id: BUILD_ROOT_ID, kind: 'sbt-build', name: selection.projects[0]!.name, file: repoPath(buildKey, 'build.sbt') },
+    { id: BUILD_ROOT_ID, kind: 'sbt-build', name: selection.projects[0]!.name, file: 'build.sbt' },
     ...selection.projects.map(project => ({
       id: project.id,
       kind: 'sbt-project',
@@ -50,17 +50,17 @@ function attachBuildRoots(observation: ScanObservation, selection: BuildSelectio
   const remapId = (id: string, buildRelativeFile: string) => {
     const hash = id.indexOf('#')
     const suffix = hash === -1 ? '' : id.slice(hash)
-    return `${repoPath(buildKey, buildRelativeFile)}${suffix}`
+    return `${buildRelativeFile}${suffix}`
   }
   return {
     ...observation,
-    roots: buildRoots(selection, buildKey),
+    roots: buildRoots(selection),
     files: observation.files.map(source => {
       const repoFile = repoPath(buildKey, source.file)
       return {
         ...source,
         roots: ownerByRepoFile.has(repoFile) ? [ownerByRepoFile.get(repoFile)!] : [],
-        symbols: source.symbols.map(symbol => ({ ...symbol, id: `${repoFile}#${symbol.name}` })),
+        symbols: source.symbols.map(symbol => ({ ...symbol, id: `${source.file}#${symbol.name}` })),
       }
     }),
     operations: observation.operations?.map(operation => ({
@@ -105,13 +105,20 @@ export async function scanScalaBuild(
   const buildRoot = path.join(repositoryRoot, buildKey.split('/').join(path.sep))
   const candidates = buildRelativeFiles.map(file => repoPath(buildKey, file))
   const propertiesText = await readBuildProperties(buildRoot, buildRelativeFiles)
+  const gateOnly = selectBuildSources(repositoryRoot, buildKey, buildRelativeFiles, candidates, {
+    buildRoot,
+    projects: [],
+  }, propertiesText)
+  if (gateOnly.projects.length === 0 && gateOnly.diagnostics.some(item => item.code === 'SCALA_SBT_UNSUPPORTED')) {
+    return withDiagnostics(attachBuildRoots({ ...emptyObservation(), roots: buildRoots(gateOnly) }, gateOnly, buildKey), gateOnly)
+  }
   const model = await loadModel(repositoryRoot, buildKey, buildRelativeFiles)
   const selection = selectBuildSources(repositoryRoot, buildKey, buildRelativeFiles, candidates, model, propertiesText)
   const scanFiles = [...new Set(selection.projects.flatMap(project => project.files))].sort()
   const workerFiles = scanFiles.map(file => buildRelative(buildKey, file))
 
   if (scanFiles.length === 0) {
-    return withDiagnostics(attachBuildRoots({ ...emptyObservation(), roots: buildRoots(selection, buildKey) }, selection, buildKey), selection)
+    return withDiagnostics(attachBuildRoots({ ...emptyObservation(), roots: buildRoots(selection) }, selection, buildKey), selection)
   }
 
   const stdout = await scanWithWorker(buildRoot, workerFiles)
@@ -132,6 +139,11 @@ export async function listScalaSourceFiles(
     const buildRelativeFiles = repoBuildFiles.map(file => buildRelative(buildKey, file))
     const buildRoot = path.join(repositoryRoot, buildKey.split('/').join(path.sep))
     const propertiesText = await readBuildProperties(buildRoot, buildRelativeFiles)
+    const gateOnly = selectBuildSources(repositoryRoot, buildKey, buildRelativeFiles, candidates, {
+      buildRoot,
+      projects: [],
+    }, propertiesText)
+    if (gateOnly.projects.length === 0 && gateOnly.diagnostics.some(item => item.code === 'SCALA_SBT_UNSUPPORTED')) continue
     const model = await loadModel(repositoryRoot, buildKey, buildRelativeFiles)
     const selection = selectBuildSources(repositoryRoot, buildKey, buildRelativeFiles, candidates, model, propertiesText)
     for (const project of selection.projects) {
