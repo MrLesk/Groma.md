@@ -5,19 +5,22 @@ import { checkScalaReadiness, readScalaOutline } from './adapter.ts'
 import { buildDirectories } from './model.ts'
 import type { ModelLoader } from './model.ts'
 import { listScalaSourceFiles, scanScalaBuild } from './scan.ts'
+import { createCachedModelLoader } from './cache.ts'
 import { loadGromaModel } from './sbt.ts'
 
 export type { BuildSelection, GromaModel, GromaModelProject, ModelLoader, SelectedProject } from './model.ts'
 export {
   buildDirectories, filesForBuild, owningBuildDirectory, parseGromaModel, selectBuildSources, sbtVersionGate,
 } from './model.ts'
-export { definitionHash, definitionPaths } from './cache.ts'
+export { createCachedModelLoader, definitionHash, definitionPaths, repositoryRelativeFiles } from './cache.ts'
 export { loadGromaModel } from './sbt.ts'
 
 export type ModelLoaderFactory = (settings: ScannerSettings) => ModelLoader
 
 function defaultModelLoader(settings: ScannerSettings): ModelLoader {
-  return (repositoryRoot, buildKey, buildFiles) => loadGromaModel(repositoryRoot, buildKey, buildFiles, settings)
+  return createCachedModelLoader(
+    (repositoryRoot, buildKey, buildFiles) => loadGromaModel(repositoryRoot, buildKey, buildFiles, settings),
+  )
 }
 
 async function scanBuild(

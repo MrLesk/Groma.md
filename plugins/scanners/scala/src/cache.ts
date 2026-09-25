@@ -1,8 +1,31 @@
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { defaultScannerCacheRoot } from '../../../../src/scanner/modules/package.ts'
+import type { GromaModel, ModelLoader } from './model.ts'
+import { parseGromaModel } from './model.ts'
 
 const buildFile = 'build.sbt'
+
+function scalaCacheRoot(cacheRoot = defaultScannerCacheRoot()): string {
+  return path.join(cacheRoot, 'scala')
+}
+
+/** Build-local scanner paths as repository-relative paths for hashing. */
+export function repositoryRelativeFiles(buildKey: string, buildFiles: readonly string[]): string[] {
+  if (buildKey === '') return [...buildFiles]
+  return buildFiles.map(file => `${buildKey}/${file}`)
+}
+
+function modelCacheDirectory(buildRoot: string, cacheRoot = defaultScannerCacheRoot()): string {
+  const id = createHash('sha256').update(path.resolve(buildRoot)).digest('hex')
+  return path.join(scalaCacheRoot(cacheRoot), 'groma-model', id)
+}
+
+function modelCacheFile(buildRoot: string, definitionKey: string, cacheRoot = defaultScannerCacheRoot()): string {
+  return path.join(modelCacheDirectory(buildRoot, cacheRoot), `${definitionKey}.json`)
+}
 
 /** Repository-relative paths that invalidate a cached sbt model when their contents change. */
 export function definitionPaths(buildKey: string, files: readonly string[]): string[] {
@@ -29,4 +52,45 @@ export async function definitionHash(repositoryRoot: string, buildKey: string, f
     digest.update('\0')
   }
   return digest.digest('hex')
+}
+
+async function readCachedModel(
+  buildRoot: string,
+  definitionKey: string,
+  cacheRoot = defaultScannerCacheRoot(),
+): Promise<GromaModel | undefined> {
+  const file = modelCacheFile(buildRoot, definitionKey, cacheRoot)
+  if (!existsSync(file)) return undefined
+  return parseGromaModel(await readFile(file, 'utf8'))
+}
+
+async function writeCachedModel(
+  buildRoot: string,
+  definitionKey: string,
+  model: GromaModel,
+  cacheRoot = defaultScannerCacheRoot(),
+): Promise<void> {
+  const file = modelCacheFile(buildRoot, definitionKey, cacheRoot)
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, JSON.stringify(model))
+}
+
+/**
+ * Cache `gromaModel` JSON on disk under the scanner cache. The key is the absolute build root
+ * plus a hash of build-definition files among the scanner's paths.
+ */
+export function createCachedModelLoader(
+  load: ModelLoader,
+  cacheRoot = defaultScannerCacheRoot(),
+): ModelLoader {
+  return async (repositoryRoot, buildKey, buildFiles) => {
+    const buildRoot = path.join(repositoryRoot, buildKey.split('/').join(path.sep))
+    const repoFiles = repositoryRelativeFiles(buildKey, buildFiles)
+    const key = await definitionHash(repositoryRoot, buildKey, repoFiles)
+    const cached = await readCachedModel(buildRoot, key, cacheRoot)
+    if (cached !== undefined) return cached
+    const model = await load(repositoryRoot, buildKey, buildFiles)
+    await writeCachedModel(buildRoot, key, model, cacheRoot)
+    return model
+  }
 }

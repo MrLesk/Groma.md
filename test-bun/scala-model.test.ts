@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { definitionHash } from '../plugins/scanners/scala/src/cache.ts'
+import { createCachedModelLoader, definitionHash } from '../plugins/scanners/scala/src/cache.ts'
 import { SBT_VERSION } from '../plugins/scanners/scala/versions.ts'
 import {
   buildDirectories,
@@ -175,4 +175,45 @@ test('definition hash ignores src edits but reacts to build.sbt edits', async ()
     const afterBuild = await definitionHash(temporary, '', files)
     expect(afterBuild).not.toBe(first)
   } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test('cached model loader hits on source edits and misses on build.sbt edits', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'groma-scala-model-cache-'))
+  const cacheRoot = path.join(temporary, 'cache')
+  try {
+    await mkdir(path.join(temporary, 'project'), { recursive: true })
+    await mkdir(path.join(temporary, 'src/main/scala'), { recursive: true })
+    await writeFile(path.join(temporary, 'build.sbt'), 'name := "demo"\n')
+    await writeFile(path.join(temporary, 'project/build.properties'), `sbt.version=${SBT_VERSION}\n`)
+    await writeFile(path.join(temporary, 'src/main/scala/App.scala'), 'object App\n')
+    const buildFiles = ['build.sbt', 'project/build.properties', 'src/main/scala/App.scala']
+    const model: GromaModel = {
+      buildRoot: temporary,
+      projects: [{
+        id: 'demo',
+        name: 'demo',
+        base: temporary,
+        scalaVersion: '3.9.0',
+        unmanagedSourceDirectories: [path.join(temporary, 'src/main/scala')],
+        hasManagedSources: false,
+      }],
+    }
+    let loads = 0
+    const loader = createCachedModelLoader(async () => {
+      loads += 1
+      return model
+    }, cacheRoot)
+    await loader(temporary, '', buildFiles)
+    expect(loads).toBe(1)
+    await loader(temporary, '', buildFiles)
+    expect(loads).toBe(1)
+    await writeFile(path.join(temporary, 'src/main/scala/App.scala'), 'object App { def run = 1 }\n')
+    await loader(temporary, '', buildFiles)
+    expect(loads).toBe(1)
+    await writeFile(path.join(temporary, 'build.sbt'), 'name := "demo-v2"\n')
+    await loader(temporary, '', buildFiles)
+    expect(loads).toBe(2)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
 })
