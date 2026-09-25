@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "groma.md",
@@ -109,6 +108,13 @@
     "plugins/scanners/rust": {
       "name": "@groma/scanner-rust",
       "version": "0.2.0",
+      "dependencies": {
+        "@groma/scanner": "workspace:*",
+      },
+    },
+    "plugins/scanners/scala": {
+      "name": "@groma/scanner-scala",
+      "version": "0.1.0",
       "dependencies": {
         "@groma/scanner": "workspace:*",
       },
@@ -262,6 +268,8 @@
     "@groma/scanner-react": ["@groma/scanner-react@workspace:plugins/scanners/react"],
 
     "@groma/scanner-rust": ["@groma/scanner-rust@workspace:plugins/scanners/rust"],
+
+    "@groma/scanner-scala": ["@groma/scanner-scala@workspace:plugins/scanners/scala"],
 
     "@groma/scanner-swift": ["@groma/scanner-swift@workspace:plugins/scanners/swift"],
 

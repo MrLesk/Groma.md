@@ -1,6 +1,0 @@
-[debug] [zinc] IncrementalCompile -----------
-[debug] IncrementalCompile.incrementalCompile
-[debug] previous = Stamps for: 40 products, 11 sources, 5 libraries
-[debug] current source = Set(${BASE}/src/main/scala/md/groma/scanner/Main.scala, ${BASE}/src/main/scala/md/groma/scanner/Symbols.scala, ${BASE}/src/main/scala/md/groma/scanner/Operations.scala, ${BASE}/src/main/scala/md/groma/scanner/Calls.scala, ${BASE}/src/main/scala/md/groma/scanner/Stats.scala, ${BASE}/src/main/scala/md/groma/scanner/Visibility.scala, ${BASE}/src/main/scala/md/groma/scanner/Json.scala, ${BASE}/src/main/scala/md/groma/scanner/Scan.scala, ${BASE}/src/main/scala/md/groma/scanner/Outline.scala, ${BASE}/src/main/scala/md/groma/scanner/BodyTokens.scala, ${BASE}/src/main/scala/md/groma/scanner/Parse.scala)
-[debug] > initialChanges = InitialChanges(Changes(added = Set(), removed = Set(), changed = Set(), unmodified = ...),Set(),Set(),API Changes: Set())
-[debug] No changes

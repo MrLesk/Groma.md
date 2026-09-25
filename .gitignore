@@ -13,3 +13,8 @@ node_modules/
 .bsp/
 .metals/
 .scala-build/
+/plugins/scanners/scala/sbt/target/
+/plugins/scanners/scala/worker/target/
+/plugins/scanners/scala/sbt/project/target/
+/plugins/scanners/scala/sbt/project/
+/test/fixtures/scala-sbt-*/
