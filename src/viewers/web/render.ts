@@ -144,6 +144,7 @@ function syncUrl(): void {
     tab: detailsTab,
     theme: themeControl.mode,
     hudVisible,
+    ...(opened.inset === undefined ? {} : { inset: opened.inset }),
   }, world, work.items, location.pathname, revisionControl.comparison)
   history.replaceState(null, '', `${location.pathname}${query}`)
 }

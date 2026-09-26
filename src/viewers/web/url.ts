@@ -18,6 +18,7 @@ export interface ViewState {
   tab: DetailsTab
   theme: WebThemeMode
   hudVisible: boolean
+  inset?: number
 }
 
 /** A selected element is named by its kind: `actor=<id>`, `system=<id>`, `container=<id>` or `component=<id>`. */
@@ -127,6 +128,7 @@ export function readView(
   comparison?: Comparison,
 ): ViewState {
   const params = new URLSearchParams(url.search)
+  const inset = Number(params.get('inset'))
   const revision = revisions.find(candidate => candidate.id === params.get('revision'))?.id
   const byId = new Map(world.elements.map(element => [element.id, element]))
   const architecture = architectureSelection(params, byId, world)
@@ -143,6 +145,7 @@ export function readView(
   const source = sourceState(params, selected, comparison)
   return {
     ...(revision === undefined ? {} : { revision }),
+    ...(Number.isInteger(inset) && inset > 0 ? { inset } : {}),
     ...source,
     selection,
     flows,
@@ -211,5 +214,6 @@ export function writeView(state: ViewState, world: ArchitectureGraph, work: read
   }
   if (state.theme !== (pathTheme(pathname) ?? 'auto')) pairs.push(['theme', state.theme])
   if (!state.hudVisible) pairs.push(['hud', 'off'])
+  if (state.inset !== undefined) pairs.push(['inset', String(state.inset)])
   return pairs.length === 0 ? '' : `?${pairs.map(([key, value]) => `${key}=${value}`).join('&')}`
 }
