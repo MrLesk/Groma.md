@@ -1,3 +1,4 @@
+import { chromeButton } from '../atoms/button.ts'
 import type { ComponentChange } from '../../../history/comparison.ts'
 import { paintFileDiff } from './diff-view.ts'
 import type { AnnotatedElement } from '../../../types.ts'
@@ -126,6 +127,26 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
     options.repaint()
   }
 
+  function paintFileNavigation(): void {
+    const files = options.comparison?.()?.files.filter(item => item.status !== 'unchanged') ?? []
+    if (files.length < 2) return
+    const index = files.findIndex(item => item.file === file)
+    const navigation = document.createElement('span')
+    navigation.className = 'file-stepper'
+    const position = document.createElement('span')
+    position.textContent = `${index + 1} / ${files.length}`
+    position.setAttribute('aria-live', 'polite')
+    const step = (direction: number, label: string, glyph: string) => {
+      const button = chromeButton('', { glyph, ariaLabel: label })
+      const target = files[index + direction]
+      button.disabled = target === undefined
+      button.onclick = () => { if (target !== undefined) void load(target.file) }
+      return button
+    }
+    navigation.append(step(-1, 'Previous changed file', '←'), position, step(1, 'Next changed file', '→'))
+    options.host.querySelector('.tabs')!.append(navigation)
+  }
+
   async function loadStructure(element: AnnotatedElement, revision: string | undefined): Promise<void> {
     const activeRequest = ++structureRequest
     try {
@@ -175,7 +196,11 @@ export function createSourceControl(options: SourceControlOptions): SourceContro
       }
       const diff = changedFile(file)
       if (diff === undefined) paintSource(options.host, element, file, line, payload, error, back)
-      else { leaveSource(options.host); paintFileDiff(options.host, diff, element.title, back) }
+      else {
+        leaveSource(options.host)
+        paintFileDiff(options.host, diff, element.title, back)
+        paintFileNavigation()
+      }
       return true
     },
     restore() {

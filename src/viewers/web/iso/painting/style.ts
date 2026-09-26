@@ -246,7 +246,12 @@ export const mapCss = `
   #map :is(.island, .slab, .zone):is(.selected, .touched, .lit, .context) > .surface-label .label-leader { stroke: var(--highlight); }
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) { --emphasis: ${emphasis(0.5)}; }
   #map .building.neighbor:not(.selected):not(.touched):not(.lit) .face { stroke: color-mix(in srgb, var(--highlight) 45%, var(--map-line)); }
-  #map .camera:has(.component-focus) .building.component:not(.component-focus):not(.neighbor) { opacity: 0.3; }
+  body:not([data-comparison]) #map .camera:has(.component-focus) .building.component:not(.component-focus):not(.neighbor) { opacity: 0.3; }
+  body[data-comparison] #map .building:not([data-change]):not(.selected):not(.component-focus):not(.neighbor),
+  body[data-comparison] #map .route:not([data-change]):not(.route-base):not(.selected):not(.endpoint):not(.lit) { opacity: .4; }
+  body[data-comparison] #map .route-base { opacity: .4; }
+  #map .building, #map .route { transition: opacity var(--chrome-motion) var(--chrome-ease); }
+  @media (prefers-reduced-motion: reduce) { #map .building, #map .route { transition: none; } }
   #map [data-change="added"] { --change: var(--diff-added); }
   #map [data-change="modified"] { --change: var(--diff-modified); }
   #map [data-change="removed"] { --change: var(--diff-removed); }

@@ -1,7 +1,8 @@
 import { diffWordsWithSpace } from 'diff'
-import type { ComponentChange, ChangeStatus } from '../../../history/comparison.ts'
+import type { ComponentChange, ChangeStatus, Comparison } from '../../../history/comparison.ts'
 import type { ArchitectureGraph } from '../../../types.ts'
 import { heading, paragraph } from '../atoms/text.ts'
+import { isChange } from './tree.ts'
 import { fileDiffRow } from '../source/diff-view.ts'
 
 export function changeBadge(status: ChangeStatus): HTMLElement {
@@ -12,20 +13,102 @@ export function changeBadge(status: ChangeStatus): HTMLElement {
   return badge
 }
 
-/** Only changed words are marked; a removed component's complete explanation stays readable. */
-function changedText(className: string, before: string | undefined, after: string | undefined): HTMLElement {
+/** A large rewrite is read as two texts; a small edit keeps its unchanged words as context. */
+export function textChanges(before: string, after: string) {
+  const parts = diffWordsWithSpace(before, after)
+  const changed = parts.filter(part => part.added || part.removed).reduce((total, part) => total + part.value.length, 0)
+  const mode = before === after ? 'same' : before === '' ? 'added' : after === '' ? 'removed'
+    : changed / (before.length + after.length) >= .5 ? 'rewrite' : 'words'
+  const spaced = parts.flatMap((part, index) => {
+    const previous = parts[index - 1]
+    return previous?.removed && part.added && !/\s$/.test(previous.value) && !/^\s/.test(part.value)
+      ? [{ value: ' ', added: false, removed: false, count: 0 }, part] : [part]
+  })
+  return { mode, parts: spaced }
+}
+
+function textVersion(label: string, value: string): HTMLElement {
+  const section = document.createElement('div')
+  const title = document.createElement('span')
+  title.className = 'comparison-text-label'
+  title.textContent = label
+  section.append(title, paragraph('', value))
+  return section
+}
+
+function textVersions(className: string, mode: string, before: string, after: string): HTMLElement {
+  const versions = document.createElement('div')
+  versions.className = className
+  if (after !== '') versions.append(textVersion(mode === 'added' ? 'Added' : 'Now', after))
+  if (before !== '') versions.append(textVersion(mode === 'removed' ? 'Removed' : 'Before', before))
+  return versions
+}
+
+function changedText(className: string, before: string | undefined, after: string | undefined, prose = false): HTMLElement {
   const text = paragraph(className, '')
   if (before === undefined || after === undefined || before === after) {
     text.textContent = after ?? before ?? ''
     return text
   }
-  for (const part of diffWordsWithSpace(before, after)) {
+  const { mode, parts } = textChanges(before, after)
+  if (prose && mode !== 'words') return textVersions(className, mode, before, after)
+  for (const part of parts) {
     if (!part.added && !part.removed) { text.append(part.value); continue }
     const fragment = document.createElement(part.added ? 'ins' : 'del')
     fragment.textContent = part.value
     text.append(fragment)
   }
   return text
+}
+
+const fields = [
+  ['title', 'name', 'what'], ['technology', 'technology', 'how'], ['parent', 'parent', 'what'],
+  ['group', 'group', 'what'], ['origin', 'status', 'what'], ['draft', 'draft', 'what'],
+] as const
+
+export function componentReasons(change: ComponentChange | undefined) {
+  const reasons: { key: string; label: string; tab: 'what' | 'how' }[] = []
+  if (change?.status !== 'modified' || change.before === undefined || change.after === undefined) return reasons
+  const { before, after } = change
+  if (before.description !== after.description || before.overview !== after.overview) {
+    reasons.push({ key: 'description', label: 'description', tab: 'what' })
+  }
+  for (const [key, label, tab] of fields) if (before[key] !== after[key]) reasons.push({ key, label, tab })
+  const ownership = (element: typeof before) => JSON.stringify(element.code.map(({ scanner, file, symbol }) => [scanner, file, symbol]).sort())
+  if (ownership(before) !== ownership(after)) reasons.push({ key: 'ownership', label: 'ownership', tab: 'how' })
+  const files = change.files.filter(file => file.status !== 'unchanged')
+  if (files.length > 0) {
+    const added = files.reduce((sum, file) => sum + file.additions, 0)
+    const removed = files.reduce((sum, file) => sum + file.deletions, 0)
+    reasons.push({ key: 'files', label: `${files.length} ${files.length === 1 ? 'file' : 'files'} +${added} −${removed}`, tab: 'how' })
+  }
+  return reasons
+}
+
+/** Only source and ownership changes start in build evidence; an explicit URL tab still wins. */
+export function comparisonDefaultTab(change: ComponentChange | undefined): 'what' | 'how' {
+  const reasons = componentReasons(change)
+  return reasons.length > 0 && reasons.every(reason => reason.key === 'ownership' || reason.key === 'files') ? 'how' : 'what'
+}
+
+export function comparisonReasons(change: ComponentChange, comparison: Comparison, world: ArchitectureGraph,
+  onTab: (tab: 'what' | 'how') => void): HTMLElement | undefined {
+  if (change.status !== 'modified') return undefined
+  const reasons = componentReasons(change)
+  const id = (change.after ?? change.before)!.representationId
+  const count = world.relationships.filter(item => (item.source === id || item.target === id) && isChange(comparison.relationships[item.id])).length
+  if (count > 0) reasons.push({ key: 'relationships', label: `${count} ${count === 1 ? 'relationship' : 'relationships'}`, tab: 'what' })
+  const line = paragraph('comparison-reasons', 'Changed: ')
+  for (const [index, reason] of reasons.entries()) {
+    if (index > 0) line.append(', ')
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'link'
+    button.textContent = reason.label
+    button.onclick = () => onTab(reason.tab)
+    line.append(button)
+  }
+  return line
 }
 
 function changedField(body: Element, label: string, before: string | undefined, after: string | undefined): void {
@@ -42,10 +125,10 @@ function changedField(body: Element, label: string, before: string | undefined, 
 
 export function comparisonOverview(body: Element, change: ComponentChange, world: ArchitectureGraph): void {
   const { before, after } = change
-  if ((before?.description ?? after?.description) !== undefined) {
-    body.append(changedText('description', before === undefined ? undefined : before.description ?? '', after === undefined ? undefined : after.description ?? ''))
+  const prose = (element: typeof before, key: 'description' | 'overview') => element === undefined ? undefined : element[key] ?? ''
+  for (const key of ['description', 'overview'] as const) {
+    if (before?.[key] || after?.[key]) body.append(changedText(key, prose(before, key), prose(after, key), true))
   }
-  if (before?.overview || after?.overview) body.append(changedText('overview', before?.overview, after?.overview))
   if (before === undefined || after === undefined) return
   const parentName = (id: string | null) => world.elements.find(item => item.id === id)?.title ?? id ?? ''
   changedField(body, 'Name', before.title, after.title)
@@ -86,6 +169,11 @@ export function comparisonFiles(body: Element, change: ComponentChange, onOpen: 
 }
 
 export const comparisonDetailsCss = `
+  #details .comparison-reasons { color: var(--muted); font-size: 10px; line-height: 1.7; margin: 8px 0 14px; }
+  #details .comparison-reasons button { font: inherit; color: inherit; }
+  #details .comparison-text-label { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+  #details .comparison-text-label + p { margin-top: 5px; }
+
   #details .change-badge { display: inline-block; border: 1px solid currentColor; border-radius: 4px; padding: 2px 6px; font-size: 9px; line-height: 1.35; letter-spacing: .04em; text-transform: uppercase; }
   #details .meta .change-badge { margin-left: 8px; }
   #details [data-change="added"] { color: var(--diff-added); }

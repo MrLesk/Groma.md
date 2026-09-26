@@ -34,6 +34,8 @@ import { tipCss } from './organisms/tip.ts'
 import type { WebBootPayload } from './payload.ts'
 import { projectEditorCss } from './project/editor.ts'
 import { fileDiffCss } from './source/diff-view.ts'
+import { comparisonControlCss } from './comparison/control.ts'
+import { hierarchyComparisonCss } from './organisms/hierarchy.ts'
 import { comparisonDetailsCss } from './comparison/details.ts'
 import { revisionControl, revisionCss } from './revision/view.ts'
 import { searchControl, searchCss } from './search/view.ts'
@@ -166,11 +168,6 @@ const style = `
   #stats .project-name { flex: none; color: var(--ink); }
   .header-context > .time-machine { margin-left: auto; }
   body[data-comparison] #stats .world-counts { display: none; }
-  #legend .comparison-legend { display: none; gap: 12px; margin-top: 8px; }
-  body[data-comparison] #legend .comparison-legend { display: flex; }
-  #legend .comparison-legend span:nth-child(1) { color: var(--diff-added); }
-  #legend .comparison-legend span:nth-child(2) { color: var(--diff-modified); }
-  #legend .comparison-legend span:nth-child(3) { color: var(--diff-removed); }
   /* Zero width keeps the counts out of the header's demand: they fill only width nothing else wants, and leave
      whole rather than show a clipped fragment beside a long commit message. */
   #stats .world-counts { container-type: inline-size; flex: 1 1 0px; width: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; letter-spacing: 0.06em; }
@@ -236,6 +233,7 @@ const style = `
     #fit > span, #help > summary > span, #credits > summary > span { display: none; }
     /* Both short IDs must fit at 1000px, so Search may narrow to 120px here. */
     #header > #web-search { min-width: 120px; }
+    #header:has(#revision[data-editing]) > #web-search:not([data-open]) { flex-basis: 34px; min-width: 34px; overflow: hidden; }
   }
   /* Below this width a pair's two short IDs fit only once Search folds to its icon as well. */
   @media (max-width: 1000px) {
@@ -335,7 +333,7 @@ const style = `
   #zoom-in, #zoom-out { justify-content: center; font-size: 12px; line-height: 1.2; }
   .control-glyph { display: block; transform-origin: center; }
   /* A bar placed from the window sets --window-inset to the chrome inset it has to add. */
-  body #work, body #map-view {
+  body #work, body #map-view, body #changes {
     left: calc(var(--hierarchy-inset) + var(--window-inset, 0px) + 24px);
     right: calc(var(--details-inset) + var(--window-inset, 0px) + 24px);
     max-width: calc(100% - var(--hierarchy-inset) - var(--details-inset) - 2 * var(--window-inset, 0px) - 48px);
@@ -384,7 +382,7 @@ const style = `
   @media (prefers-reduced-motion: reduce) {
     #hierarchy, #hierarchy-toggle .hierarchy-chevron, #hierarchy-content, #hierarchy-title .pane-label, #details, body.details-hidden #details, body #work, body #map-view, #header > #web-search { transition: none; }
   }
-${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${fileDiffCss}${taskDiffCss}${comparisonDetailsCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
+${floatingBarCss}${chromeCss}${anchoredPopoverCss}${creditsCss}${motionCss}${revisionCss}${searchCss}${highlightCss}${sourceCss}${fileDiffCss}${taskDiffCss}${comparisonDetailsCss}${hierarchyComparisonCss}${comparisonControlCss}${backlogMarkCss}${workBadgeCss}${workDetailsCss}${flowRowCss}${mapCss}${pinsCss}${workCss}${tipCss}${projectEditorCss}
 ${emptyStateCss}
 ${addDialogCss}${editorCss}
 ${relationshipCardCss}${removeCss}${editableCss}${mapDebugCss}${detailsPanelCss}${mapViewCss}${c4FilterCss}`
@@ -463,7 +461,7 @@ export function renderPage(payload: WebBootPayload, url?: URL): string {
     + searchControl({ search: searchIcon, close: closeIcon })
     + `<div class="header-actions">${projectReviewControl}<div id="map-controls" class="controls" aria-label="Map controls"><button id="fit" aria-label="Fit map">${fitIcon}<span>Fit</span></button><button id="zoom-out" aria-label="Zoom out"><span class="control-glyph">−</span></button><span id="zoom" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in"><span class="control-glyph">+</span></button></div><div class="header-utilities">${settingsControl(themeControl())}${helpControl()}${creditsControl(infoIcon, lockup)}</div></div>`
     + '</header>'
-    + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}<div class="comparison-legend"><span>+ Added</span><span>~ Modified</span><span>− Removed</span></div></div></div></nav>`
+    + `<nav id="hierarchy" aria-label="Hierarchy"><div id="hierarchy-title"><span class="pane-label">Hierarchy</span>${payload.delivery.kind === 'live' ? '<button id="add" type="button" aria-label="Add">+</button>' : ''}<button id="hierarchy-toggle" type="button" aria-controls="hierarchy-content">${hierarchyIcon}</button></div><div id="hierarchy-content"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></div></nav>`
     + `<div id="map" role="tabpanel" aria-label="Architecture map"></div>${mapViewControl()}${c4FilterControl()}`
     + emptyState(payload)
     + `<div id="details-dock"><aside id="details" aria-label="Details"><div class="details-controls"><button id="details-expand" aria-label="Expand details" title="Expand details" aria-expanded="false">${expandIcon}${collapseIcon}</button><button id="details-close" aria-label="Close details">${closeIcon}</button></div><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside></div>`

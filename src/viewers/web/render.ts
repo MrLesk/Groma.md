@@ -1,3 +1,5 @@
+import { comparisonDefaultTab } from './comparison/details.ts'
+import { createComparisonControl } from './comparison/control.ts'
 import { createProjectSettings } from './settings/control.ts'
 import { createProjectReview } from './review/control.ts'
 import type { ProjectProfile } from '../../project-profile.ts'
@@ -9,7 +11,7 @@ import { createEmptyState } from './chrome/empty.ts'
 import { createMapDebugPanel } from './chrome/map-debug.ts'
 import { bindMapView } from './chrome/map-view.ts'
 import { bindC4Filter } from './chrome/c4-filter.ts'
-import { animateControl } from './chrome/motion.ts'
+import { animateControl, animateContent } from './chrome/motion.ts'
 import { measureFrame, type MapFrame } from './chrome/frame.ts'
 import { bindChromeActions, createWebShell, pageHosts } from './chrome/shell.ts'
 import { bindThemeControl, readSavedTheme } from './chrome/theme-control.ts'
@@ -50,15 +52,20 @@ let sheet = boot.sheet
 let project: ProjectProfile | undefined = boot.project ?? undefined
 let currentPins = boot.pins
 let mapMeta = { generation: boot.generation, timings: boot.timings }
+const changes = createComparisonControl(document.body, select, () => {
+  repaintScene(false)
+  paintViewState()
+})
+changes.update(world, boot.comparison, boot.revision?.id, undefined)
 const mapMotion = createMapMotion(sheet)
 const filterC4 = bindC4Filter(document.getElementById('c4-filter')!, () => repaintScene(false))
 const debug = createMapDebugPanel(document.body, () => ({ ...mapMeta, world, sheet }))
 function projectedScene() {
-  return debug.project(() => filterC4(presentScene(mapMotion.sheet, project, mapMotion.pose)))
+  return debug.project(() => changes.project(filterC4(presentScene(mapMotion.sheet, project, mapMotion.pose))))
 }
 let scene = projectedScene()
 const hosts = pageHosts()
-const { host, treeHost, flowsHost, statsHost, revisionSelect, searchRoot, detailsHost, zoomHost, hierarchyContent, hierarchyToggle } = hosts
+const { host, treeHost, flowsHost, statsHost, revisionBox, searchRoot, detailsHost, zoomHost, hierarchyContent, hierarchyToggle } = hosts
 const paintFlows = createFlowList()
 const map = createMap(host)
 const highlights = createMapHighlights(map)
@@ -85,7 +92,7 @@ if (boot.revision === null && selection.kind === 'none' && initial !== undefined
 let activeTaskIds: string[] = selection.kind === 'task' ? [selection.id] : []
 let detailsTab: DetailsTab = opened.tab
 const revisionControl = createRevisionControl({
-  control: revisionSelect, body: document.body, boot, data,
+  box: revisionBox, body: document.body, boot, data,
   applyRevision: payload => applyWorld(payload, true), applyWorld, applyWork,
 })
 const authoring = createAuthoring(host, map, data, {
@@ -109,7 +116,9 @@ const taskDiff = createTaskDiffControl({
 const viewport = (): MapFrame => measureFrame(hosts, hudVisible)
 emptyState.paint(world, project, !revisionControl.live) // Before the first fit; a published view hides the page's notice.
 const camera = createCameraSession({
-  frame: viewport, bounds: () => scene.bounds, approach: map.approach, readout: zoomHost, host,
+  frame: viewport, bounds: () => scene.bounds,
+  focus: (frame, fitted) => fitHighlights(scene, changes.targets(), frame, zoomLimits(fitted).max),
+  approach: map.approach, readout: zoomHost, host,
   move(view, zoom) {
     const scaleChanged = map.move(view, zoom)
     pins.place(view)
@@ -151,7 +160,7 @@ function syncUrl(): void {
 /** Applies comparison marks, highlights and task activation from the current selection, flows and active tasks. */
 function paintMapState(): void {
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
-  map.changes(revisionControl.comparison)
+  map.changes(changes.marks())
   highlights.paint(selection, world, activeFlows, activeTaskIds.map(id => workItem(id)).filter((item): item is WorkItem => item !== undefined))
   pins.activate(activeTaskIds, task?.id)
   island.activate(activeTaskIds, task?.id)
@@ -160,8 +169,9 @@ function paintMapState(): void {
 function paintViewState(commitUrl = true): void {
   if (commitUrl) syncUrl()
   const task = selection.kind === 'task' ? workItem(selection.id) : undefined
+  changes.update(world, revisionControl.comparison, revisionControl.selected, primarySelection(selection))
   paintMapState()
-  hierarchy.paint(world, selectedArchitecture(selection))
+  hierarchy.paint(world, selectedArchitecture(selection), revisionControl.comparison, changes.enabled)
   paintFlows(flowsHost, world, activeFlows, toggleFlow, {
     title: 'Actors', selectedIds: selectedArchitecture(selection), onSelectActor: select,
   })
@@ -170,7 +180,12 @@ function paintViewState(commitUrl = true): void {
   shell.paint(selection)
 }
 
+let paintedDetail = ''
 function paintDetailsState(task: WorkItem | undefined): void {
+  const detail = `${primarySelection(selection)}:${detailsTab}:${source.file}`
+  if (revisionControl.comparison !== undefined && detail !== paintedDetail) animateContent(detailsHost.querySelector<HTMLElement>('.body')!)
+  paintedDetail = detail
+  detailsHost.querySelector('.comparison-reasons')?.remove()
   const activeFlow = activeFlows.at(-1)
   const selectedId = primarySelection(selection)
   const selected = worldElement(selectedId)
@@ -214,7 +229,7 @@ function select(id: string, additive = false, origin: 'panel' | 'map' = 'panel')
   source.clear()
   const next = origin === 'map' ? selectMapArchitecture(selection, id, additive, world)
     : selectArchitecture(selection, id, additive)
-  detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next))
+  detailsTab = detailsTabAfterSelection(detailsTab, primarySelection(selection), primarySelection(next), comparisonDefaultTab(revisionControl.comparison?.components[worldElement(primarySelection(next))?.id ?? '']))
   selection = next
   camera.touched = true
   paintViewState()
@@ -270,7 +285,11 @@ const searchControl = createSearchSession({
     map.select(ids ?? selectedArchitecture(selection))
   },
   apply(next, commitUrl) {
-    ({ selection, detailsTab } = next)
+    const previousId = primarySelection(selection)
+    ;({ selection, detailsTab } = next)
+    if (commitUrl && previousId !== primarySelection(selection)) {
+      detailsTab = comparisonDefaultTab(revisionControl.comparison?.components[worldElement(primarySelection(selection))?.id ?? ''])
+    }
     camera.touched = next.touched
     if (!commitUrl) camera.navigate(next.camera)
     paintViewState(commitUrl)
@@ -385,6 +404,7 @@ bindChromeActions({
 function applyWorld(payload: WebPayload, reset = false): void {
   mapMeta = { generation: payload.generation, timings: payload.timings }
   world = payload.world
+  changes.update(world, payload.comparison, payload.revision?.id, primarySelection(selection))
   work = payload.work
   sheet = payload.sheet
   project = payload.project ?? undefined
@@ -402,7 +422,9 @@ function applyWorld(payload: WebPayload, reset = false): void {
     activeTaskIds = []
     activeFlows = []
     selection = retainSelection(selection, id => worldElement(id) !== undefined)
-    if (detailsTab === 'tasks') detailsTab = 'what'
+    if (!new URLSearchParams(location.search).has('tab')) {
+      detailsTab = comparisonDefaultTab(payload.comparison?.components[worldElement(primarySelection(selection))?.id ?? ''])
+    } else if (detailsTab === 'tasks') detailsTab = 'what'
     settle()
     camera.touched = false
   } else {

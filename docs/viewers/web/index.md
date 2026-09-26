@@ -336,17 +336,52 @@ different kind of element in each revision, such as a component that became a
 container, shows as two elements: B's keeps the ID and A's is added as removed,
 with A's children beneath it. Systems,
 containers, and groups stay neutral. Added, Modified, and Removed use shared
-theme roles; green remains the selection and active-flow color. Comparisons
+theme roles shared with code diffs and change controls; green remains the
+selection and active-flow color. Blueprint uses lime for Added to distinguish it
+from the map's blue line work. During comparison, unchanged buildings and routes
+recede to 40% opacity unless selected or highlighted as neighbors. Opening a
+comparison without a selected item, and pressing Fit, frames changed components
+and their outgoing routes using the existing task-highlight fit. A comparison
+with no changed components fits the complete map. Comparisons
 have no task data or editing controls. A working-tree endpoint follows owned
 source edits even when no scanner handles that file.
 
+During a comparison the hierarchy opens on **Changes**: changed components
+under their systems and containers, followed by changed relationships. Component
+rows show source-line totals when source changed, and every change has a status
+mark. Ancestors count their changed components by status. **All** restores the
+ordinary tree with the same marks and counts. Removed components and context
+needed only for them have muted names. Selecting a row uses ordinary selection:
+the URL, camera and details follow. An empty comparison says **No changes**.
+`web/comparison/tree.ts` derives the list and ancestor counts from History's
+existing facts; `web/organisms/hierarchy.ts` owns its controls and rendering.
+The bottom changes bar counts components and relationships per status. Its
+filters update the list, ancestor counts and map marks together; filtering Removed
+also hides deleted buildings, routes and their retained context. Previous/next
+and J/K step through visible components, then relationships, and wrap at either
+end. Text inputs keep J/K for typing. Filters belong to the open pair and reset
+when it changes; they are not saved in URLs. `web/comparison/control.ts` owns
+these filters and navigation. Empty comparisons have no changes bar.
+
 Comparison details keep the same What it does and How it's built tabs. Added
 components show B's content; removed components keep A's readable description.
-Modified prose marks changed words in place, with changed fields alongside it.
+Modified components show a **Changed:** line below their title, naming changed
+fields, source files with line totals, and changed relationships. Each reason
+opens its details tab. Source-only or ownership-only changes start on **How it's
+built**, unless the URL names a tab. Small prose edits mark changed words in
+place, with a space between adjacent removals and additions. When at least half
+the text changed, complete **Now** and **Before** versions replace word marks.
+Text introduced or deleted in an existing component is labeled **Added** or
+**Removed**. `web/comparison/details.ts` owns these presentation decisions.
 Relationships carry their own status. Files include both versions' ownership,
 with actual source status and line counts; removing a component does not imply
 deleting its files. Changed files open a unified diff, unchanged files the
-ordinary source view. Back restores the component, tab, and reading position.
+ordinary source view. File and diff readers use opaque theme paper, with neutral
+diff section headers. When a component has multiple changed files, its diff
+toolbar offers previous/next file navigation with a position count. Back restores
+the component, tab, and reading position, including after stepping between files.
+The source controller owns this navigation; task diffs retain their existing flow
+through the same diff renderer.
 The shared details panel covers map controls within its area, while the header
 remains usable.
 

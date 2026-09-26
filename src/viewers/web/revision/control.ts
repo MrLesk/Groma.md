@@ -4,7 +4,7 @@ import type { WebBootPayload, WebPayload, WebWorkPayload } from '../payload.ts'
 import { NARROW_HEADER, pendingPairFields, revisionFields, revisionOptions, snapshotNotice, type RevisionField } from './view.ts'
 
 interface RevisionControlOptions {
-  control: HTMLElement
+  box: HTMLElement
   body: HTMLElement
   boot: WebBootPayload
   data: WebDataSource
@@ -75,7 +75,7 @@ function revisionTooltip(list: HTMLElement) {
  * An open field is only a draft: the displayed view changes when a commit is chosen.
  */
 export function createRevisionControl(options: RevisionControlOptions) {
-  const { control: box, body, boot, data, applyRevision, applyWorld, applyWork } = options
+  const { box, body, boot, data, applyRevision, applyWorld, applyWork } = options
   // `box` is the text field that holds the revision fields; `root` also holds the commit list and the x.
   const root = box.parentElement!
   const fields = box.querySelector<HTMLElement>('.revision-fields')!

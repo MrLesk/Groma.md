@@ -7,7 +7,7 @@ import type {
   Origin,
 } from '../../../types.ts'
 import type { Comparison, ComponentChange } from '../../../history/comparison.ts'
-import { changeBadge, comparisonOverview, comparisonTechnology, comparisonFiles } from '../comparison/details.ts'
+import { changeBadge, comparisonReasons, comparisonOverview, comparisonTechnology, comparisonFiles } from '../comparison/details.ts'
 import type { ElementWorkGroup } from '../../../work/pins.ts'
 import type { Zone } from '../../../sheet/types.ts'
 import { findingsForOwner } from '../../../architecture-findings.ts'
@@ -70,8 +70,9 @@ export function detailsTabAfterSelection(
   tab: DetailsTab,
   previousId: string | undefined,
   nextId: string | undefined,
+  defaultTab: DetailsTab = 'what',
 ): DetailsTab {
-  return previousId === nextId ? tab : 'what'
+  return previousId === nextId ? tab : defaultTab
 }
 
 /** Definitive live work without a linked task leaves the component on its meaning tab. */
@@ -284,7 +285,11 @@ export function paintDetails(host: HTMLElement, inspected: Inspected, options: D
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
 
   const change = options.comparison?.components[inspected.id]
-  if (change !== undefined) meta.append(changeBadge(change.status))
+  if (change !== undefined) {
+    meta.append(changeBadge(change.status))
+    const reasons = comparisonReasons(change, options.comparison!, options.world, onTab)
+    if (reasons !== undefined) title.after(reasons)
+  }
   const availableTabs = detailsTabs(inspected, workGroups, change)
   const shownTab = availableTabs.includes(tab) ? tab : 'what'
   paintTabs(tabsHost, availableTabs, shownTab, onTab)

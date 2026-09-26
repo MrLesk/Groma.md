@@ -24,7 +24,7 @@ export function pageHosts() {
     treeHost: byId('tree'),
     flowsHost: byId('flows'),
     statsHost: byId('stats'),
-    revisionSelect: byId('revision') as HTMLDetailsElement,
+    revisionBox: byId('revision'),
     searchRoot: byId('web-search'),
     detailsHost: byId('details'),
     detailsDock: byId('details-dock'),
@@ -158,7 +158,7 @@ export const detailsPanelCss = `
     body.details-expanded { min-width: 0; }
   }
   @media (max-width: 600px) {
-    body.details-expanded #header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 0 8px; }
+    body.details-expanded #header { gap: 8px; padding: 0 8px; }
     body.details-expanded #stats, body.details-expanded #map-controls, body.details-expanded .header-utilities { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {

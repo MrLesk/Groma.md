@@ -105,7 +105,7 @@ export const palettes: Record<WebTheme, Palette> = {
     syntaxNumber: '#FF8FAB',
     syntaxString: '#70E1F5',
     syntaxType: '#D9B8FF',
-    diffAdded: '#70E1F5',
+    diffAdded: '#B8F26B',
     diffModified: '#FFE066',
     diffRemoved: '#FF8FAB',
   },

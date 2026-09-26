@@ -1,6 +1,11 @@
+import { componentReasons, comparisonDefaultTab, textChanges } from '../src/viewers/web/comparison/details.ts'
 import { expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
 import { compareArchitecture, type SourceTexts } from '../src/history/comparison.ts'
+import { filterComparisonScene } from '../src/viewers/web/comparison/control.ts'
+import { presentScene } from '../src/viewers/web/iso/view-motion/presentation.ts'
+import { NESTED_POSE } from '../src/viewers/web/iso/view-motion/orbit.ts'
+import { comparisonTree, nextChange } from '../src/viewers/web/comparison/tree.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readView, writeView } from '../src/viewers/web/url.ts'
@@ -74,4 +79,70 @@ test.concurrent('an id that changes kind keeps both elements, so both comparison
     const placed = [...scene.buildings, ...scene.slabs].map(item => item.representationId)
     expect(placed).toEqual(expect.arrayContaining(['observed:revision-control', 'observed:export', 'removed:observed:export']))
   }
+})
+
+
+test.concurrent('comparison hierarchy includes changed paths and independent relationships, with counts owned by ancestors', async () => {
+  const { before, after, oldSources, newSources } = await fixture()
+  const compared = compareArchitecture(before, after, oldSources, newSources)
+  const comparison = { ...compared, from: null }
+  const tree = comparisonTree(compared.world, comparison)
+  expect(tree.rows.map(row => row.id)).not.toContain('payment')
+  expect(tree.counts.get('shop')).toEqual({ added: 1, modified: 1, removed: 1 })
+  expect(tree.counts.get('api')).toEqual({ added: 1, modified: 1, removed: 0 })
+  expect(tree.former.has('mail')).toBe(true)
+  expect(tree.order.slice(-3)).toEqual(compared.world.relationships.map(item => item.id))
+  expect(tree.order.indexOf('checkout')).toBeLessThan(tree.order.indexOf('receipt-sender'))
+  const empty = compareArchitecture(after, after, newSources, newSources)
+  expect(comparisonTree(empty.world, { ...empty, from: null }).order).toEqual([])
+})
+
+
+test.concurrent('comparison filters share list counts and navigation while removing only deleted map context', async () => {
+  const { before, after, oldSources, newSources } = await fixture()
+  const compared = compareArchitecture(before, after, oldSources, newSources)
+  const comparison = { ...compared, from: null }
+  const enabled = new Set(['added'] as const)
+  const tree = comparisonTree(compared.world, comparison, enabled)
+  expect(tree.counts.get('shop')).toEqual({ added: 1, modified: 0, removed: 0 })
+  expect(tree.order).toEqual(['receipt-worker', 'relationship:0'])
+  expect(nextChange(tree.order, undefined, 1)).toBe('receipt-worker')
+  expect(nextChange(tree.order, 'relationship:0', 1)).toBe('receipt-worker')
+  expect(nextChange(tree.order, 'receipt-worker', -1)).toBe('relationship:0')
+  expect(nextChange([], undefined, 1)).toBeUndefined()
+  const scene = presentScene(sheetScene(compared.world), undefined, NESTED_POSE)
+  const original = structuredClone(scene)
+  const filtered = filterComparisonScene(scene, compared.world, comparison, enabled)
+  expect(filtered.buildings.some(item => item.building.representationId === 'receipt-sender')).toBe(false)
+  expect(filtered.buildings.some(item => item.building.representationId === 'payment')).toBe(true)
+  expect(filtered.slabs.some(item => item.slab.representationId === 'mail')).toBe(false)
+  expect(filtered.routes.some(item => item.route.target === 'receipt-sender')).toBe(false)
+  expect(filtered.bounds).toBe(scene.bounds)
+  expect(scene).toEqual(original)
+})
+
+
+test.concurrent('comparison details explain owned changes and respect explicit tabs for source-only changes', async () => {
+  const { before, after, oldSources, newSources } = await fixture()
+  const compared = compareArchitecture(before, after, oldSources, newSources)
+  expect(componentReasons(compared.components.checkout).map(reason => reason.key)).toEqual(['description', 'files'])
+  const sourceOnly = compareArchitecture(before, before, oldSources, { ...oldSources, 'src/checkout.ts': 'new source' })
+  const comparison = { ...sourceOnly, from: null }
+  expect(comparisonDefaultTab(sourceOnly.components.checkout)).toBe('how')
+  const url = new URL('https://example.test/?component=checkout')
+  expect(readView(url, sourceOnly.world, [], [], 'auto', comparison).tab).toBe('how')
+  url.searchParams.set('tab', 'what')
+  const explicit = readView(url, sourceOnly.world, [], [], 'auto', comparison)
+  expect(explicit.tab).toBe('what')
+  expect(new URL(writeView(explicit, sourceOnly.world, [], '/', comparison), url).searchParams.get('tab')).toBe('what')
+  expect(comparisonDefaultTab(compared.components.checkout)).toBe('what')
+  expect(componentReasons(compared.components['receipt-worker'])).toEqual([])
+})
+
+test.concurrent('prose presentation separates replacements and keeps large rewrites readable', () => {
+  expect(textChanges('Writes', 'Packages').parts.map(part => part.value).join('')).toBe('Writes Packages')
+  expect(textChanges('This service writes the current order.', 'This service reads the current order.').mode).toBe('words')
+  expect(textChanges('The queue stores pending email.', 'Payment requests go directly to the provider.').mode).toBe('rewrite')
+  expect(textChanges('', 'New explanation').mode).toBe('added')
+  expect(textChanges('Old explanation', '').mode).toBe('removed')
 })

@@ -66,3 +66,28 @@ export function createThemeTransition(host: HTMLElement): (apply: () => void) =>
     })
   }
 }
+
+/** Comparison content and counters enter with the same timing as the surrounding chrome. */
+export function animateContent(host: HTMLElement): void {
+  if (reducedMotion()) return
+  const style = getComputedStyle(host)
+  host.animate([{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }], {
+    duration: Number.parseFloat(style.getPropertyValue('--chrome-motion')),
+    easing: style.getPropertyValue('--chrome-ease').trim(),
+  })
+}
+
+/** Tree rows enter or leave in place, so neighboring rows move with the disclosure. */
+export function animateRow(row: HTMLElement, entering: boolean, height: number): void {
+  if (reducedMotion()) { if (!entering) row.remove(); return }
+  const style = getComputedStyle(row)
+  const open = { height: `${height}px`, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, opacity: 1 }
+  const closed = { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 }
+  row.style.overflow = 'hidden'
+  row.style.boxSizing = 'border-box'
+  const animation = row.animate(entering ? [closed, open] : [open, closed], {
+    duration: Number.parseFloat(style.getPropertyValue('--chrome-motion')),
+    easing: style.getPropertyValue('--chrome-ease').trim(),
+  })
+  animation.onfinish = () => { if (!entering) row.remove() }
+}

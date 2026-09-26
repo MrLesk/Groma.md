@@ -77,6 +77,10 @@ export function leaveSource(host: HTMLElement): void {
 }
 
 export const sourceCss = `
+  #details.file-open { background: var(--paper); backdrop-filter: none; }
+  #details .file-stepper { display: flex; align-items: center; gap: 4px; flex: none; font-variant-numeric: tabular-nums; }
+  #details .file-stepper span { white-space: nowrap; }
+
   #details .source-file { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
   #details .code-entry { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 4px; }
   #details .code-tree { grid-column: 1; grid-row: 1; display: flex; align-items: stretch; }
