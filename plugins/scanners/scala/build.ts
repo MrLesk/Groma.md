@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { SBT_VERSION } from './versions.ts'
+import { SBT_VERSION, SCALAMETA_VERSION } from './versions.ts'
 
 const execute = promisify(execFile)
 const pluginRoot = fileURLToPath(new URL('./', import.meta.url))
@@ -13,6 +13,11 @@ const sbtRoot = path.join(pluginRoot, 'sbt')
 
 function sbtCommand(): string {
   return process.env.SBT_HOME ? path.join(process.env.SBT_HOME, 'bin', 'sbt') : 'sbt'
+}
+
+function tool(name: string): string {
+  const executable = process.platform === 'win32' ? `${name}.exe` : name
+  return process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', executable) : executable
 }
 
 /** Maintainer build: compile the scalameta worker with sbt assembly. */
@@ -52,8 +57,68 @@ export async function buildDist(dist = path.join(pluginRoot, 'dist')): Promise<v
   await fetchSbtLaunch(path.join(dist, 'sbt-launch.jar'))
 }
 
+async function writeNotices(inputs: string[], output: string): Promise<void> {
+  const directories = new Set(inputs.flatMap(input => /^(.*node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(input.replaceAll('\\', '/'))?.[1] ?? []))
+  const sections = [
+    'The Scala scanner module bundles these npm packages. Their license texts follow.\n',
+    `\nScalameta ${SCALAMETA_VERSION}\nLicense: Apache-2.0\n\nUsed by the worker JAR to parse Scala 3.9 source. See https://github.com/scalameta/scalameta\n`,
+    `\norg.scala-sbt sbt-launch ${SBT_VERSION}\nLicense: Apache-2.0\n\nVendored launcher used to evaluate sbt build definitions. See https://github.com/sbt/sbt\n`,
+  ]
+  for (const directory of [...directories].map(item => path.resolve(item)).sort()) {
+    const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))
+    const license = (await readdir(directory)).find(name => /^licen[cs]e/i.test(name))
+    if (!license) throw new Error(`Review the missing license text for ${manifest.name}@${manifest.version}`)
+    sections.push(`\n${manifest.name} ${manifest.version}\nLicense: ${manifest.license}\n\n${await readFile(path.join(directory, license), 'utf8')}`)
+  }
+  await writeFile(output, sections.join(''))
+}
+
+/** Maintainer build; consumers receive bundled JavaScript, worker, sbt plugin, launcher, and a JRE. */
+export async function buildPackage(destination: string): Promise<void> {
+  await rm(destination, { recursive: true, force: true })
+  await mkdir(destination, { recursive: true })
+  const distDir = path.join(destination, 'dist')
+  await buildWorker(path.join(distDir, 'worker.jar'))
+  await buildGromaSbt(path.join(distDir, 'groma-sbt.jar'))
+  await fetchSbtLaunch(path.join(distDir, 'sbt-launch.jar'))
+  const runtime = path.join(distDir, `${process.platform}-${process.arch}`, 'runtime')
+  await mkdir(path.dirname(runtime), { recursive: true })
+  await execute(tool('jlink'), ['--add-modules', 'java.base,jdk.zipfs,jdk.unsupported', '--strip-debug',
+    '--no-header-files', '--no-man-pages', '--output', runtime])
+  const built = await Bun.build({
+    entrypoints: [path.join(pluginRoot, 'src/index.ts')],
+    outdir: path.join(destination, 'src'),
+    target: 'bun',
+    format: 'esm',
+    naming: 'index.js',
+    metafile: true,
+  })
+  if (!built.success) throw new Error(built.logs.join('\n'))
+  await cp(
+    path.join(pluginRoot, 'src/sbt-global-plugin.sbt.template'),
+    path.join(destination, 'src/sbt-global-plugin.sbt.template'),
+  )
+  await writeNotices(Object.keys(built.metafile?.inputs ?? {}), path.join(destination, 'THIRD-PARTY-NOTICES.txt'))
+  const manifest = JSON.parse(await readFile(path.join(pluginRoot, 'package.json'), 'utf8'))
+  await writeFile(path.join(destination, 'package.json'), `${JSON.stringify({
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+    private: manifest.private,
+    type: 'module',
+    license: 'MIT',
+    os: [process.platform],
+    cpu: [process.arch],
+    groma: { scanner: { ...manifest.groma.scanner, entry: './src/index.js' } },
+  }, null, 2)}\n`)
+  await cp(path.join(pluginRoot, '../../../LICENSE'), path.join(destination, 'LICENSE'))
+}
+
 if (import.meta.main) {
-  const output = path.join(pluginRoot, 'dist')
-  await buildDist(output)
+  const output = path.join(pluginRoot, 'dist/package')
+  await buildPackage(output)
+  const pluginDist = path.join(pluginRoot, 'dist')
+  await rm(pluginDist, { recursive: true, force: true })
+  await cp(path.join(output, 'dist'), pluginDist, { recursive: true })
   console.log(output)
 }

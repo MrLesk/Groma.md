@@ -6,14 +6,31 @@
 node_modules/
 /dist/
 /npm-release/
+
 /plugins/scanners/typescript/dist/
+/plugins/scanners/scala/**/target/
+/plugins/scanners/scala/**/project/project/
 /test/fixtures/csharp-operations/**/obj/
 
+#
 # Scala-specific
+#
 .bsp/
 .metals/
 .scala-build/
-/plugins/scanners/scala/sbt/target/
-/plugins/scanners/scala/worker/target/
-/plugins/scanners/scala/sbt/project/target/
-/test/fixtures/scala-sbt-*/
+
+!/test/fixtures/scala-*/**
+/test/fixtures/scala-*/**/*.class
+
+/test/fixtures/scala-sbt-single/target/
+/test/fixtures/scala-sbt-single/project/target/
+/test/fixtures/scala-sbt-single/project/project/target/
+/test/fixtures/scala-sbt-single/xsbt/
+/test/fixtures/scala-sbt-single/xsbti/
+
+
+/test/fixtures/scala-sbt-*/**/target/
+/test/fixtures/scala-sbt-*/**/sbt.boot.*
+/test/fixtures/scala-*/**/xsbt/
+/test/fixtures/scala-*/**/xsbti/
+

@@ -112,6 +112,7 @@ The architecture lives in a `groma/` folder as an [Open Knowledge Format 0.2](ht
 | [C#/.NET](docs/scanners/dotnet-csharp/index.md) | ✅ Available |
 | [Go](docs/scanners/go/index.md) | ✅ Available |
 | [Java (Maven, Gradle)](docs/scanners/java/index.md) | ✅ Available |
+| [Scala (sbt 2, Scala 3.9)](docs/scanners/scala/index.md) | ✅ Available |
 | [Python](docs/scanners/python/index.md) | ✅ Available |
 | [Rust](docs/scanners/rust/index.md) | ✅ Available |
 | [PHP](docs/scanners/php/index.md) | ✅ Available |

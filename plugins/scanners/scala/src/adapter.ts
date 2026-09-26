@@ -1,4 +1,4 @@
-import type { CodeFile, CodeSymbol, SourceReference } from '@groma/scanner'
+import type { CodeDeclaration, CodeFile, CodeSymbol, SourceReference } from '@groma/scanner'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -81,9 +81,27 @@ export async function readScalaOutline(repositoryRoot: string, references: reado
   const symbols = new Map(present.map(reference => [reference.file, reference.symbols]))
   return (JSON.parse(stdout) as WorkerOutline[]).filter(file => file.declarations.length > 0).map(({ file, declarations }) => {
     const named = symbols.get(file) ?? []
-    return { file, declarations: declarations.map(declaration => ({
-      ...declaration, entry: named.includes(declaration.name),
-      members: declaration.members.map(member => ({ ...member, entry: named.includes(`${declaration.name}.${member.name}`) })),
-    })) }
+    return {
+      file,
+      declarations: declarations.map(declaration => {
+        const entry = named.includes(declaration.name)
+        if (declaration.kind === 'function') {
+          return { name: declaration.name, line: declaration.line, visibility: declaration.visibility, kind: 'function' as const, entry } satisfies CodeDeclaration
+        }
+        return {
+          name: declaration.name,
+          line: declaration.line,
+          visibility: declaration.visibility,
+          kind: 'type' as const,
+          entry,
+          members: declaration.members.map(member => ({
+            name: member.name,
+            line: member.line,
+            visibility: member.visibility,
+            entry: named.includes(`${declaration.name}.${member.name}`),
+          })),
+        } satisfies CodeDeclaration
+      }),
+    }
   })
 }

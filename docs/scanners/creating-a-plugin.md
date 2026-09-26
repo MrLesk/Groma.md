@@ -243,6 +243,7 @@ scanner makes:
 | C# | A C# file no scanned project compiles |
 | Angular, Vue | A template or stylesheet no component declares |
 | React | Any TypeScript source, while the repository has a React project, including files no React package compiles |
+| Scala | Every `.scala` candidate under an sbt build, while the listing runs sbt only to learn `Compile` source directories and does not parse Scala |
 
 A listing must never leave out a file the scan does read: that would report the
 file as read by no enabled scanner.

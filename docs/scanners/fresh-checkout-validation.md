@@ -54,6 +54,10 @@ are inferred.
 
 Java includes a compiler runtime; C# includes a self-contained .NET runtime.
 Python includes Pyodide 314.0.7 with CPython 3.14.2 and the standard library.
+The Scala scanner includes a JRE, the Scalameta worker, the `gromaModel` sbt
+plugin, and the pinned sbt 2 launcher. The first model load on a machine may
+fetch that sbt release into the Groma scanner cache; it still does not require
+a preinstalled JDK, a preinstalled sbt, or an application `update`.
 Go, Rust and TypeScript include their native analysis workers. Framework
 packages include their compiler libraries. Runtime licenses and notices travel
 with the packages. Release CI assembles platform assets and runs the same

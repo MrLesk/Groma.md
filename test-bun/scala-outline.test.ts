@@ -1,7 +1,7 @@
 import { beforeAll, expect, test } from 'bun:test'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import type { CodeSymbol } from '../packages/scanner/src/index.ts'
+import type { CodeSymbol, CodeType } from '../packages/scanner/src/index.ts'
 import { buildWorker } from '../plugins/scanners/scala/build.ts'
 import { readScalaOutline } from '../plugins/scanners/scala/src/adapter.ts'
 
@@ -41,7 +41,7 @@ test('Orders.scala outline follows Scala visibility and omits non-outline declar
 
 test('entry marks a linked type and member by bare names', async () => {
   const files = await readScalaOutline(root, [{ file: 'Orders.scala', symbols: ['Orders', 'Orders.place'] }])
-  const orders = files.find(file => file.file === 'Orders.scala')!.declarations.find(declaration => declaration.name === 'Orders')!
+  const orders = files.find(file => file.file === 'Orders.scala')!.declarations.find(declaration => declaration.name === 'Orders')! as CodeType
   expect(orders.entry).toBeTrue()
   const place = orders.members.find(member => member.name === 'place')!
   expect(place.entry).toBeTrue()
