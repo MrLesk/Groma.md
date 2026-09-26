@@ -1,0 +1,2 @@
+resolvers += Resolver.file("groma-scanner", file(@@IVY_LOCAL@@))(Resolver.ivyStylePatterns)
+addSbtPlugin("md.groma" % "groma-sbt" % "0.1.0")
