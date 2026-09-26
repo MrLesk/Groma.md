@@ -1,18 +1,24 @@
 import { beforeAll, expect, test } from 'bun:test'
+import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { CodeSymbol, CodeType } from '../packages/scanner/src/index.ts'
-import { buildWorker } from '../plugins/scanners/scala/build.ts'
+import { buildGromaSbt, buildWorker, fetchSbtLaunch } from '../plugins/scanners/scala/build.ts'
 import { readScalaOutline } from '../plugins/scanners/scala/src/adapter.ts'
 
 const root = path.resolve(import.meta.dir, '../test/fixtures/scala-outline')
-const workerJar = path.resolve(import.meta.dir, '../plugins/scanners/scala/dist/worker.jar')
+const distDir = path.resolve(import.meta.dir, '../plugins/scanners/scala/dist')
+const workerJar = path.join(distDir, 'worker.jar')
+const gromaSbtJar = path.join(distDir, 'groma-sbt.jar')
+const sbtLaunchJar = path.join(distDir, 'sbt-launch.jar')
 
 const symbol = ({ name, line, visibility, entry }: CodeSymbol) => [name, line, visibility, entry]
 
 beforeAll(async () => {
-  await mkdir(path.dirname(workerJar), { recursive: true })
-  await buildWorker(workerJar)
+  await mkdir(distDir, { recursive: true })
+  if (!existsSync(workerJar)) await buildWorker(workerJar)
+  if (!existsSync(gromaSbtJar)) await buildGromaSbt(gromaSbtJar)
+  if (!existsSync(sbtLaunchJar)) await fetchSbtLaunch(sbtLaunchJar)
 })
 
 test('Orders.scala outline follows Scala visibility and omits non-outline declarations', async () => {

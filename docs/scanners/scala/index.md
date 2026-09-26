@@ -14,7 +14,9 @@ groma scan
 
 For local development, a maintainer with sbt and a JDK builds the package with
 `bun plugins/scanners/scala/build.ts`, then adds the resulting
-`plugins/scanners/scala/dist/package` directory to groma.md. The package
+`plugins/scanners/scala/dist/package` directory to groma.md. See
+[validation on a real codebase](validation.md) for the full dev CLI and local
+package workflow. The package
 contains bundled JavaScript, the Scalameta worker JAR, the `gromaModel` sbt
 plugin, the vendored sbt launcher, a platform JRE, and `ivy-local` metadata
 for the plugin. `THIRD-PARTY-NOTICES.txt` lists bundled npm packages,

@@ -116,9 +116,8 @@ export async function buildPackage(destination: string): Promise<void> {
 
 if (import.meta.main) {
   const output = path.join(pluginRoot, 'dist/package')
+  await rm(output, { recursive: true, force: true })
   await buildPackage(output)
-  const pluginDist = path.join(pluginRoot, 'dist')
-  await rm(pluginDist, { recursive: true, force: true })
-  await cp(path.join(output, 'dist'), pluginDist, { recursive: true })
+  await cp(path.join(output, 'dist'), path.join(pluginRoot, 'dist'), { recursive: true })
   console.log(output)
 }
