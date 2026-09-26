@@ -39,8 +39,8 @@ function mergeInputs(inputs: EntrySources, next: EntrySources): void {
 
 /**
  * One project's evidence across its programs. Each program reports only the sources it owns, while every repository
- * source it compiles, such as an imported library, can supply a child directive or a value. A component's templates
- * and stylesheets are read only from the scanner's files, which `readable` holds.
+ * source it compiles can supply context such as a constant value. Child directives, templates and stylesheets
+ * contribute evidence only when they are among the scanner's files, which `readable` holds.
  */
 async function scanProject(root: string, directory: string, programs: readonly AngularProgram[], inputs: EntrySources,
   readable: ReadonlySet<string>): Promise<ScanObservation> {
@@ -52,7 +52,8 @@ async function scanProject(root: string, directory: string, programs: readonly A
   for (const { program, owned, sources } of programs) {
     const checker = program.getTypeChecker()
     const mine = new Set(owned)
-    const directives = sources.flatMap(source => source.statements.filter(ts.isClassDeclaration).flatMap(node => sourceDirective(node, checker) ?? []))
+    const directives = sources.filter(source => readable.has(relative(root, source.fileName)))
+      .flatMap(source => source.statements.filter(ts.isClassDeclaration).flatMap(node => sourceDirective(node, checker) ?? []))
     for (const component of directives.filter(directive => directive.view && mine.has(directive.declaration.getSourceFile()))) {
       templates.bindOutputs(component, directives, checker)
       sourceUnits.push(templates.unit(component))

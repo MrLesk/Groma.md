@@ -13,7 +13,8 @@ import { buildArchitectureModel } from '../src/architecture-model.ts'
 import { loadAnnotatedArchitecture, reconcileScanObservations } from '../src/core.ts'
 import { editArchitecture } from '../src/edit.ts'
 import { inferRelationships } from '../src/relationship-inference.ts'
-import { scannerFiles } from '../src/scanner/modules/selection.ts'
+import { scannerFiles, scannerSelection } from '../src/scanner/modules/selection.ts'
+import { createScannerRegistry } from '../src/scanner/registry.ts'
 import { createScannerSession } from '../src/scanner/session.ts'
 import type { AnnotatedArchitectureModel } from '../src/types.ts'
 import { readCodeStructure } from '../src/viewers/source/structure.ts'
@@ -93,6 +94,27 @@ test.concurrent('Angular resolves an output callback beyond TypeScript and prese
     const unsupported = (await scanner.scan(root, {}, await angularFiles(root)))!
     expect(unsupported.invocations).toEqual([])
     expect(unsupported.diagnostics.some(item => item.code === 'unsupported-angular-binding' && item.file === 'host.html' && Number.isInteger(item.line))).toBe(true)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test.concurrent('Angular omits imported output providers outside its include list', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    const files = await angularFiles(root)
+    for (const included of [false, true]) {
+      const include = files.filter(file => included || file !== 'emitter.ts')
+      const registry = createScannerRegistry([{ plugin: scanner, ...scannerSelection({ include }) }])
+      const batch = await registry.collectObservations(root)
+      expect(batch.failures).toEqual([])
+      const observation = batch.observations[0]!
+      expect(registry.watchesFile('emitter.ts')).toBe(included)
+      expect(observation.files.some(file => file.file === 'emitter.ts')).toBe(included)
+      expect(observation.operations?.some(operation => operation.file === 'emitter.ts')).toBe(included)
+      const owners = new Map(observation.files.map(file => [file.file, file.file]))
+      expect(inferRelationships([observation], owners)).toEqual(included ? [
+        expect.objectContaining({ source: 'emitter.ts', target: 'host.ts', technology: 'angular' }),
+      ] : [])
+    }
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
