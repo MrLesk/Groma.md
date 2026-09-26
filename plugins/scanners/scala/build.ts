@@ -83,8 +83,10 @@ export async function buildPackage(destination: string): Promise<void> {
   await fetchSbtLaunch(path.join(distDir, 'sbt-launch.jar'))
   const runtime = path.join(distDir, `${process.platform}-${process.arch}`, 'runtime')
   await mkdir(path.dirname(runtime), { recursive: true })
-  await execute(tool('jlink'), ['--add-modules', 'java.base,jdk.zipfs,jdk.unsupported', '--strip-debug',
-    '--no-header-files', '--no-man-pages', '--output', runtime])
+  // jdeps --print-module-deps on sbt-launch.jar plus the pinned sbt boot jars.
+  await execute(tool('jlink'), ['--add-modules',
+    'java.base,java.desktop,java.management,java.net.http,java.security.jgss,java.sql,java.xml,jdk.compiler,jdk.net,jdk.unsupported',
+    '--strip-debug', '--no-header-files', '--no-man-pages', '--output', runtime])
   const built = await Bun.build({
     entrypoints: [path.join(pluginRoot, 'src/index.ts')],
     outdir: path.join(destination, 'src'),
