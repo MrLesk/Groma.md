@@ -175,6 +175,22 @@ test.concurrent('Vue reads no source its exclusions name, even one its config in
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })
 
+test.concurrent('Vue excludes imported callback endpoints without rejecting the remaining evidence', async () => {
+  const { temporary, root, scanner } = await setup()
+  try {
+    for (const excluded of ['Emitter.vue', 'receiver.ts']) {
+      const files = await scannerFiles(root, { ...manifest.groma.scanner, exclude: [...manifest.groma.scanner.exclude, excluded] })
+      const observation = (await scanner.scan(root, {}, files))!
+      expect(observation.files.some(file => file.file === excluded)).toBe(false)
+      expect(observation.operations?.some(operation => operation.file === excluded)).toBe(false)
+      const owners = new Map(observation.files.map(file => [file.file, file.file]))
+      expect(inferRelationships([observation], owners)).toEqual(excluded === 'Emitter.vue' ? [] : [
+        expect.objectContaining({ source: 'Emitter.vue', target: 'Host.vue', technology: 'vue' }),
+      ])
+    }
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
 test.concurrent('Vue reads tracked components and Nuxt routes without generated TypeScript config roots', async () => {
   const { temporary, root, scanner } = await setup()
   try {

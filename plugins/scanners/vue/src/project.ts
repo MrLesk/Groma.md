@@ -90,9 +90,10 @@ export class VueProject {
     for (const source of this.files) this.validateSfc(source.fileName)
   }
 
+  /** Only selected repository source can contribute operations; other compiler inputs are context. */
   owned(source: ts.SourceFile): boolean {
     return !source.isDeclarationFile && !relative(this.root, source.fileName).startsWith('../')
-      && !source.fileName.includes('/node_modules/')
+      && !source.fileName.includes('/node_modules/') && this.readable.has(relative(this.root, source.fileName))
   }
 
   sfc(file: string): VueVirtualCode | undefined {
