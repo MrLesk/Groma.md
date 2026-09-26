@@ -232,8 +232,9 @@ export function createMapAnimator(motion: MapMotion, repaint: (fit: boolean) => 
     toggleLayers: () => change(motion.toggleLayers),
     retarget: sheet => change((now, animate) => motion.retarget(sheet, now, animate), false),
     orbit(dx, dy) {
-      stopAnimation()
       motion.orbit(dx, dy)
+      // Orbit cancels the pose transition, but a live sheet update still needs its animation frames.
+      if (!motion.morphing) stopAnimation()
       if (frame !== undefined) return
       frame = requestAnimationFrame(() => {
         frame = undefined
